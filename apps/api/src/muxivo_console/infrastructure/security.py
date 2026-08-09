@@ -4,6 +4,7 @@ import hashlib
 import hmac
 import secrets
 import time
+from datetime import UTC, datetime
 from uuid import UUID
 
 from argon2 import PasswordHasher as Argon2PasswordHasher
@@ -64,3 +65,25 @@ class Argon2idPasswordHasher:
             return self._hasher.verify(encoded_hash, plaintext_password)
         except (InvalidHashError, VerificationError):
             return False
+
+
+class UtcClock:
+    def now(self) -> datetime:
+        return datetime.now(UTC)
+
+
+class SecureOpaqueSessionTokenIssuer:
+    """Create a 256-bit opaque token suitable for an HttpOnly browser cookie."""
+
+    def issue(self) -> str:
+        return secrets.token_urlsafe(32)
+
+
+class HmacSessionTokenHasher:
+    def __init__(self, pepper: bytes) -> None:
+        if len(pepper) < 32:
+            raise ValueError("Session token pepper must contain at least 256 bits.")
+        self._pepper = pepper
+
+    def hash(self, raw_token: str) -> str:
+        return hmac.new(self._pepper, raw_token.encode("utf-8"), hashlib.sha256).hexdigest()

@@ -7,6 +7,7 @@ from muxivo_console.domain.audit import AuditEvent
 from muxivo_console.domain.authorization import AuthorizationDecision, AuthorizationRequest
 from muxivo_console.domain.identity import EmailPasswordRegistration, UserStatus
 from muxivo_console.domain.organizations import Organization, OrganizationMembership
+from muxivo_console.domain.sessions import AuthSession
 
 
 class ModuleCatalog(Protocol):
@@ -89,3 +90,27 @@ class OrganizationCreationWriter(Protocol):
         owner_membership: OrganizationMembership,
         audit_event: AuditEvent,
     ) -> bool: ...
+
+
+class Clock(Protocol):
+    """Returns the current UTC instant; a port makes expiry behavior deterministic."""
+
+    def now(self): ...
+
+
+class OpaqueSessionTokenIssuer(Protocol):
+    """Issues an opaque value that may be returned once to a browser cookie boundary."""
+
+    def issue(self) -> str: ...
+
+
+class SessionTokenHasher(Protocol):
+    """Derives a keyed, fixed-size database lookup hash from a raw session token."""
+
+    def hash(self, raw_token: str) -> str: ...
+
+
+class AuthSessionWriter(Protocol):
+    """Atomically persists a session and its mandatory security audit event."""
+
+    async def create(self, *, session: AuthSession, audit_event: AuditEvent) -> bool: ...
