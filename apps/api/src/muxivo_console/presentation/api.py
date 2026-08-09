@@ -11,6 +11,11 @@ from muxivo_console.application.authenticate_email_password import (
     AuthenticateEmailPasswordCommand,
     AuthenticationRejectedError,
 )
+from muxivo_console.application.create_organization import (
+    CreateOrganization,
+    CreateOrganizationCommand,
+    OrganizationCreationRejectedError,
+)
 from muxivo_console.application.list_control_modules import AccessDeniedError, ListControlModules
 from muxivo_console.application.register_email_password import (
     RegisterEmailPassword,
@@ -26,6 +31,10 @@ from muxivo_console.contracts.v1.authentication import (
 from muxivo_console.contracts.v1.control_modules import (
     ControlModuleListResponse,
     ControlModuleResponse,
+)
+from muxivo_console.contracts.v1.organizations import (
+    OrganizationCreateRequest,
+    OrganizationResponse,
 )
 from muxivo_console.infrastructure.development import (
     DenyByDefaultOrganizationAuthorizer,
@@ -48,6 +57,7 @@ def create_app(
     control_modules_use_case: ListControlModules | None = None,
     registration_use_case: RegisterEmailPassword | None = None,
     authentication_use_case: AuthenticateEmailPassword | None = None,
+    organization_creation_use_case: CreateOrganization | None = None,
     session_resolver: ResolveBrowserSession | None = None,
 ) -> FastAPI:
     """Create the Console BFF without coupling application code to FastAPI."""
@@ -88,17 +98,10 @@ def create_app(
     @app.middleware("http")
     async def protect_mutations_from_csrf(request: Request, call_next) -> Response:
         """Require a browser-readable token to accompany every authenticated mutation."""
-        if (
-            request.method not in SAFE_HTTP_METHODS
-            and request.url.path not in CSRF_EXEMPT_PATHS
-        ):
+        if request.method not in SAFE_HTTP_METHODS and request.url.path not in CSRF_EXEMPT_PATHS:
             csrf_cookie = request.cookies.get(CSRF_COOKIE_NAME)
             csrf_header = request.headers.get(CSRF_HEADER_NAME)
-            if (
-                not csrf_cookie
-                or not csrf_header
-                or not compare_digest(csrf_cookie, csrf_header)
-            ):
+            if not csrf_cookie or not csrf_header or not compare_digest(csrf_cookie, csrf_header):
                 return JSONResponse(
                     status_code=status.HTTP_403_FORBIDDEN,
                     content={"detail": "CSRF validation failed"},
@@ -108,6 +111,37 @@ def create_app(
     @app.get("/healthz", tags=["operations"])
     async def healthz() -> dict[str, str]:
         return {"status": "ok"}
+
+    @app.post(
+        "/api/v1/organizations",
+        response_model=OrganizationResponse,
+        status_code=status.HTTP_201_CREATED,
+        tags=["organizations"],
+    )
+    async def create_organization(
+        payload: OrganizationCreateRequest, request: Request
+    ) -> OrganizationResponse:
+        actor_id = getattr(request.state, "actor_id", None)
+        if not isinstance(actor_id, UUID):
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied")
+        if organization_creation_use_case is None:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Organization creation is unavailable",
+            )
+        try:
+            organization = await organization_creation_use_case.execute(
+                CreateOrganizationCommand(
+                    actor_id=actor_id,
+                    name=payload.name,
+                    correlation_id=request.state.correlation_id,
+                )
+            )
+        except OrganizationCreationRejectedError as error:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN, detail="Organization creation failed"
+            ) from error
+        return OrganizationResponse.model_validate(organization, from_attributes=True)
 
     @app.post(
         "/api/v1/auth/email-password/registrations",
