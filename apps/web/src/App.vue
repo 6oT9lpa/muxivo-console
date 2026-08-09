@@ -12,6 +12,7 @@ const organizationId = ref("");
 const platform = ref<"discord" | "twitch" | "telegram">("discord");
 const externalResourceId = ref("");
 const connections = ref<PlatformConnection[]>([]);
+const platformHealth = ref<PlatformHealth | null>(null);
 
 type Organization = { id: string; name: string; slug: string };
 type PlatformConnection = {
@@ -20,6 +21,18 @@ type PlatformConnection = {
   platform: "discord" | "twitch" | "telegram";
   external_resource_id: string;
   status: "pending" | "active" | "degraded" | "reauth_required" | "disconnected";
+};
+type PlatformHealthSignal = {
+  key: string;
+  display_name: string;
+  value: string;
+  status: "operational" | "degraded";
+  latency_ms: number | null;
+};
+type PlatformHealth = {
+  organization_id: string;
+  platform: "discord" | "twitch" | "telegram";
+  signals: PlatformHealthSignal[];
 };
 
 async function signIn() {
@@ -83,7 +96,24 @@ async function loadConnections() {
       `/api/v1/organizations/${encodeURIComponent(organizationId.value.trim())}/platform-connections`,
     );
     connections.value = payload.items;
+    platformHealth.value = null;
   } catch (error) {
+    notice.value = messageFor(error);
+  } finally {
+    busy.value = false;
+  }
+}
+
+async function loadDiscordHealth() {
+  if (!organizationId.value.trim()) return;
+  busy.value = true;
+  notice.value = "";
+  try {
+    platformHealth.value = await consoleApi<PlatformHealth>(
+      `/api/v1/organizations/${encodeURIComponent(organizationId.value.trim())}/platforms/discord/health`,
+    );
+  } catch (error) {
+    platformHealth.value = null;
     notice.value = messageFor(error);
   } finally {
     busy.value = false;
@@ -138,6 +168,10 @@ function messageFor(error: unknown): string {
       <form @submit.prevent="loadConnections"><label>Organization ID<input v-model="organizationId" inputmode="text" placeholder="UUID" required /></label><button :disabled="busy">{{ busy ? "Loading…" : "Load connections" }}</button></form>
       <form v-if="organizationId" class="connection-form" @submit.prevent="registerConnection"><label>Platform<select v-model="platform"><option value="discord">Discord</option><option value="twitch">Twitch</option><option value="telegram">Telegram</option></select></label><label>External resource ID<input v-model="externalResourceId" required /></label><button :disabled="busy">Register connection</button></form>
       <ul v-if="connections.length" class="connections"><li v-for="connection in connections" :key="connection.id"><strong>{{ connection.platform }}</strong><span>{{ connection.external_resource_id }}</span><em :data-status="connection.status">{{ connection.status.replaceAll("_", " ") }}</em></li></ul>
+      <section v-if="organizationId" class="platform-health" aria-labelledby="discord-health-heading">
+        <div class="section-heading"><div><h3 id="discord-health-heading">Discord platform health</h3><p>Read-only runtime signals are requested through the Console BFF; Discord credentials never enter the browser.</p></div><button type="button" :disabled="busy" @click="loadDiscordHealth">{{ busy ? "Loading…" : "Load health" }}</button></div>
+        <ul v-if="platformHealth" class="health-signals"><li v-for="signal in platformHealth.signals" :key="signal.key"><span><strong>{{ signal.display_name }}</strong><small>{{ signal.value }}</small></span><em :data-status="signal.status">{{ signal.status }}</em></li></ul>
+      </section>
     </section>
     <p v-if="notice" class="notice" role="status">{{ notice }}</p>
   </main>
