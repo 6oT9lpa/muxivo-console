@@ -1,8 +1,11 @@
 """Production composition root; this is the only place concrete adapters meet."""
 
 from muxivo_console.application.authenticate_email_password import AuthenticateEmailPassword
+from muxivo_console.application.begin_identity_link import BeginIdentityLink
+from muxivo_console.application.complete_identity_link import CompleteIdentityLink
 from muxivo_console.application.create_browser_session import CreateBrowserSession
 from muxivo_console.application.create_organization import CreateOrganization
+from muxivo_console.application.link_verified_identity import LinkVerifiedIdentity
 from muxivo_console.application.list_control_modules import ListControlModules
 from muxivo_console.application.list_platform_connections import ListPlatformConnections
 from muxivo_console.application.organization_authorizer import MembershipOrganizationAuthorizer
@@ -14,12 +17,20 @@ from muxivo_console.infrastructure.discord_control_api import (
     DiscordPlatformConnectionVerifier,
     HmacControlAssertionIssuer,
 )
+from muxivo_console.infrastructure.discord_oauth import DiscordOAuthClient
 from muxivo_console.infrastructure.naming import RandomSuffixOrganizationSlugGenerator
 from muxivo_console.infrastructure.persistence.connection_repository import (
     SqlAlchemyPlatformConnectionReader,
     SqlAlchemyPlatformConnectionWriter,
 )
 from muxivo_console.infrastructure.persistence.database import create_session_factory
+from muxivo_console.infrastructure.persistence.identity_link_transaction_writer import (
+    SqlAlchemyIdentityLinkTransactionConsumer,
+    SqlAlchemyIdentityLinkTransactionWriter,
+)
+from muxivo_console.infrastructure.persistence.identity_link_writer import (
+    SqlAlchemyLoginIdentityLinkWriter,
+)
 from muxivo_console.infrastructure.persistence.identity_repository import (
     SqlAlchemyEmailPasswordAccountReader,
     SqlAlchemyLoginIdentityReader,
@@ -39,6 +50,7 @@ from muxivo_console.infrastructure.persistence.session_repository import (
 from muxivo_console.infrastructure.security import (
     Argon2idPasswordHasher,
     FernetEmailProtector,
+    FernetOpaqueValueProtector,
     HmacSessionTokenHasher,
     SecureOpaqueSessionTokenIssuer,
     UtcClock,
@@ -124,6 +136,39 @@ def create_production_app(settings: ConsoleSettings):
         ),
         connections=SqlAlchemyPlatformConnectionReader(sessions),
     )
+    discord_identity_link_start = None
+    discord_identity_link_complete = None
+    discord_authorization_url = None
+    if settings.discord_oauth is not None:
+        oauth_client = DiscordOAuthClient(
+            client_id=settings.discord_oauth.client_id,
+            client_secret=settings.discord_oauth.client_secret,
+            redirect_uri=settings.discord_oauth.redirect_uri,
+        )
+        identity_linker = LinkVerifiedIdentity(
+            identifiers=identifiers,
+            user_statuses=user_statuses,
+            identities=SqlAlchemyLoginIdentityLinkWriter(sessions),
+        )
+        opaque_secrets = FernetOpaqueValueProtector(settings.email_encryption_key)
+        discord_identity_link_start = BeginIdentityLink(
+            identifiers=identifiers,
+            clock=clock,
+            user_statuses=user_statuses,
+            token_issuer=SecureOpaqueSessionTokenIssuer(),
+            token_hasher=session_hasher,
+            secrets=opaque_secrets,
+            transactions=SqlAlchemyIdentityLinkTransactionWriter(sessions),
+        )
+        discord_identity_link_complete = CompleteIdentityLink(
+            clock=clock,
+            token_hasher=session_hasher,
+            secrets=opaque_secrets,
+            transactions=SqlAlchemyIdentityLinkTransactionConsumer(sessions),
+            provider_client=oauth_client,
+            linker=identity_linker,
+        )
+        discord_authorization_url = oauth_client.authorization_url
     return create_app(
         control_modules_use_case=modules,
         registration_use_case=registrations,
@@ -131,6 +176,9 @@ def create_production_app(settings: ConsoleSettings):
         organization_creation_use_case=organizations,
         platform_connection_registration_use_case=platform_connections,
         platform_connections_use_case=listed_platform_connections,
+        discord_identity_link_start=discord_identity_link_start,
+        discord_identity_link_complete=discord_identity_link_complete,
+        discord_authorization_url=discord_authorization_url,
         session_resolver=ResolveBrowserSession(
             clock=clock,
             token_hasher=session_hasher,

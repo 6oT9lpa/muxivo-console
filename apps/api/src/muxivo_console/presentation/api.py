@@ -1,4 +1,4 @@
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Callable
 from contextlib import asynccontextmanager
 from hmac import compare_digest
 from uuid import UUID, uuid4
@@ -10,6 +10,16 @@ from muxivo_console.application.authenticate_email_password import (
     AuthenticateEmailPassword,
     AuthenticateEmailPasswordCommand,
     AuthenticationRejectedError,
+)
+from muxivo_console.application.begin_identity_link import (
+    BeginIdentityLink,
+    BeginIdentityLinkCommand,
+    IdentityLinkStartRejectedError,
+)
+from muxivo_console.application.complete_identity_link import (
+    CompleteIdentityLink,
+    CompleteIdentityLinkCommand,
+    IdentityLinkCompletionRejectedError,
 )
 from muxivo_console.application.create_organization import (
     CreateOrganization,
@@ -51,6 +61,7 @@ from muxivo_console.contracts.v1.platform_connections import (
     PlatformConnectionListResponse,
     PlatformConnectionResponse,
 )
+from muxivo_console.domain.identity import LoginIdentityProvider
 from muxivo_console.infrastructure.development import (
     DenyByDefaultOrganizationAuthorizer,
     StaticModuleCatalog,
@@ -75,6 +86,9 @@ def create_app(
     organization_creation_use_case: CreateOrganization | None = None,
     platform_connection_registration_use_case: RegisterPlatformConnection | None = None,
     platform_connections_use_case: ListPlatformConnections | None = None,
+    discord_identity_link_start: BeginIdentityLink | None = None,
+    discord_identity_link_complete: CompleteIdentityLink | None = None,
+    discord_authorization_url: Callable[..., str] | None = None,
     session_resolver: ResolveBrowserSession | None = None,
 ) -> FastAPI:
     """Create the Console BFF without coupling application code to FastAPI."""
@@ -128,6 +142,66 @@ def create_app(
     @app.get("/healthz", tags=["operations"])
     async def healthz() -> dict[str, str]:
         return {"status": "ok"}
+
+    @app.post(
+        "/api/v1/identity-links/discord/authorizations",
+        tags=["identity-links"],
+    )
+    async def begin_discord_identity_link(request: Request) -> dict[str, str | int]:
+        actor_id = getattr(request.state, "actor_id", None)
+        if not isinstance(actor_id, UUID):
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied")
+        if discord_identity_link_start is None or discord_authorization_url is None:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Discord identity linking is unavailable",
+            )
+        try:
+            started = await discord_identity_link_start.execute(
+                BeginIdentityLinkCommand(
+                    actor_id=actor_id,
+                    provider=LoginIdentityProvider.DISCORD,
+                    correlation_id=request.state.correlation_id,
+                )
+            )
+            return {
+                "authorization_url": discord_authorization_url(
+                    state=started.state, code_challenge=started.code_challenge
+                ),
+                "expires_in_seconds": started.expires_in_seconds,
+            }
+        except IdentityLinkStartRejectedError as error:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN, detail="Discord identity linking failed"
+            ) from error
+
+    @app.get(
+        "/api/v1/identity-links/discord/callback",
+        tags=["identity-links"],
+    )
+    async def complete_discord_identity_link(
+        code: str, state: str, request: Request
+    ) -> dict[str, bool]:
+        if discord_identity_link_complete is None:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Discord identity linking is unavailable",
+            )
+        try:
+            await discord_identity_link_complete.execute(
+                CompleteIdentityLinkCommand(
+                    provider=LoginIdentityProvider.DISCORD,
+                    state=state,
+                    authorization_code=code,
+                    correlation_id=request.state.correlation_id,
+                )
+            )
+        except IdentityLinkCompletionRejectedError as error:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Discord identity linking failed",
+            ) from error
+        return {"linked": True}
 
     @app.post(
         "/api/v1/organizations",

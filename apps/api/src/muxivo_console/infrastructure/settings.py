@@ -14,6 +14,13 @@ class ConfigurationError(ValueError):
 
 
 @dataclass(frozen=True, slots=True)
+class DiscordOAuthSettings:
+    client_id: str
+    client_secret: str
+    redirect_uri: str
+
+
+@dataclass(frozen=True, slots=True)
 class ConsoleSettings:
     database_url: str
     email_lookup_key: bytes
@@ -22,6 +29,7 @@ class ConsoleSettings:
     discord_control_base_url: str
     discord_control_signing_key: bytes
     environment: str = "production"
+    discord_oauth: DiscordOAuthSettings | None = None
 
     @property
     def allow_insecure_discord_control_http(self) -> bool:
@@ -43,6 +51,7 @@ class ConsoleSettings:
             raise ConfigurationError(
                 "MUXIVO_CONSOLE_EMAIL_ENCRYPTION_KEY must be a valid Fernet key."
             ) from error
+        oauth = _optional_discord_oauth(values)
         return cls(
             database_url=database_url,
             email_lookup_key=_decode_key(values, "MUXIVO_CONSOLE_EMAIL_LOOKUP_KEY"),
@@ -51,6 +60,7 @@ class ConsoleSettings:
             discord_control_base_url=_required(values, "MUXIVO_DISCORD_CONTROL_BASE_URL"),
             discord_control_signing_key=_decode_key(values, "MUXIVO_DISCORD_CONTROL_SIGNING_KEY"),
             environment=runtime_environment,
+            discord_oauth=oauth,
         )
 
 
@@ -69,3 +79,24 @@ def _decode_key(values: Mapping[str, str], name: str) -> bytes:
     if len(decoded) < 32:
         raise ConfigurationError(f"{name} must contain at least 32 bytes.")
     return decoded
+
+
+def _optional_discord_oauth(values: Mapping[str, str]) -> DiscordOAuthSettings | None:
+    names = (
+        "MUXIVO_DISCORD_OAUTH_CLIENT_ID",
+        "MUXIVO_DISCORD_OAUTH_CLIENT_SECRET",
+        "MUXIVO_DISCORD_OAUTH_REDIRECT_URI",
+    )
+    provided = [bool(values.get(name, "").strip()) for name in names]
+    if not any(provided):
+        return None
+    if not all(provided):
+        raise ConfigurationError("Discord OAuth configuration must be complete or absent.")
+    redirect_uri = _required(values, names[2])
+    if not redirect_uri.startswith("https://"):
+        raise ConfigurationError("MUXIVO_DISCORD_OAUTH_REDIRECT_URI must use HTTPS.")
+    return DiscordOAuthSettings(
+        client_id=_required(values, names[0]),
+        client_secret=_required(values, names[1]),
+        redirect_uri=redirect_uri,
+    )
