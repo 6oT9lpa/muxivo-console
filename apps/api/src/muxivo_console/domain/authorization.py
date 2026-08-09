@@ -21,6 +21,7 @@ class AuthorizationResource(StrEnum):
     """Platform-neutral Console resources, deliberately independent of guild IDs."""
 
     CONTROL_MODULES = "console.control_modules"
+    PLATFORM_CONNECTIONS = "console.platform_connections"
 
 
 @dataclass(frozen=True, slots=True)

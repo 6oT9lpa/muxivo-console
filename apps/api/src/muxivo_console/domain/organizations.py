@@ -83,6 +83,11 @@ class OrganizationMembership:
 
 def _role_supports(role: OrganizationRole, request: AuthorizationRequest) -> bool:
     """Return the maximum capability of a role before its scopes narrow it."""
-    if request.resource is not AuthorizationResource.CONTROL_MODULES:
-        return False
-    return request.action is AuthorizationAction.READ
+    if request.resource is AuthorizationResource.CONTROL_MODULES:
+        return request.action is AuthorizationAction.READ
+    if request.resource is AuthorizationResource.PLATFORM_CONNECTIONS:
+        return role is OrganizationRole.ADMIN and request.action in {
+            AuthorizationAction.READ,
+            AuthorizationAction.MANAGE,
+        }
+    return False

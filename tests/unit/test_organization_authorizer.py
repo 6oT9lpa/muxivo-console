@@ -115,3 +115,30 @@ def test_role_assignment_may_not_grant_equal_or_greater_privilege() -> None:
     assert OrganizationRole.ADMIN.may_assign(OrganizationRole.MODERATOR) is True
     assert OrganizationRole.ADMIN.may_assign(OrganizationRole.ADMIN) is False
     assert OrganizationRole.MODERATOR.may_assign(OrganizationRole.ADMIN) is False
+
+
+def test_admin_can_manage_platform_connections_only_with_an_explicit_scope() -> None:
+    actor_id = uuid4()
+    organization_id = uuid4()
+    request = AuthorizationRequest(
+        actor_id=actor_id,
+        organization_id=organization_id,
+        resource=AuthorizationResource.PLATFORM_CONNECTIONS,
+        action=AuthorizationAction.MANAGE,
+    )
+    without_scope = OrganizationMembership(actor_id, organization_id, OrganizationRole.ADMIN)
+    with_scope = OrganizationMembership(
+        actor_id,
+        organization_id,
+        OrganizationRole.ADMIN,
+        frozenset(
+            {
+                MembershipResourceScope(
+                    AuthorizationResource.PLATFORM_CONNECTIONS, AuthorizationAction.MANAGE
+                )
+            }
+        ),
+    )
+
+    assert without_scope.allows(request) is False
+    assert with_scope.allows(request) is True

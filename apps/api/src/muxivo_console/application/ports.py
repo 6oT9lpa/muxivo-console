@@ -2,9 +2,10 @@ from collections.abc import Sequence
 from typing import Protocol
 from uuid import UUID
 
-from muxivo_console.domain.activity import ControlModule
+from muxivo_console.domain.activity import ControlModule, Platform
 from muxivo_console.domain.audit import AuditEvent
 from muxivo_console.domain.authorization import AuthorizationDecision, AuthorizationRequest
+from muxivo_console.domain.connections import PlatformConnection
 from muxivo_console.domain.identity import (
     EmailPasswordAccount,
     EmailPasswordRegistration,
@@ -98,6 +99,26 @@ class OrganizationCreationWriter(Protocol):
         owner_membership: OrganizationMembership,
         audit_event: AuditEvent,
     ) -> bool: ...
+
+
+class PlatformConnectionVerifier(Protocol):
+    """Asks the platform service to validate native ownership before registration."""
+
+    async def verify_registration(
+        self,
+        *,
+        actor_id: UUID,
+        organization_id: UUID,
+        platform: Platform,
+        external_resource_id: str,
+        correlation_id: UUID,
+    ) -> bool: ...
+
+
+class PlatformConnectionWriter(Protocol):
+    """Atomically persists non-secret metadata and its mandatory audit event."""
+
+    async def create(self, *, connection: PlatformConnection, audit_event: AuditEvent) -> bool: ...
 
 
 class Clock(Protocol):
