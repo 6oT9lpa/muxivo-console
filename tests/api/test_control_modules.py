@@ -21,7 +21,9 @@ def test_requires_an_authenticated_principal() -> None:
 
 def test_returns_versioned_platform_neutral_contract_for_authorized_actor() -> None:
     actor_id = uuid4()
-    app = create_app(ListControlModules(AllowAuthorizer(), StaticModuleCatalog()))
+    app = create_app(
+        control_modules_use_case=ListControlModules(AllowAuthorizer(), StaticModuleCatalog())
+    )
 
     @app.middleware("http")
     async def inject_test_principal(request, call_next):

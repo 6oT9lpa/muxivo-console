@@ -1,10 +1,20 @@
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
-from uuid import UUID
+from uuid import UUID, uuid4
 
 from fastapi import FastAPI, HTTPException, Request, status
+from fastapi.responses import Response
 
 from muxivo_console.application.list_control_modules import AccessDeniedError, ListControlModules
+from muxivo_console.application.register_email_password import (
+    RegisterEmailPassword,
+    RegisterEmailPasswordCommand,
+    RegistrationRejectedError,
+)
+from muxivo_console.contracts.v1.authentication import (
+    EmailPasswordRegistrationRequest,
+    EmailPasswordRegistrationResponse,
+)
 from muxivo_console.contracts.v1.control_modules import (
     ControlModuleListResponse,
     ControlModuleResponse,
@@ -15,9 +25,12 @@ from muxivo_console.infrastructure.development import (
 )
 
 
-def create_app(use_case: ListControlModules | None = None) -> FastAPI:
+def create_app(
+    control_modules_use_case: ListControlModules | None = None,
+    registration_use_case: RegisterEmailPassword | None = None,
+) -> FastAPI:
     """Create the Console BFF without coupling application code to FastAPI."""
-    control_modules = use_case or ListControlModules(
+    control_modules = control_modules_use_case or ListControlModules(
         authorizer=DenyByDefaultOrganizationAuthorizer(),
         catalog=StaticModuleCatalog(),
     )
@@ -28,9 +41,44 @@ def create_app(use_case: ListControlModules | None = None) -> FastAPI:
 
     app = FastAPI(title="Muxivo Console API", version="1.0.0", lifespan=lifespan)
 
+    @app.middleware("http")
+    async def attach_correlation_id(request: Request, call_next) -> Response:
+        correlation_id = uuid4()
+        request.state.correlation_id = correlation_id
+        response = await call_next(request)
+        response.headers["X-Correlation-ID"] = str(correlation_id)
+        return response
+
     @app.get("/healthz", tags=["operations"])
     async def healthz() -> dict[str, str]:
         return {"status": "ok"}
+
+    @app.post(
+        "/api/v1/auth/email-password/registrations",
+        response_model=EmailPasswordRegistrationResponse,
+        status_code=status.HTTP_202_ACCEPTED,
+        tags=["authentication"],
+    )
+    async def register_email_password(
+        payload: EmailPasswordRegistrationRequest, request: Request
+    ) -> EmailPasswordRegistrationResponse:
+        if registration_use_case is None:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Registration is unavailable",
+            )
+        try:
+            await registration_use_case.execute(
+                RegisterEmailPasswordCommand(
+                    email=str(payload.email),
+                    password=payload.password.get_secret_value(),
+                    display_name=payload.display_name,
+                    correlation_id=request.state.correlation_id,
+                )
+            )
+        except RegistrationRejectedError:
+            pass
+        return EmailPasswordRegistrationResponse()
 
     @app.get(
         "/api/v1/organizations/{organization_id}/control-modules",
