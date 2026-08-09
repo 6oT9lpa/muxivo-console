@@ -21,6 +21,7 @@ from muxivo_console.domain.activity import (
     Platform,
 )
 from muxivo_console.domain.authorization import AuthorizationAction, AuthorizationResource
+from muxivo_console.domain.health import HealthSignal, HealthStatus, PlatformHealth
 from muxivo_console.domain.identity import LoginIdentityProvider
 
 
@@ -111,6 +112,34 @@ class DiscordControlApiCatalog:
         except (httpx.HTTPError, ValueError, json.JSONDecodeError) as error:
             raise PlatformControlUnavailableError("Discord Control API request failed.") from error
         return _parse_discord_modules(payload)
+
+    async def get_for_organization(
+        self, *, organization_id: UUID, actor_id: UUID, correlation_id: UUID
+    ) -> PlatformHealth:
+        assertion = self.assertions.issue(
+            actor_id=actor_id,
+            organization_id=organization_id,
+            resource=AuthorizationResource.CONTROL_MODULES,
+            action=AuthorizationAction.READ,
+            correlation_id=correlation_id,
+        )
+        try:
+            async with httpx.AsyncClient(
+                base_url=self.base_url,
+                timeout=self.timeout,
+                transport=self.transport,
+            ) as client:
+                response = await client.get(
+                    f"/control/v1/organizations/{organization_id}/health",
+                    headers={"Authorization": f"Bearer {assertion}"},
+                )
+                response.raise_for_status()
+                payload = response.json()
+        except (httpx.HTTPError, ValueError, json.JSONDecodeError) as error:
+            raise PlatformControlUnavailableError(
+                "Discord Control API health request failed."
+            ) from error
+        return _parse_discord_health(payload)
 
 
 @dataclass(frozen=True, slots=True)
@@ -205,6 +234,50 @@ def _parse_discord_modules(payload: Any) -> tuple[ControlModule, ...]:
             "Discord Control API returned an invalid module."
         ) from error
     return tuple(modules)
+
+
+def _parse_discord_health(payload: Any) -> PlatformHealth:
+    if not isinstance(payload, dict) or not isinstance(payload.get("signals"), list):
+        raise PlatformControlUnavailableError(
+            "Discord Control API returned an invalid health payload."
+        )
+    signals: list[HealthSignal] = []
+    try:
+        for item in payload["signals"]:
+            if not isinstance(item, dict):
+                raise ValueError("Health signal must be an object.")
+            name, value, status = item["name"], item["value"], item["status"]
+            latency_ms = item.get("latency_ms")
+            if (
+                not isinstance(name, str)
+                or not isinstance(value, str)
+                or not isinstance(status, str)
+            ):
+                raise ValueError("Health signal fields must be strings.")
+            if latency_ms is not None and (
+                not isinstance(latency_ms, int) or isinstance(latency_ms, bool)
+            ):
+                raise ValueError("Health signal latency must be an integer.")
+            signals.append(
+                HealthSignal(
+                    key=_health_signal_key(name),
+                    display_name=name,
+                    value=value,
+                    status=HealthStatus(status),
+                    latency_ms=latency_ms,
+                )
+            )
+    except (KeyError, TypeError, ValueError) as error:
+        raise PlatformControlUnavailableError(
+            "Discord Control API returned an invalid health signal."
+        ) from error
+    return PlatformHealth(platform=Platform.DISCORD, signals=tuple(signals))
+
+
+def _health_signal_key(name: str) -> str:
+    return "discord." + "".join(
+        character.lower() if character.isalnum() else "-" for character in name
+    ).strip("-")
 
 
 def _base64url(value: bytes) -> str:

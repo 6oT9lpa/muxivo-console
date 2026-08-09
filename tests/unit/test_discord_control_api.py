@@ -127,6 +127,62 @@ async def test_catalog_rejects_bad_platform_payload_without_leaking_upstream_det
         )
 
 
+@pytest.mark.asyncio
+async def test_catalog_maps_aggregate_discord_health_without_platform_secrets() -> None:
+    actor_id, organization_id, correlation_id = uuid4(), uuid4(), uuid4()
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        assert request.url.path == f"/control/v1/organizations/{organization_id}/health"
+        claims = decode_claims(request.headers["Authorization"].removeprefix("Bearer "))
+        assert claims["resource"] == "console.control_modules"
+        assert claims["action"] == "read"
+        return httpx.Response(
+            200,
+            json={
+                "signals": [
+                    {
+                        "name": "Bot latency",
+                        "value": "12 ms",
+                        "status": "operational",
+                        "latency_ms": 12,
+                    }
+                ]
+            },
+        )
+
+    catalog = DiscordControlApiCatalog(
+        "http://discord-control.test",
+        assertion_issuer(),
+        transport=httpx.MockTransport(handler),
+        allow_insecure_http=True,
+    )
+
+    health = await catalog.get_for_organization(
+        actor_id=actor_id,
+        organization_id=organization_id,
+        correlation_id=correlation_id,
+    )
+
+    assert health.platform is Platform.DISCORD
+    assert health.signals[0].key == "discord.bot-latency"
+    assert health.signals[0].latency_ms == 12
+
+
+@pytest.mark.asyncio
+async def test_catalog_rejects_invalid_discord_health_payload() -> None:
+    catalog = DiscordControlApiCatalog(
+        "http://discord-control.test",
+        assertion_issuer(),
+        transport=httpx.MockTransport(lambda _: httpx.Response(200, json={"signals": [{}]})),
+        allow_insecure_http=True,
+    )
+
+    with pytest.raises(PlatformControlUnavailableError, match="invalid health signal"):
+        await catalog.get_for_organization(
+            actor_id=uuid4(), organization_id=uuid4(), correlation_id=uuid4()
+        )
+
+
 def test_catalog_requires_https_outside_explicit_local_development() -> None:
     with pytest.raises(ValueError, match="absolute service URL"):
         DiscordControlApiCatalog("http://discord-control.test", assertion_issuer())

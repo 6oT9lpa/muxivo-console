@@ -6,6 +6,7 @@ from muxivo_console.domain.activity import ControlModule, Platform
 from muxivo_console.domain.audit import AuditEvent
 from muxivo_console.domain.authorization import AuthorizationDecision, AuthorizationRequest
 from muxivo_console.domain.connections import PlatformConnection
+from muxivo_console.domain.health import PlatformHealth
 from muxivo_console.domain.identity import (
     EmailPasswordAccount,
     EmailPasswordRegistration,
@@ -24,6 +25,14 @@ class ModuleCatalog(Protocol):
     async def list_for_organization(
         self, *, organization_id: UUID, actor_id: UUID, correlation_id: UUID
     ) -> Sequence[ControlModule]: ...
+
+
+class PlatformHealthReader(Protocol):
+    """Reads aggregate, non-secret health from an authorized Control API."""
+
+    async def get_for_organization(
+        self, *, organization_id: UUID, actor_id: UUID, correlation_id: UUID
+    ) -> PlatformHealth: ...
 
 
 class OrganizationAuthorizer(Protocol):
