@@ -60,6 +60,7 @@ class SessionCreator:
         return IssuedBrowserSession(
             id=uuid4(),
             raw_token="opaque-token",
+            raw_csrf_token="opaque-csrf-token",
             expires_at=datetime(2026, 8, 23, tzinfo=UTC),
             assurance_level=SessionAssuranceLevel.PASSWORD,
         )

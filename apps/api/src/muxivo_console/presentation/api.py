@@ -1,9 +1,10 @@
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
+from hmac import compare_digest
 from uuid import UUID, uuid4
 
 from fastapi import FastAPI, HTTPException, Request, status
-from fastapi.responses import Response
+from fastapi.responses import JSONResponse, Response
 
 from muxivo_console.application.authenticate_email_password import (
     AuthenticateEmailPassword,
@@ -32,6 +33,15 @@ from muxivo_console.infrastructure.development import (
 )
 
 SESSION_COOKIE_NAME = "__Host-muxivo_session"
+CSRF_COOKIE_NAME = "__Host-muxivo_csrf"
+CSRF_HEADER_NAME = "X-CSRF-Token"
+CSRF_EXEMPT_PATHS = frozenset(
+    {
+        "/api/v1/auth/email-password/registrations",
+        "/api/v1/auth/email-password/sessions",
+    }
+)
+SAFE_HTTP_METHODS = frozenset({"GET", "HEAD", "OPTIONS"})
 
 
 def create_app(
@@ -73,6 +83,26 @@ def create_app(
                     request.state.actor_id = principal.user_id
                     request.state.session_id = principal.session_id
                     request.state.assurance_level = principal.assurance_level
+        return await call_next(request)
+
+    @app.middleware("http")
+    async def protect_mutations_from_csrf(request: Request, call_next) -> Response:
+        """Require a browser-readable token to accompany every authenticated mutation."""
+        if (
+            request.method not in SAFE_HTTP_METHODS
+            and request.url.path not in CSRF_EXEMPT_PATHS
+        ):
+            csrf_cookie = request.cookies.get(CSRF_COOKIE_NAME)
+            csrf_header = request.headers.get(CSRF_HEADER_NAME)
+            if (
+                not csrf_cookie
+                or not csrf_header
+                or not compare_digest(csrf_cookie, csrf_header)
+            ):
+                return JSONResponse(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    content={"detail": "CSRF validation failed"},
+                )
         return await call_next(request)
 
     @app.get("/healthz", tags=["operations"])
@@ -141,6 +171,15 @@ def create_app(
             path="/",
             secure=True,
             httponly=True,
+            samesite="lax",
+        )
+        response.set_cookie(
+            key=CSRF_COOKIE_NAME,
+            value=issued_session.raw_csrf_token,
+            expires=issued_session.expires_at,
+            path="/",
+            secure=True,
+            httponly=False,
             samesite="lax",
         )
         return response

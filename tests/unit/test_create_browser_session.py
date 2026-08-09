@@ -38,8 +38,11 @@ class UserStatuses:
 
 
 class TokenIssuer:
+    def __init__(self) -> None:
+        self.tokens = iter(("opaque-browser-token", "opaque-csrf-token"))
+
     def issue(self) -> str:
-        return "opaque-browser-token"
+        return next(self.tokens)
 
 
 class TokenHasher:
@@ -81,7 +84,9 @@ async def test_active_user_receives_raw_token_once_while_storage_receives_only_h
     issued = await use_case.execute(command(user_id))
 
     assert issued.raw_token == "opaque-browser-token"
+    assert issued.raw_csrf_token == "opaque-csrf-token"
     assert "opaque-browser-token" not in repr(issued)
+    assert "opaque-csrf-token" not in repr(issued)
     assert writer.session.token_hash == "a" * 64
     assert writer.session.expires_at == now + timedelta(days=14)
     assert writer.audit_event.action == "auth.session_created"

@@ -30,10 +30,11 @@ class CreateBrowserSessionCommand:
 
 @dataclass(frozen=True, slots=True)
 class IssuedBrowserSession:
-    """Raw token is intentionally excluded from repr/logging and returned once only."""
+    """Raw browser credentials are excluded from repr/logging and returned once only."""
 
     id: UUID
     raw_token: str = field(repr=False)
+    raw_csrf_token: str = field(repr=False)
     expires_at: datetime
     assurance_level: SessionAssuranceLevel
 
@@ -53,6 +54,7 @@ class CreateBrowserSession:
             raise SessionCreationRejectedError("The user is not allowed to create a session.")
         now = self.clock.now()
         raw_token = self.token_issuer.issue()
+        raw_csrf_token = self.token_issuer.issue()
         session = AuthSession(
             id=self.identifiers.new(),
             user_id=command.user_id,
@@ -78,6 +80,7 @@ class CreateBrowserSession:
         return IssuedBrowserSession(
             id=session.id,
             raw_token=raw_token,
+            raw_csrf_token=raw_csrf_token,
             expires_at=session.expires_at,
             assurance_level=session.assurance_level,
         )
