@@ -4,7 +4,10 @@ version = "0.1.0"
 description = "Platform-neutral control plane for the Muxivo ecosystem."
 requires-python = ">=3.12"
 dependencies = [
+  "alembic>=1.18,<1.19",
+  "asyncpg>=0.30,<0.31",
   "fastapi>=0.135,<0.136",
+  "sqlalchemy>=2.0,<2.1",
   "uvicorn[standard]>=0.42,<0.43",
 ]
 
@@ -15,6 +18,9 @@ dev = [
   "pytest-asyncio>=1.0,<2.0",
   "ruff>=0.15,<0.16",
 ]
+
+[tool.setuptools.packages.find]
+where = ["apps/api/src"]
 
 [tool.pytest.ini_options]
 pythonpath = ["apps/api/src"]
