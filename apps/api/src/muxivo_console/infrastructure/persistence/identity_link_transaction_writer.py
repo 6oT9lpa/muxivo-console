@@ -2,11 +2,14 @@
 
 from collections.abc import Callable
 from contextlib import AbstractAsyncContextManager
+from datetime import datetime
 
+from sqlalchemy import update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from muxivo_console.domain.audit import AuditEvent
+from muxivo_console.domain.identity import LoginIdentityProvider
 from muxivo_console.domain.identity_linking import IdentityLinkTransaction
 from muxivo_console.infrastructure.persistence.models import (
     AuditEventRecord,
@@ -52,3 +55,44 @@ class SqlAlchemyIdentityLinkTransactionWriter:
         except IntegrityError:
             return False
         return True
+
+
+class SqlAlchemyIdentityLinkTransactionConsumer:
+    """Claim a valid state in one SQL statement to reject concurrent/replayed callbacks."""
+
+    def __init__(
+        self, session_factory: Callable[[], AbstractAsyncContextManager[AsyncSession]]
+    ) -> None:
+        self._session_factory = session_factory
+
+    async def consume(
+        self, *, state_hash: str, consumed_at: datetime
+    ) -> IdentityLinkTransaction | None:
+        statement = (
+            update(IdentityLinkTransactionRecord)
+            .where(
+                IdentityLinkTransactionRecord.state_hash == state_hash,
+                IdentityLinkTransactionRecord.consumed_at.is_(None),
+                IdentityLinkTransactionRecord.expires_at > consumed_at,
+            )
+            .values(consumed_at=consumed_at)
+            .returning(IdentityLinkTransactionRecord)
+        )
+        async with self._session_factory() as session:
+            async with session.begin():
+                result = await session.execute(statement)
+                record = result.scalar_one_or_none()
+        if record is None:
+            return None
+        try:
+            return IdentityLinkTransaction(
+                id=record.id,
+                user_id=record.user_id,
+                provider=LoginIdentityProvider(record.provider),
+                state_hash=record.state_hash,
+                code_verifier_ciphertext=record.code_verifier_ciphertext,
+                expires_at=record.expires_at,
+                consumed_at=record.consumed_at,
+            )
+        except ValueError:
+            return None

@@ -99,6 +99,8 @@ class OpaqueValueProtector(Protocol):
 
     def encrypt(self, plaintext: str) -> bytes: ...
 
+    def decrypt(self, ciphertext: bytes) -> str: ...
+
 
 class IdentityLinkTransactionWriter(Protocol):
     """Stores a single-use OAuth transaction before redirecting a browser."""
@@ -106,6 +108,18 @@ class IdentityLinkTransactionWriter(Protocol):
     async def create(
         self, *, transaction: IdentityLinkTransaction, audit_event: AuditEvent
     ) -> bool: ...
+
+
+class IdentityLinkTransactionConsumer(Protocol):
+    """Atomically claims an unexpired OAuth transaction so state cannot be replayed."""
+
+    async def consume(self, *, state_hash: str, consumed_at) -> IdentityLinkTransaction | None: ...
+
+
+class OAuthIdentityProvider(Protocol):
+    """Exchanges an authorization code server-side and returns a verified subject."""
+
+    async def resolve_subject(self, *, authorization_code: str, code_verifier: str) -> str: ...
 
 
 class UserStatusReader(Protocol):
