@@ -80,12 +80,7 @@ class DiscordControlApiCatalog:
     allow_insecure_http: bool = False
 
     def __post_init__(self) -> None:
-        parsed = urlparse(self.base_url)
-        allowed_schemes = {"https"}
-        if self.allow_insecure_http:
-            allowed_schemes.add("http")
-        if parsed.scheme not in allowed_schemes or not parsed.netloc or parsed.username:
-            raise ValueError("Discord Control API base URL must be an absolute service URL.")
+        _validate_control_base_url(self.base_url, self.allow_insecure_http)
 
     async def list_for_organization(
         self, *, organization_id: UUID, actor_id: UUID, correlation_id: UUID
@@ -112,6 +107,61 @@ class DiscordControlApiCatalog:
         except (httpx.HTTPError, ValueError, json.JSONDecodeError) as error:
             raise PlatformControlUnavailableError("Discord Control API request failed.") from error
         return _parse_discord_modules(payload)
+
+
+@dataclass(frozen=True, slots=True)
+class DiscordPlatformConnectionVerifier:
+    """Ask Discord to re-check native authority before Console links a guild."""
+
+    base_url: str
+    assertions: HmacControlAssertionIssuer
+    timeout: float = 5.0
+    transport: httpx.AsyncBaseTransport | None = None
+    allow_insecure_http: bool = False
+
+    def __post_init__(self) -> None:
+        _validate_control_base_url(self.base_url, self.allow_insecure_http)
+
+    async def verify_registration(
+        self,
+        *,
+        actor_id: UUID,
+        organization_id: UUID,
+        platform: Platform,
+        external_resource_id: str,
+        correlation_id: UUID,
+    ) -> bool:
+        if platform is not Platform.DISCORD:
+            return False
+        assertion = self.assertions.issue(
+            actor_id=actor_id,
+            organization_id=organization_id,
+            resource=AuthorizationResource.PLATFORM_CONNECTIONS,
+            action=AuthorizationAction.MANAGE,
+            correlation_id=correlation_id,
+        )
+        try:
+            async with httpx.AsyncClient(
+                base_url=self.base_url,
+                timeout=self.timeout,
+                transport=self.transport,
+            ) as client:
+                response = await client.post(
+                    f"/control/v1/organizations/{organization_id}/connections/verify",
+                    headers={"Authorization": f"Bearer {assertion}"},
+                    json={"platform": platform.value, "external_resource_id": external_resource_id},
+                )
+                response.raise_for_status()
+                payload = response.json()
+        except (httpx.HTTPError, ValueError, json.JSONDecodeError) as error:
+            raise PlatformControlUnavailableError(
+                "Discord Control API connection verification failed."
+            ) from error
+        if not isinstance(payload, dict) or not isinstance(payload.get("verified"), bool):
+            raise PlatformControlUnavailableError(
+                "Discord Control API returned an invalid connection verification payload."
+            )
+        return payload["verified"]
 
 
 def _parse_discord_modules(payload: Any) -> tuple[ControlModule, ...]:
@@ -148,3 +198,12 @@ def _parse_discord_modules(payload: Any) -> tuple[ControlModule, ...]:
 
 def _base64url(value: bytes) -> str:
     return base64.urlsafe_b64encode(value).rstrip(b"=").decode("ascii")
+
+
+def _validate_control_base_url(base_url: str, allow_insecure_http: bool) -> None:
+    parsed = urlparse(base_url)
+    allowed_schemes = {"https"}
+    if allow_insecure_http:
+        allowed_schemes.add("http")
+    if parsed.scheme not in allowed_schemes or not parsed.netloc or parsed.username:
+        raise ValueError("Discord Control API base URL must be an absolute service URL.")

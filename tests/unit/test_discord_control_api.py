@@ -6,9 +6,11 @@ from uuid import uuid4
 import httpx
 import pytest
 from muxivo_console.application.list_control_modules import PlatformControlUnavailableError
+from muxivo_console.domain.activity import Platform
 from muxivo_console.domain.authorization import AuthorizationAction, AuthorizationResource
 from muxivo_console.infrastructure.discord_control_api import (
     DiscordControlApiCatalog,
+    DiscordPlatformConnectionVerifier,
     HmacControlAssertionIssuer,
 )
 
@@ -127,3 +129,61 @@ def test_assertion_rejects_weak_shared_secret() -> None:
             signing_key=b"weak",
             clock=FixedClock(),
         )
+
+
+@pytest.mark.asyncio
+async def test_discord_verifier_requires_platform_confirmation_with_manage_assertion() -> None:
+    actor_id, organization_id, correlation_id = uuid4(), uuid4(), uuid4()
+    received_authorization: str | None = None
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        nonlocal received_authorization
+        received_authorization = request.headers["Authorization"]
+        assert request.url.path == f"/control/v1/organizations/{organization_id}/connections/verify"
+        assert json.loads(request.content) == {
+            "platform": "discord",
+            "external_resource_id": "123456789012345678",
+        }
+        return httpx.Response(200, json={"verified": True})
+
+    verifier = DiscordPlatformConnectionVerifier(
+        "http://discord-control.test",
+        assertion_issuer(),
+        transport=httpx.MockTransport(handler),
+        allow_insecure_http=True,
+    )
+
+    verified = await verifier.verify_registration(
+        actor_id=actor_id,
+        organization_id=organization_id,
+        platform=Platform.DISCORD,
+        external_resource_id="123456789012345678",
+        correlation_id=correlation_id,
+    )
+
+    assert verified is True
+    assert received_authorization is not None
+    claims = decode_claims(received_authorization.removeprefix("Bearer "))
+    assert claims["resource"] == "console.platform_connections"
+    assert claims["action"] == "manage"
+    assert claims["sub"] == str(actor_id)
+
+
+@pytest.mark.asyncio
+async def test_discord_verifier_rejects_other_platforms_without_http_call() -> None:
+    verifier = DiscordPlatformConnectionVerifier(
+        "http://discord-control.test",
+        assertion_issuer(),
+        transport=httpx.MockTransport(lambda _: pytest.fail("unexpected HTTP call")),
+        allow_insecure_http=True,
+    )
+
+    verified = await verifier.verify_registration(
+        actor_id=uuid4(),
+        organization_id=uuid4(),
+        platform=Platform.TWITCH,
+        external_resource_id="channel-id",
+        correlation_id=uuid4(),
+    )
+
+    assert verified is False
