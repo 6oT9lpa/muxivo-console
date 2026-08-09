@@ -68,6 +68,19 @@ def test_assertion_is_short_lived_and_binds_exact_console_request_facts() -> Non
     assert isinstance(claims["jti"], str)
 
 
+def test_assertion_can_bind_one_platform_resource() -> None:
+    token = assertion_issuer().issue(
+        actor_id=uuid4(),
+        organization_id=uuid4(),
+        resource=AuthorizationResource.CONTROL_MODULES,
+        action=AuthorizationAction.READ,
+        correlation_id=uuid4(),
+        platform_resource_id="123456789012345678",
+    )
+
+    assert decode_claims(token)["platform_resource_id"] == "123456789012345678"
+
+
 @pytest.mark.asyncio
 async def test_catalog_calls_versioned_discord_api_with_bound_assertion() -> None:
     actor_id, organization_id, correlation_id = uuid4(), uuid4(), uuid4()

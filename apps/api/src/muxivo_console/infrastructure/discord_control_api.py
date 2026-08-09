@@ -50,6 +50,7 @@ class HmacControlAssertionIssuer:
         action: AuthorizationAction,
         correlation_id: UUID,
         platform_subject: str | None = None,
+        platform_resource_id: str | None = None,
     ) -> str:
         now = self.clock.now().astimezone(UTC)
         header = {"alg": "HS256", "typ": "JWT"}
@@ -67,6 +68,10 @@ class HmacControlAssertionIssuer:
         }
         if platform_subject is not None:
             claims["platform_subject"] = platform_subject
+        if platform_resource_id is not None:
+            if not platform_resource_id.strip() or len(platform_resource_id) > 255:
+                raise ValueError("Platform resource identifier must contain 1 to 255 characters.")
+            claims["platform_resource_id"] = platform_resource_id
         encoded_header = _base64url(json.dumps(header, separators=(",", ":")).encode())
         encoded_claims = _base64url(json.dumps(claims, separators=(",", ":")).encode())
         signing_input = f"{encoded_header}.{encoded_claims}".encode("ascii")
