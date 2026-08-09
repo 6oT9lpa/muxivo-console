@@ -26,6 +26,11 @@ from muxivo_console.application.register_email_password import (
     RegisterEmailPasswordCommand,
     RegistrationRejectedError,
 )
+from muxivo_console.application.register_platform_connection import (
+    PlatformConnectionRegistrationRejectedError,
+    RegisterPlatformConnection,
+    RegisterPlatformConnectionCommand,
+)
 from muxivo_console.application.resolve_browser_session import ResolveBrowserSession
 from muxivo_console.contracts.v1.authentication import (
     EmailPasswordLoginRequest,
@@ -39,6 +44,10 @@ from muxivo_console.contracts.v1.control_modules import (
 from muxivo_console.contracts.v1.organizations import (
     OrganizationCreateRequest,
     OrganizationResponse,
+)
+from muxivo_console.contracts.v1.platform_connections import (
+    PlatformConnectionCreateRequest,
+    PlatformConnectionResponse,
 )
 from muxivo_console.infrastructure.development import (
     DenyByDefaultOrganizationAuthorizer,
@@ -62,6 +71,7 @@ def create_app(
     registration_use_case: RegisterEmailPassword | None = None,
     authentication_use_case: AuthenticateEmailPassword | None = None,
     organization_creation_use_case: CreateOrganization | None = None,
+    platform_connection_registration_use_case: RegisterPlatformConnection | None = None,
     session_resolver: ResolveBrowserSession | None = None,
 ) -> FastAPI:
     """Create the Console BFF without coupling application code to FastAPI."""
@@ -146,6 +156,45 @@ def create_app(
                 status_code=status.HTTP_403_FORBIDDEN, detail="Organization creation failed"
             ) from error
         return OrganizationResponse.model_validate(organization, from_attributes=True)
+
+    @app.post(
+        "/api/v1/organizations/{organization_id}/platform-connections",
+        response_model=PlatformConnectionResponse,
+        status_code=status.HTTP_201_CREATED,
+        tags=["platform-connections"],
+    )
+    async def register_platform_connection(
+        organization_id: UUID, payload: PlatformConnectionCreateRequest, request: Request
+    ) -> PlatformConnectionResponse:
+        actor_id = getattr(request.state, "actor_id", None)
+        if not isinstance(actor_id, UUID):
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied")
+        if platform_connection_registration_use_case is None:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Platform connection registration is unavailable",
+            )
+        try:
+            connection = await platform_connection_registration_use_case.execute(
+                RegisterPlatformConnectionCommand(
+                    actor_id=actor_id,
+                    organization_id=organization_id,
+                    platform=payload.platform,
+                    external_resource_id=payload.external_resource_id,
+                    correlation_id=request.state.correlation_id,
+                )
+            )
+        except PlatformConnectionRegistrationRejectedError as error:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Platform connection registration failed",
+            ) from error
+        except PlatformControlUnavailableError as error:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Platform control service is unavailable",
+            ) from error
+        return PlatformConnectionResponse.model_validate(connection, from_attributes=True)
 
     @app.post(
         "/api/v1/auth/email-password/registrations",

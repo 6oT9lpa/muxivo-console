@@ -6,12 +6,17 @@ from muxivo_console.application.create_organization import CreateOrganization
 from muxivo_console.application.list_control_modules import ListControlModules
 from muxivo_console.application.organization_authorizer import MembershipOrganizationAuthorizer
 from muxivo_console.application.register_email_password import RegisterEmailPassword
+from muxivo_console.application.register_platform_connection import RegisterPlatformConnection
 from muxivo_console.application.resolve_browser_session import ResolveBrowserSession
 from muxivo_console.infrastructure.discord_control_api import (
     DiscordControlApiCatalog,
+    DiscordPlatformConnectionVerifier,
     HmacControlAssertionIssuer,
 )
 from muxivo_console.infrastructure.naming import RandomSuffixOrganizationSlugGenerator
+from muxivo_console.infrastructure.persistence.connection_repository import (
+    SqlAlchemyPlatformConnectionWriter,
+)
 from muxivo_console.infrastructure.persistence.database import create_session_factory
 from muxivo_console.infrastructure.persistence.identity_repository import (
     SqlAlchemyEmailPasswordAccountReader,
@@ -97,11 +102,24 @@ def create_production_app(settings: ConsoleSettings):
         slugs=RandomSuffixOrganizationSlugGenerator(),
         organizations=SqlAlchemyOrganizationCreationWriter(sessions),
     )
+    platform_connections = RegisterPlatformConnection(
+        authorizer=MembershipOrganizationAuthorizer(
+            SqlAlchemyOrganizationMembershipReader(sessions)
+        ),
+        verifier=DiscordPlatformConnectionVerifier(
+            settings.discord_control_base_url,
+            assertions,
+            allow_insecure_http=settings.allow_insecure_discord_control_http,
+        ),
+        identifiers=identifiers,
+        connections=SqlAlchemyPlatformConnectionWriter(sessions),
+    )
     return create_app(
         control_modules_use_case=modules,
         registration_use_case=registrations,
         authentication_use_case=authentication,
         organization_creation_use_case=organizations,
+        platform_connection_registration_use_case=platform_connections,
         session_resolver=ResolveBrowserSession(
             clock=clock,
             token_hasher=session_hasher,
