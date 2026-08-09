@@ -114,3 +114,9 @@ class AuthSessionWriter(Protocol):
     """Atomically persists a session and its mandatory security audit event."""
 
     async def create(self, *, session: AuthSession, audit_event: AuditEvent) -> bool: ...
+
+
+class AuthSessionReader(Protocol):
+    """Looks up a stored Console session by a keyed hash, never raw bearer data."""
+
+    async def find_by_token_hash(self, *, token_hash: str) -> AuthSession | None: ...
