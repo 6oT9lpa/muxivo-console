@@ -29,6 +29,16 @@ def assertion_issuer() -> HmacControlAssertionIssuer:
     )
 
 
+class Identities:
+    def __init__(self, subject: str | None = "123456789012345678") -> None:
+        self.subject = subject
+        self.arguments = None
+
+    async def find_provider_subject(self, **arguments) -> str | None:
+        self.arguments = arguments
+        return self.subject
+
+
 def decode_claims(token: str) -> dict[str, object]:
     encoded_claims = token.split(".")[1]
     padding = "=" * (-len(encoded_claims) % 4)
@@ -85,6 +95,7 @@ async def test_catalog_calls_versioned_discord_api_with_bound_assertion() -> Non
     catalog = DiscordControlApiCatalog(
         "http://discord-control.test",
         assertion_issuer(),
+        Identities(),
         transport=httpx.MockTransport(handler),
         allow_insecure_http=True,
     )
@@ -149,6 +160,7 @@ async def test_discord_verifier_requires_platform_confirmation_with_manage_asser
     verifier = DiscordPlatformConnectionVerifier(
         "http://discord-control.test",
         assertion_issuer(),
+        Identities(),
         transport=httpx.MockTransport(handler),
         allow_insecure_http=True,
     )
@@ -167,6 +179,7 @@ async def test_discord_verifier_requires_platform_confirmation_with_manage_asser
     assert claims["resource"] == "console.platform_connections"
     assert claims["action"] == "manage"
     assert claims["sub"] == str(actor_id)
+    assert claims["platform_subject"] == "123456789012345678"
 
 
 @pytest.mark.asyncio
@@ -174,6 +187,7 @@ async def test_discord_verifier_rejects_other_platforms_without_http_call() -> N
     verifier = DiscordPlatformConnectionVerifier(
         "http://discord-control.test",
         assertion_issuer(),
+        Identities(),
         transport=httpx.MockTransport(lambda _: pytest.fail("unexpected HTTP call")),
         allow_insecure_http=True,
     )
@@ -183,6 +197,27 @@ async def test_discord_verifier_rejects_other_platforms_without_http_call() -> N
         organization_id=uuid4(),
         platform=Platform.TWITCH,
         external_resource_id="channel-id",
+        correlation_id=uuid4(),
+    )
+
+    assert verified is False
+
+
+@pytest.mark.asyncio
+async def test_discord_verifier_rejects_unlinked_console_user_without_http_call() -> None:
+    verifier = DiscordPlatformConnectionVerifier(
+        "http://discord-control.test",
+        assertion_issuer(),
+        Identities(None),
+        transport=httpx.MockTransport(lambda _: pytest.fail("unexpected HTTP call")),
+        allow_insecure_http=True,
+    )
+
+    verified = await verifier.verify_registration(
+        actor_id=uuid4(),
+        organization_id=uuid4(),
+        platform=Platform.DISCORD,
+        external_resource_id="123",
         correlation_id=uuid4(),
     )
 

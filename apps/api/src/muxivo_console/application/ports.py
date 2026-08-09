@@ -10,6 +10,7 @@ from muxivo_console.domain.identity import (
     EmailPasswordAccount,
     EmailPasswordRegistration,
     LoginIdentity,
+    LoginIdentityProvider,
     UserStatus,
 )
 from muxivo_console.domain.organizations import Organization, OrganizationMembership
@@ -82,6 +83,14 @@ class LoginIdentityLinkWriter(Protocol):
     """Atomically stores a provider-verified external identity and its audit event."""
 
     async def link(self, *, identity: LoginIdentity, audit_event: AuditEvent) -> bool: ...
+
+
+class LoginIdentityReader(Protocol):
+    """Reads a Console-verified provider subject without exposing provider credentials."""
+
+    async def find_provider_subject(
+        self, *, user_id: UUID, provider: "LoginIdentityProvider"
+    ) -> str | None: ...
 
 
 class UserStatusReader(Protocol):

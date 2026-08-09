@@ -2,12 +2,14 @@
 
 from collections.abc import Callable
 from contextlib import AbstractAsyncContextManager
+from uuid import UUID
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from muxivo_console.domain.identity import EmailPasswordAccount, UserStatus
+from muxivo_console.domain.identity import EmailPasswordAccount, LoginIdentityProvider, UserStatus
 from muxivo_console.infrastructure.persistence.models import (
+    LoginIdentityRecord,
     PasswordCredentialRecord,
     UserEmailRecord,
     UserRecord,
@@ -42,3 +44,24 @@ class SqlAlchemyEmailPasswordAccountReader:
             )
         except ValueError:
             return None
+
+
+class SqlAlchemyLoginIdentityReader:
+    """Read a provider subject already verified and owned by this Console user."""
+
+    def __init__(
+        self, session_factory: Callable[[], AbstractAsyncContextManager[AsyncSession]]
+    ) -> None:
+        self._session_factory = session_factory
+
+    async def find_provider_subject(
+        self, *, user_id: UUID, provider: LoginIdentityProvider
+    ) -> str | None:
+        statement = select(LoginIdentityRecord.provider_subject).where(
+            LoginIdentityRecord.user_id == user_id,
+            LoginIdentityRecord.provider == provider.value,
+        )
+        async with self._session_factory() as database_session:
+            result = await database_session.execute(statement)
+            value = result.scalar_one_or_none()
+        return value if isinstance(value, str) and value else None

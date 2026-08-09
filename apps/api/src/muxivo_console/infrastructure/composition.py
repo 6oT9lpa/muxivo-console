@@ -22,6 +22,7 @@ from muxivo_console.infrastructure.persistence.connection_repository import (
 from muxivo_console.infrastructure.persistence.database import create_session_factory
 from muxivo_console.infrastructure.persistence.identity_repository import (
     SqlAlchemyEmailPasswordAccountReader,
+    SqlAlchemyLoginIdentityReader,
 )
 from muxivo_console.infrastructure.persistence.organization_repository import (
     SqlAlchemyOrganizationCreationWriter,
@@ -111,6 +112,7 @@ def create_production_app(settings: ConsoleSettings):
         verifier=DiscordPlatformConnectionVerifier(
             settings.discord_control_base_url,
             assertions,
+            SqlAlchemyLoginIdentityReader(sessions),
             allow_insecure_http=settings.allow_insecure_discord_control_http,
         ),
         identifiers=identifiers,

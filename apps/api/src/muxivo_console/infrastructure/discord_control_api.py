@@ -13,7 +13,7 @@ from uuid import UUID, uuid4
 import httpx
 
 from muxivo_console.application.list_control_modules import PlatformControlUnavailableError
-from muxivo_console.application.ports import Clock
+from muxivo_console.application.ports import Clock, LoginIdentityReader
 from muxivo_console.domain.activity import (
     ControlModule,
     ModuleCapability,
@@ -21,6 +21,7 @@ from muxivo_console.domain.activity import (
     Platform,
 )
 from muxivo_console.domain.authorization import AuthorizationAction, AuthorizationResource
+from muxivo_console.domain.identity import LoginIdentityProvider
 
 
 @dataclass(frozen=True, slots=True)
@@ -47,6 +48,7 @@ class HmacControlAssertionIssuer:
         resource: AuthorizationResource,
         action: AuthorizationAction,
         correlation_id: UUID,
+        platform_subject: str | None = None,
     ) -> str:
         now = self.clock.now().astimezone(UTC)
         header = {"alg": "HS256", "typ": "JWT"}
@@ -62,6 +64,8 @@ class HmacControlAssertionIssuer:
             "iat": int(now.timestamp()),
             "exp": int((now + self.lifetime).timestamp()),
         }
+        if platform_subject is not None:
+            claims["platform_subject"] = platform_subject
         encoded_header = _base64url(json.dumps(header, separators=(",", ":")).encode())
         encoded_claims = _base64url(json.dumps(claims, separators=(",", ":")).encode())
         signing_input = f"{encoded_header}.{encoded_claims}".encode("ascii")
@@ -115,6 +119,7 @@ class DiscordPlatformConnectionVerifier:
 
     base_url: str
     assertions: HmacControlAssertionIssuer
+    identities: LoginIdentityReader
     timeout: float = 5.0
     transport: httpx.AsyncBaseTransport | None = None
     allow_insecure_http: bool = False
@@ -133,12 +138,18 @@ class DiscordPlatformConnectionVerifier:
     ) -> bool:
         if platform is not Platform.DISCORD:
             return False
+        platform_subject = await self.identities.find_provider_subject(
+            user_id=actor_id, provider=LoginIdentityProvider.DISCORD
+        )
+        if platform_subject is None:
+            return False
         assertion = self.assertions.issue(
             actor_id=actor_id,
             organization_id=organization_id,
             resource=AuthorizationResource.PLATFORM_CONNECTIONS,
             action=AuthorizationAction.MANAGE,
             correlation_id=correlation_id,
+            platform_subject=platform_subject,
         )
         try:
             async with httpx.AsyncClient(
