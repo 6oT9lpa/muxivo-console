@@ -5,6 +5,11 @@ from uuid import UUID, uuid4
 from fastapi import FastAPI, HTTPException, Request, status
 from fastapi.responses import Response
 
+from muxivo_console.application.authenticate_email_password import (
+    AuthenticateEmailPassword,
+    AuthenticateEmailPasswordCommand,
+    AuthenticationRejectedError,
+)
 from muxivo_console.application.list_control_modules import AccessDeniedError, ListControlModules
 from muxivo_console.application.register_email_password import (
     RegisterEmailPassword,
@@ -13,6 +18,7 @@ from muxivo_console.application.register_email_password import (
 )
 from muxivo_console.application.resolve_browser_session import ResolveBrowserSession
 from muxivo_console.contracts.v1.authentication import (
+    EmailPasswordLoginRequest,
     EmailPasswordRegistrationRequest,
     EmailPasswordRegistrationResponse,
 )
@@ -31,6 +37,7 @@ SESSION_COOKIE_NAME = "__Host-muxivo_session"
 def create_app(
     control_modules_use_case: ListControlModules | None = None,
     registration_use_case: RegisterEmailPassword | None = None,
+    authentication_use_case: AuthenticateEmailPassword | None = None,
     session_resolver: ResolveBrowserSession | None = None,
 ) -> FastAPI:
     """Create the Console BFF without coupling application code to FastAPI."""
@@ -98,6 +105,45 @@ def create_app(
         except RegistrationRejectedError:
             pass
         return EmailPasswordRegistrationResponse()
+
+    @app.post(
+        "/api/v1/auth/email-password/sessions",
+        status_code=status.HTTP_204_NO_CONTENT,
+        tags=["authentication"],
+    )
+    async def authenticate_email_password(
+        payload: EmailPasswordLoginRequest, request: Request
+    ) -> Response:
+        if authentication_use_case is None:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Authentication is unavailable",
+            )
+        try:
+            issued_session = await authentication_use_case.execute(
+                AuthenticateEmailPasswordCommand(
+                    email=str(payload.email),
+                    password=payload.password.get_secret_value(),
+                    correlation_id=request.state.correlation_id,
+                )
+            )
+        except AuthenticationRejectedError as error:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Authentication failed",
+            ) from error
+
+        response = Response(status_code=status.HTTP_204_NO_CONTENT)
+        response.set_cookie(
+            key=SESSION_COOKIE_NAME,
+            value=issued_session.raw_token,
+            expires=issued_session.expires_at,
+            path="/",
+            secure=True,
+            httponly=True,
+            samesite="lax",
+        )
+        return response
 
     @app.get(
         "/api/v1/organizations/{organization_id}/control-modules",

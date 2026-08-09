@@ -15,3 +15,8 @@ class EmailPasswordRegistrationResponse(BaseModel):
     """Enumeration-safe result for both accepted and duplicate registrations."""
 
     status: Literal["verification_required"] = "verification_required"
+
+
+class EmailPasswordLoginRequest(BaseModel):
+    email: EmailStr
+    password: SecretStr = Field(min_length=1, max_length=1024)
