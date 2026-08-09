@@ -25,3 +25,8 @@ class PlatformConnectionResponse(BaseModel):
     platform: Platform
     external_resource_id: str
     status: ConnectionStatus
+
+
+class PlatformConnectionListResponse(BaseModel):
+    items: list[PlatformConnectionResponse]
+    next_cursor: UUID | None = None

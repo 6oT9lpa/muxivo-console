@@ -21,6 +21,7 @@ from muxivo_console.application.list_control_modules import (
     ListControlModules,
     PlatformControlUnavailableError,
 )
+from muxivo_console.application.list_platform_connections import ListPlatformConnections
 from muxivo_console.application.register_email_password import (
     RegisterEmailPassword,
     RegisterEmailPasswordCommand,
@@ -47,6 +48,7 @@ from muxivo_console.contracts.v1.organizations import (
 )
 from muxivo_console.contracts.v1.platform_connections import (
     PlatformConnectionCreateRequest,
+    PlatformConnectionListResponse,
     PlatformConnectionResponse,
 )
 from muxivo_console.infrastructure.development import (
@@ -72,6 +74,7 @@ def create_app(
     authentication_use_case: AuthenticateEmailPassword | None = None,
     organization_creation_use_case: CreateOrganization | None = None,
     platform_connection_registration_use_case: RegisterPlatformConnection | None = None,
+    platform_connections_use_case: ListPlatformConnections | None = None,
     session_resolver: ResolveBrowserSession | None = None,
 ) -> FastAPI:
     """Create the Console BFF without coupling application code to FastAPI."""
@@ -195,6 +198,44 @@ def create_app(
                 detail="Platform control service is unavailable",
             ) from error
         return PlatformConnectionResponse.model_validate(connection, from_attributes=True)
+
+    @app.get(
+        "/api/v1/organizations/{organization_id}/platform-connections",
+        response_model=PlatformConnectionListResponse,
+        tags=["platform-connections"],
+    )
+    async def list_platform_connections(
+        organization_id: UUID,
+        request: Request,
+        cursor: UUID | None = None,
+        limit: int = 50,
+    ) -> PlatformConnectionListResponse:
+        actor_id = getattr(request.state, "actor_id", None)
+        if not isinstance(actor_id, UUID):
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied")
+        if platform_connections_use_case is None:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Platform connections are unavailable",
+            )
+        try:
+            page = await platform_connections_use_case.execute(
+                actor_id=actor_id,
+                organization_id=organization_id,
+                after_id=cursor,
+                limit=limit,
+            )
+        except AccessDeniedError as error:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN, detail="Access denied"
+            ) from error
+        return PlatformConnectionListResponse(
+            items=[
+                PlatformConnectionResponse.model_validate(connection, from_attributes=True)
+                for connection in page.items
+            ],
+            next_cursor=page.next_cursor,
+        )
 
     @app.post(
         "/api/v1/auth/email-password/registrations",

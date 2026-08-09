@@ -121,6 +121,14 @@ class PlatformConnectionWriter(Protocol):
     async def create(self, *, connection: PlatformConnection, audit_event: AuditEvent) -> bool: ...
 
 
+class PlatformConnectionReader(Protocol):
+    """Lists Console-owned non-secret connection metadata with keyset pagination."""
+
+    async def list_for_organization(
+        self, *, organization_id: UUID, after_id: UUID | None, limit: int
+    ) -> Sequence[PlatformConnection]: ...
+
+
 class Clock(Protocol):
     """Returns the current UTC instant; a port makes expiry behavior deterministic."""
 

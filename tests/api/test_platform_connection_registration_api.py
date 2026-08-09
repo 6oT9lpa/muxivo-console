@@ -1,6 +1,7 @@
 from uuid import UUID, uuid4
 
 from fastapi.testclient import TestClient
+from muxivo_console.application.list_platform_connections import PlatformConnectionPage
 from muxivo_console.application.register_platform_connection import (
     PlatformConnectionRegistrationRejectedError,
 )
@@ -35,6 +36,16 @@ class ConnectionRegistrationUseCase:
         if self.rejects:
             raise PlatformConnectionRegistrationRejectedError("Native authority denied.")
         return self.connection
+
+
+class ConnectionListUseCase:
+    def __init__(self, page: PlatformConnectionPage) -> None:
+        self.page = page
+        self.arguments = None
+
+    async def execute(self, **arguments) -> PlatformConnectionPage:
+        self.arguments = arguments
+        return self.page
 
 
 def headers() -> dict[str, str]:
@@ -121,3 +132,49 @@ def test_connection_registration_hides_native_rejection_reason() -> None:
 
     assert response.status_code == 403
     assert response.json() == {"detail": "Platform connection registration failed"}
+
+
+def test_connection_list_returns_cursor_paginated_neutral_contract() -> None:
+    actor_id, organization_id = uuid4(), uuid4()
+    first = PlatformConnection(
+        id=uuid4(),
+        organization_id=organization_id,
+        platform=Platform.DISCORD,
+        external_resource_id="123",
+        status=ConnectionStatus.ACTIVE,
+    )
+    next_cursor = uuid4()
+    use_case = ConnectionListUseCase(PlatformConnectionPage((first,), next_cursor))
+    client = TestClient(
+        create_app(
+            platform_connections_use_case=use_case,
+            session_resolver=SessionResolver(
+                BrowserSessionPrincipal(actor_id, uuid4(), SessionAssuranceLevel.PASSWORD)
+            ),
+        )
+    )
+
+    response = client.get(
+        f"/api/v1/organizations/{organization_id}/platform-connections?cursor={first.id}&limit=20",
+        headers={"Cookie": f"{SESSION_COOKIE_NAME}=opaque-session"},
+    )
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "items": [
+            {
+                "id": str(first.id),
+                "organization_id": str(organization_id),
+                "platform": "discord",
+                "external_resource_id": "123",
+                "status": "active",
+            }
+        ],
+        "next_cursor": str(next_cursor),
+    }
+    assert use_case.arguments == {
+        "actor_id": actor_id,
+        "organization_id": organization_id,
+        "after_id": first.id,
+        "limit": 20,
+    }

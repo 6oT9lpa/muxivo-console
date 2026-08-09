@@ -2,12 +2,15 @@
 
 from collections.abc import Callable
 from contextlib import AbstractAsyncContextManager
+from uuid import UUID
 
+from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from muxivo_console.domain.activity import Platform
 from muxivo_console.domain.audit import AuditEvent
-from muxivo_console.domain.connections import PlatformConnection
+from muxivo_console.domain.connections import ConnectionStatus, PlatformConnection
 from muxivo_console.infrastructure.persistence.models import (
     AuditEventRecord,
     PlatformConnectionRecord,
@@ -51,3 +54,42 @@ class SqlAlchemyPlatformConnectionWriter:
         except IntegrityError:
             return False
         return True
+
+
+class SqlAlchemyPlatformConnectionReader:
+    """Read non-secret connection records in stable UUIDv7 keyset order."""
+
+    def __init__(
+        self, session_factory: Callable[[], AbstractAsyncContextManager[AsyncSession]]
+    ) -> None:
+        self._session_factory = session_factory
+
+    async def list_for_organization(
+        self, *, organization_id: UUID, after_id: UUID | None, limit: int
+    ) -> tuple[PlatformConnection, ...]:
+        statement = (
+            select(PlatformConnectionRecord)
+            .where(PlatformConnectionRecord.organization_id == organization_id)
+            .order_by(PlatformConnectionRecord.id)
+            .limit(limit)
+        )
+        if after_id is not None:
+            statement = statement.where(PlatformConnectionRecord.id > after_id)
+        async with self._session_factory() as session:
+            result = await session.execute(statement)
+            records = result.scalars().all()
+        connections: list[PlatformConnection] = []
+        for record in records:
+            try:
+                connections.append(
+                    PlatformConnection(
+                        id=record.id,
+                        organization_id=record.organization_id,
+                        platform=Platform(record.platform),
+                        external_resource_id=record.external_resource_id,
+                        status=ConnectionStatus(record.status),
+                    )
+                )
+            except ValueError:
+                continue
+        return tuple(connections)
