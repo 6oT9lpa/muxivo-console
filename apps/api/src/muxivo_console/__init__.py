@@ -1,0 +1,1 @@
+"""Muxivo Console application package."""
