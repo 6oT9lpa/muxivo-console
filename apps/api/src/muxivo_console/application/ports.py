@@ -6,6 +6,7 @@ from muxivo_console.domain.activity import ControlModule, Platform
 from muxivo_console.domain.audit import AuditEvent
 from muxivo_console.domain.authorization import AuthorizationDecision, AuthorizationRequest
 from muxivo_console.domain.connections import PlatformConnection
+from muxivo_console.domain.dashboard import PlatformDashboardSummary
 from muxivo_console.domain.health import PlatformHealth
 from muxivo_console.domain.identity import (
     EmailPasswordAccount,
@@ -33,6 +34,19 @@ class PlatformHealthReader(Protocol):
     async def get_for_organization(
         self, *, organization_id: UUID, actor_id: UUID, correlation_id: UUID
     ) -> PlatformHealth: ...
+
+
+class PlatformDashboardReader(Protocol):
+    """Reads a resource-bound, aggregate dashboard summary from a Control API."""
+
+    async def get_for_connection(
+        self,
+        *,
+        organization_id: UUID,
+        actor_id: UUID,
+        external_resource_id: str,
+        correlation_id: UUID,
+    ) -> PlatformDashboardSummary: ...
 
 
 class OrganizationAuthorizer(Protocol):
@@ -181,6 +195,10 @@ class PlatformConnectionReader(Protocol):
     async def list_for_organization(
         self, *, organization_id: UUID, after_id: UUID | None, limit: int
     ) -> Sequence[PlatformConnection]: ...
+
+    async def find_for_organization(
+        self, *, organization_id: UUID, connection_id: UUID
+    ) -> PlatformConnection | None: ...
 
 
 class Clock(Protocol):

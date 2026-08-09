@@ -93,3 +93,25 @@ class SqlAlchemyPlatformConnectionReader:
             except ValueError:
                 continue
         return tuple(connections)
+
+    async def find_for_organization(
+        self, *, organization_id: UUID, connection_id: UUID
+    ) -> PlatformConnection | None:
+        statement = select(PlatformConnectionRecord).where(
+            PlatformConnectionRecord.organization_id == organization_id,
+            PlatformConnectionRecord.id == connection_id,
+        )
+        async with self._session_factory() as session:
+            record = (await session.execute(statement)).scalar_one_or_none()
+        if record is None:
+            return None
+        try:
+            return PlatformConnection(
+                id=record.id,
+                organization_id=record.organization_id,
+                platform=Platform(record.platform),
+                external_resource_id=record.external_resource_id,
+                status=ConnectionStatus(record.status),
+            )
+        except ValueError:
+            return None

@@ -21,6 +21,7 @@ from muxivo_console.domain.activity import (
     Platform,
 )
 from muxivo_console.domain.authorization import AuthorizationAction, AuthorizationResource
+from muxivo_console.domain.dashboard import PlatformDashboardSummary
 from muxivo_console.domain.health import HealthSignal, HealthStatus, PlatformHealth
 from muxivo_console.domain.identity import LoginIdentityProvider
 
@@ -145,6 +146,38 @@ class DiscordControlApiCatalog:
                 "Discord Control API health request failed."
             ) from error
         return _parse_discord_health(payload)
+
+    async def get_for_connection(
+        self,
+        *,
+        organization_id: UUID,
+        actor_id: UUID,
+        external_resource_id: str,
+        correlation_id: UUID,
+    ) -> PlatformDashboardSummary:
+        assertion = self.assertions.issue(
+            actor_id=actor_id,
+            organization_id=organization_id,
+            resource=AuthorizationResource.CONTROL_MODULES,
+            action=AuthorizationAction.READ,
+            correlation_id=correlation_id,
+            platform_resource_id=external_resource_id,
+        )
+        try:
+            async with httpx.AsyncClient(
+                base_url=self.base_url, timeout=self.timeout, transport=self.transport
+            ) as client:
+                response = await client.get(
+                    f"/control/v1/organizations/{organization_id}/connections/{external_resource_id}/dashboard",
+                    headers={"Authorization": f"Bearer {assertion}"},
+                )
+                response.raise_for_status()
+                payload = response.json()
+        except (httpx.HTTPError, ValueError, json.JSONDecodeError) as error:
+            raise PlatformControlUnavailableError(
+                "Discord Control API dashboard request failed."
+            ) from error
+        return _parse_discord_dashboard(payload)
 
 
 @dataclass(frozen=True, slots=True)
@@ -277,6 +310,34 @@ def _parse_discord_health(payload: Any) -> PlatformHealth:
             "Discord Control API returned an invalid health signal."
         ) from error
     return PlatformHealth(platform=Platform.DISCORD, signals=tuple(signals))
+
+
+def _parse_discord_dashboard(payload: Any) -> PlatformDashboardSummary:
+    if not isinstance(payload, dict) or not isinstance(payload.get("metrics"), dict):
+        raise PlatformControlUnavailableError(
+            "Discord Control API returned an invalid dashboard payload."
+        )
+    metrics = payload["metrics"]
+    try:
+        counters = tuple(
+            metrics[field] for field in ("messages_today", "ai_flagged_today", "creator_sources")
+        )
+        if not all(isinstance(value, int) and not isinstance(value, bool) for value in counters):
+            raise ValueError("Dashboard counter must be an integer.")
+        latency = metrics.get("bot_latency_ms")
+        if latency is not None and (not isinstance(latency, int) or isinstance(latency, bool)):
+            raise ValueError("Dashboard latency must be an integer.")
+        return PlatformDashboardSummary(
+            platform=Platform.DISCORD,
+            messages_today=counters[0],
+            ai_flagged_today=counters[1],
+            creator_sources=counters[2],
+            bot_latency_ms=latency,
+        )
+    except (KeyError, TypeError, ValueError) as error:
+        raise PlatformControlUnavailableError(
+            "Discord Control API returned an invalid dashboard summary."
+        ) from error
 
 
 def _health_signal_key(name: str) -> str:
