@@ -51,6 +51,7 @@ class CreateOrganization:
             actor_id=command.actor_id,
             organization_id=organization.id,
             role=OrganizationRole.OWNER,
+            id=self.identifiers.new(),
         )
         created = await self.organizations.create(
             organization=organization,

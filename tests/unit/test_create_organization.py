@@ -65,10 +65,11 @@ def command(actor_id: UUID) -> CreateOrganizationCommand:
 async def test_active_user_creates_organization_owner_membership_and_audit_event() -> None:
     actor_id = uuid4()
     organization_id = uuid4()
+    membership_id = uuid4()
     audit_event_id = uuid4()
     writer = OrganizationWriter()
     use_case = CreateOrganization(
-        SequenceIdentifiers([organization_id, audit_event_id]),
+        SequenceIdentifiers([organization_id, membership_id, audit_event_id]),
         UserStatuses(UserStatus.ACTIVE),
         Slugs(),
         writer,
@@ -82,6 +83,7 @@ async def test_active_user_creates_organization_owner_membership_and_audit_event
         actor_id=actor_id,
         organization_id=organization_id,
         role=OrganizationRole.OWNER,
+        id=membership_id,
     )
     assert writer.audit_event.organization_id == organization_id
     assert writer.audit_event.action == "organization.create"
@@ -95,7 +97,7 @@ async def test_non_active_user_cannot_create_an_organization(status: UserStatus 
     actor_id = uuid4()
     writer = OrganizationWriter()
     use_case = CreateOrganization(
-        SequenceIdentifiers([uuid4(), uuid4()]), UserStatuses(status), Slugs(), writer
+        SequenceIdentifiers([uuid4(), uuid4(), uuid4()]), UserStatuses(status), Slugs(), writer
     )
 
     with pytest.raises(OrganizationCreationRejectedError):
@@ -109,7 +111,10 @@ async def test_creation_conflict_does_not_yield_partial_result() -> None:
     actor_id = uuid4()
     writer = OrganizationWriter(result=False)
     use_case = CreateOrganization(
-        SequenceIdentifiers([uuid4(), uuid4()]), UserStatuses(UserStatus.ACTIVE), Slugs(), writer
+        SequenceIdentifiers([uuid4(), uuid4(), uuid4()]),
+        UserStatuses(UserStatus.ACTIVE),
+        Slugs(),
+        writer,
     )
 
     with pytest.raises(OrganizationCreationRejectedError, match="could not be created"):

@@ -68,6 +68,7 @@ class OrganizationMembership:
     organization_id: UUID
     role: OrganizationRole
     resource_scopes: frozenset[MembershipResourceScope] = frozenset()
+    id: UUID | None = None
 
     def allows(self, request: AuthorizationRequest) -> bool:
         """Evaluate a policy request without consulting a platform service."""
