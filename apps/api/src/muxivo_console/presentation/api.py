@@ -11,6 +11,7 @@ from muxivo_console.application.register_email_password import (
     RegisterEmailPasswordCommand,
     RegistrationRejectedError,
 )
+from muxivo_console.application.resolve_browser_session import ResolveBrowserSession
 from muxivo_console.contracts.v1.authentication import (
     EmailPasswordRegistrationRequest,
     EmailPasswordRegistrationResponse,
@@ -24,10 +25,13 @@ from muxivo_console.infrastructure.development import (
     StaticModuleCatalog,
 )
 
+SESSION_COOKIE_NAME = "__Host-muxivo_session"
+
 
 def create_app(
     control_modules_use_case: ListControlModules | None = None,
     registration_use_case: RegisterEmailPassword | None = None,
+    session_resolver: ResolveBrowserSession | None = None,
 ) -> FastAPI:
     """Create the Console BFF without coupling application code to FastAPI."""
     control_modules = control_modules_use_case or ListControlModules(
@@ -48,6 +52,21 @@ def create_app(
         response = await call_next(request)
         response.headers["X-Correlation-ID"] = str(correlation_id)
         return response
+
+    @app.middleware("http")
+    async def resolve_browser_session(request: Request, call_next) -> Response:
+        if session_resolver is not None:
+            raw_token = request.cookies.get(SESSION_COOKIE_NAME)
+            if raw_token is not None:
+                try:
+                    principal = await session_resolver.execute(raw_token)
+                except Exception:
+                    principal = None
+                if principal is not None:
+                    request.state.actor_id = principal.user_id
+                    request.state.session_id = principal.session_id
+                    request.state.assurance_level = principal.assurance_level
+        return await call_next(request)
 
     @app.get("/healthz", tags=["operations"])
     async def healthz() -> dict[str, str]:
