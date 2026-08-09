@@ -13,6 +13,7 @@ from muxivo_console.domain.identity import (
     LoginIdentityProvider,
     UserStatus,
 )
+from muxivo_console.domain.identity_linking import IdentityLinkTransaction
 from muxivo_console.domain.organizations import Organization, OrganizationMembership
 from muxivo_console.domain.sessions import AuthSession
 
@@ -91,6 +92,20 @@ class LoginIdentityReader(Protocol):
     async def find_provider_subject(
         self, *, user_id: UUID, provider: "LoginIdentityProvider"
     ) -> str | None: ...
+
+
+class OpaqueValueProtector(Protocol):
+    """Encrypts opaque browser-flow secrets before persistence."""
+
+    def encrypt(self, plaintext: str) -> bytes: ...
+
+
+class IdentityLinkTransactionWriter(Protocol):
+    """Stores a single-use OAuth transaction before redirecting a browser."""
+
+    async def create(
+        self, *, transaction: IdentityLinkTransaction, audit_event: AuditEvent
+    ) -> bool: ...
 
 
 class UserStatusReader(Protocol):
