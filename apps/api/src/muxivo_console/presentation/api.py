@@ -16,7 +16,11 @@ from muxivo_console.application.create_organization import (
     CreateOrganizationCommand,
     OrganizationCreationRejectedError,
 )
-from muxivo_console.application.list_control_modules import AccessDeniedError, ListControlModules
+from muxivo_console.application.list_control_modules import (
+    AccessDeniedError,
+    ListControlModules,
+    PlatformControlUnavailableError,
+)
 from muxivo_console.application.register_email_password import (
     RegisterEmailPassword,
     RegisterEmailPasswordCommand,
@@ -233,11 +237,18 @@ def create_app(
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied")
         try:
             modules = await control_modules.execute(
-                actor_id=actor_id, organization_id=organization_id
+                actor_id=actor_id,
+                organization_id=organization_id,
+                correlation_id=request.state.correlation_id,
             )
         except AccessDeniedError as error:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN, detail="Access denied"
+            ) from error
+        except PlatformControlUnavailableError as error:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Platform control service is unavailable",
             ) from error
         return ControlModuleListResponse(
             organization_id=organization_id,

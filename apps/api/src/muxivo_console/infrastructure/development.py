@@ -21,7 +21,7 @@ class StaticModuleCatalog:
     """Temporary catalog proving the Console boundary; it never accesses Discord DB."""
 
     async def list_for_organization(
-        self, *, organization_id: UUID, actor_id: UUID
+        self, *, organization_id: UUID, actor_id: UUID, correlation_id: UUID
     ) -> Sequence[ControlModule]:
         return (
             ControlModule(

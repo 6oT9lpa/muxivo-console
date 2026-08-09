@@ -30,7 +30,9 @@ class RecordingCatalog:
     def __init__(self) -> None:
         self.called = False
 
-    async def list_for_organization(self, *, organization_id: UUID, actor_id: UUID):
+    async def list_for_organization(
+        self, *, organization_id: UUID, actor_id: UUID, correlation_id: UUID
+    ):
         self.called = True
         return [
             ControlModule(
@@ -47,7 +49,7 @@ class RecordingCatalog:
 async def test_lists_modules_only_after_organization_authorization() -> None:
     catalog = RecordingCatalog()
     result = await ListControlModules(AllowAuthorizer(), catalog).execute(
-        actor_id=uuid4(), organization_id=uuid4()
+        actor_id=uuid4(), organization_id=uuid4(), correlation_id=uuid4()
     )
     assert catalog.called is True
     assert result[0].key == "discord.logs"
@@ -67,7 +69,7 @@ async def test_authorizes_the_exact_actor_organization_resource_and_action() -> 
     organization_id = uuid4()
 
     await ListControlModules(authorizer, RecordingCatalog()).execute(
-        actor_id=actor_id, organization_id=organization_id
+        actor_id=actor_id, organization_id=organization_id, correlation_id=uuid4()
     )
 
     assert authorizer.request == AuthorizationRequest(
@@ -83,6 +85,6 @@ async def test_does_not_call_platform_adapter_when_access_is_denied() -> None:
     catalog = RecordingCatalog()
     with pytest.raises(AccessDeniedError):
         await ListControlModules(DenyAuthorizer(), catalog).execute(
-            actor_id=uuid4(), organization_id=uuid4()
+            actor_id=uuid4(), organization_id=uuid4(), correlation_id=uuid4()
         )
     assert catalog.called is False

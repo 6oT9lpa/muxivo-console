@@ -18,7 +18,7 @@ class ModuleCatalog(Protocol):
     """Outbound port implemented by a platform Control API adapter."""
 
     async def list_for_organization(
-        self, *, organization_id: UUID, actor_id: UUID
+        self, *, organization_id: UUID, actor_id: UUID, correlation_id: UUID
     ) -> Sequence[ControlModule]: ...
 
 
