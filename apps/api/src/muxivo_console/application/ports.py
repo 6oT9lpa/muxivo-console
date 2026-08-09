@@ -5,7 +5,11 @@ from uuid import UUID
 from muxivo_console.domain.activity import ControlModule
 from muxivo_console.domain.audit import AuditEvent
 from muxivo_console.domain.authorization import AuthorizationDecision, AuthorizationRequest
-from muxivo_console.domain.identity import EmailPasswordRegistration, UserStatus
+from muxivo_console.domain.identity import (
+    EmailPasswordAccount,
+    EmailPasswordRegistration,
+    UserStatus,
+)
 from muxivo_console.domain.organizations import Organization, OrganizationMembership
 from muxivo_console.domain.sessions import AuthSession
 
@@ -44,12 +48,16 @@ class EmailAddressNormalizer(Protocol):
     def normalize(self, value: str) -> str: ...
 
 
-class EmailProtector(Protocol):
-    """Encrypts and derives a keyed lookup value for an email address."""
-
-    def encrypt(self, normalized_email: str) -> bytes: ...
+class EmailLookupHasher(Protocol):
+    """Derives a keyed lookup value without persisting a plaintext e-mail."""
 
     def lookup_hash(self, normalized_email: str) -> str: ...
+
+
+class EmailProtector(EmailLookupHasher, Protocol):
+    """Encrypts an email; it also provides the keyed lookup derivation."""
+
+    def encrypt(self, normalized_email: str) -> bytes: ...
 
 
 class PasswordHasher(Protocol):
@@ -120,3 +128,11 @@ class AuthSessionReader(Protocol):
     """Looks up a stored Console session by a keyed hash, never raw bearer data."""
 
     async def find_by_token_hash(self, *, token_hash: str) -> AuthSession | None: ...
+
+
+class EmailPasswordAccountReader(Protocol):
+    """Loads a password credential projection by a keyed email lookup hash."""
+
+    async def find_by_email_lookup_hash(
+        self, *, email_lookup_hash: str
+    ) -> EmailPasswordAccount | None: ...

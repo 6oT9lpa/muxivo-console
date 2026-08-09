@@ -95,3 +95,16 @@ class EmailPasswordRegistration:
             raise ValueError("Email/password registration records must belong to one user.")
         if self.identity.provider is not LoginIdentityProvider.EMAIL:
             raise ValueError("Email/password registration must create an email identity.")
+
+
+@dataclass(frozen=True, slots=True)
+class EmailPasswordAccount:
+    """Minimal authentication projection; it never contains an e-mail address."""
+
+    user_id: UUID
+    status: UserStatus
+    password_hash: str
+
+    def __post_init__(self) -> None:
+        if not self.password_hash.startswith("$argon2id$"):
+            raise ValueError("Email/password account must hold an Argon2id credential.")
