@@ -10,10 +10,17 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from muxivo_console.domain.audit import AuditEvent
+from muxivo_console.domain.authorization import AuthorizationAction, AuthorizationResource
 from muxivo_console.domain.identity import UserStatus
-from muxivo_console.domain.organizations import Organization, OrganizationMembership
+from muxivo_console.domain.organizations import (
+    MembershipResourceScope,
+    Organization,
+    OrganizationMembership,
+    OrganizationRole,
+)
 from muxivo_console.infrastructure.persistence.models import (
     AuditEventRecord,
+    MembershipResourceScopeRecord,
     OrganizationMembershipRecord,
     OrganizationRecord,
     UserRecord,
@@ -91,3 +98,48 @@ class SqlAlchemyOrganizationCreationWriter:
         except IntegrityError:
             return False
         return True
+
+
+class SqlAlchemyOrganizationMembershipReader:
+    """Read Console-owned membership facts; malformed stored values fail closed."""
+
+    def __init__(
+        self, session_factory: Callable[[], AbstractAsyncContextManager[AsyncSession]]
+    ) -> None:
+        self._session_factory = session_factory
+
+    async def get_membership(
+        self, *, actor_id: UUID, organization_id: UUID
+    ) -> OrganizationMembership | None:
+        async with self._session_factory() as session:
+            membership_result = await session.execute(
+                select(OrganizationMembershipRecord).where(
+                    OrganizationMembershipRecord.user_id == actor_id,
+                    OrganizationMembershipRecord.organization_id == organization_id,
+                )
+            )
+            membership = membership_result.scalar_one_or_none()
+            if membership is None:
+                return None
+            scope_result = await session.execute(
+                select(MembershipResourceScopeRecord).where(
+                    MembershipResourceScopeRecord.membership_id == membership.id
+                )
+            )
+            scopes = scope_result.scalars().all()
+        try:
+            return OrganizationMembership(
+                id=membership.id,
+                actor_id=membership.user_id,
+                organization_id=membership.organization_id,
+                role=OrganizationRole(membership.role),
+                resource_scopes=frozenset(
+                    MembershipResourceScope(
+                        resource=AuthorizationResource(scope.resource),
+                        action=AuthorizationAction(scope.action),
+                    )
+                    for scope in scopes
+                ),
+            )
+        except ValueError:
+            return None
