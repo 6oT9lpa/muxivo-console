@@ -5,7 +5,9 @@ description = "Platform-neutral control plane for the Muxivo ecosystem."
 requires-python = ">=3.12"
 dependencies = [
   "alembic>=1.18,<1.19",
+  "argon2-cffi>=25.1,<26.0",
   "asyncpg>=0.30,<0.31",
+  "email-validator>=2.3,<3.0",
   "fastapi>=0.135,<0.136",
   "sqlalchemy>=2.0,<2.1",
   "uvicorn[standard]>=0.42,<0.43",
