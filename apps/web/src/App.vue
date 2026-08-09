@@ -40,6 +40,21 @@ async function signIn() {
   }
 }
 
+async function linkDiscord() {
+  busy.value = true;
+  notice.value = "";
+  try {
+    const authorization = await consoleApi<{ authorization_url: string }>(
+      "/api/v1/identity-links/discord/authorizations",
+      { method: "POST" },
+    );
+    window.location.assign(authorization.authorization_url);
+  } catch (error) {
+    notice.value = messageFor(error);
+    busy.value = false;
+  }
+}
+
 async function createOrganization() {
   busy.value = true;
   notice.value = "";
@@ -115,6 +130,7 @@ function messageFor(error: unknown): string {
       <h2>Create an organization</h2>
       <p>Organizations own Console memberships and platform connections; bot credentials stay with their platform services.</p>
       <form @submit.prevent="createOrganization"><label>Name<input v-model="organizationName" maxlength="128" required /></label><button :disabled="busy">{{ busy ? "Creating…" : "Create organization" }}</button></form>
+      <div class="identity-link"><h3>Discord identity</h3><p>Link your Discord account before registering a Discord server connection. Discord remains the authority for your server access.</p><button type="button" :disabled="busy" @click="linkDiscord">Link Discord</button></div>
     </section>
     <section v-if="authenticated" class="card workspace">
       <h2>Platform connections</h2>
