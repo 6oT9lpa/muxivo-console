@@ -10,6 +10,7 @@ from uuid import UUID
 from argon2 import PasswordHasher as Argon2PasswordHasher
 from argon2.exceptions import InvalidHashError, VerificationError
 from argon2.low_level import Type
+from cryptography.fernet import Fernet, InvalidToken
 from email_validator import EmailNotValidError, validate_email
 
 
@@ -44,6 +45,32 @@ class HmacEmailLookupHasher:
         return hmac.new(
             self._lookup_key, normalized_email.encode("utf-8"), hashlib.sha256
         ).hexdigest()
+
+
+class FernetEmailProtector(HmacEmailLookupHasher):
+    """Encrypt e-mails with an externally managed, rotated data key.
+
+    The composition root must retrieve the key from its deployment secret
+    manager or KMS. This adapter does not know about environment variables,
+    files, or cloud-provider APIs.
+    """
+
+    def __init__(self, *, lookup_key: bytes, encryption_key: bytes) -> None:
+        super().__init__(lookup_key)
+        try:
+            self._cipher = Fernet(encryption_key)
+        except (TypeError, ValueError) as error:
+            raise ValueError("Email encryption key must be a valid Fernet key.") from error
+
+    def encrypt(self, normalized_email: str) -> bytes:
+        return self._cipher.encrypt(normalized_email.encode("utf-8"))
+
+    def decrypt(self, ciphertext: bytes) -> str:
+        """Decrypt only in a privileged application path; never expose via API logs."""
+        try:
+            return self._cipher.decrypt(ciphertext).decode("utf-8")
+        except (InvalidToken, UnicodeDecodeError) as error:
+            raise ValueError("Email ciphertext could not be decrypted.") from error
 
 
 class Argon2idPasswordHasher:

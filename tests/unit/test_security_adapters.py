@@ -1,5 +1,8 @@
+import pytest
+from cryptography.fernet import Fernet
 from muxivo_console.infrastructure.security import (
     Argon2idPasswordHasher,
+    FernetEmailProtector,
     HmacSessionTokenHasher,
     SecureOpaqueSessionTokenIssuer,
     Uuid7IdentifierGenerator,
@@ -34,3 +37,23 @@ def test_session_tokens_are_opaque_and_persisted_as_keyed_hashes() -> None:
     assert len(token_hash) == 64
     assert raw_token not in token_hash
     assert hasher.hash(raw_token) == token_hash
+
+
+def test_email_protector_encrypts_without_affecting_stable_keyed_lookup() -> None:
+    protector = FernetEmailProtector(
+        lookup_key=b"l" * 32,
+        encryption_key=Fernet.generate_key(),
+    )
+
+    ciphertext = protector.encrypt("creator@example.com")
+
+    assert ciphertext != b"creator@example.com"
+    assert protector.decrypt(ciphertext) == "creator@example.com"
+    assert protector.lookup_hash("creator@example.com") == protector.lookup_hash(
+        "creator@example.com"
+    )
+
+
+def test_email_protector_rejects_malformed_encryption_key() -> None:
+    with pytest.raises(ValueError, match="valid Fernet key"):
+        FernetEmailProtector(lookup_key=b"l" * 32, encryption_key=b"not-a-key")
