@@ -14,6 +14,7 @@ class AuthorizationAction(StrEnum):
     """Actions currently exposed by the Console control plane."""
 
     READ = "read"
+    MANAGE = "manage"
 
 
 class AuthorizationResource(StrEnum):
