@@ -5,8 +5,8 @@ from uuid import UUID
 from muxivo_console.domain.activity import ControlModule
 from muxivo_console.domain.audit import AuditEvent
 from muxivo_console.domain.authorization import AuthorizationDecision, AuthorizationRequest
-from muxivo_console.domain.identity import EmailPasswordRegistration
-from muxivo_console.domain.organizations import OrganizationMembership
+from muxivo_console.domain.identity import EmailPasswordRegistration, UserStatus
+from muxivo_console.domain.organizations import Organization, OrganizationMembership
 
 
 class ModuleCatalog(Protocol):
@@ -64,4 +64,28 @@ class EmailPasswordRegistrationWriter(Protocol):
 
     async def register(
         self, *, registration: EmailPasswordRegistration, audit_event: AuditEvent
+    ) -> bool: ...
+
+
+class UserStatusReader(Protocol):
+    """Reads only the user lifecycle status needed to gate Console use cases."""
+
+    async def get_status(self, *, user_id: UUID) -> UserStatus | None: ...
+
+
+class OrganizationSlugGenerator(Protocol):
+    """Creates a server-side, URL-safe organization slug."""
+
+    def generate(self, organization_name: str) -> str: ...
+
+
+class OrganizationCreationWriter(Protocol):
+    """Atomically creates an organization, its owner membership and audit event."""
+
+    async def create(
+        self,
+        *,
+        organization: Organization,
+        owner_membership: OrganizationMembership,
+        audit_event: AuditEvent,
     ) -> bool: ...

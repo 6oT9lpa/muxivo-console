@@ -35,6 +35,21 @@ _ROLE_RANK = {
 
 
 @dataclass(frozen=True, slots=True)
+class Organization:
+    """A Console tenant that owns adapter connections and scoped settings."""
+
+    id: UUID
+    name: str
+    slug: str
+
+    def __post_init__(self) -> None:
+        if not self.name.strip() or len(self.name) > 128:
+            raise ValueError("Organization name must contain 1 to 128 non-blank characters.")
+        if not self.slug or len(self.slug) > 96:
+            raise ValueError("Organization slug must contain 1 to 96 characters.")
+
+
+@dataclass(frozen=True, slots=True)
 class MembershipResourceScope:
     """An explicit grant to one platform-neutral Console resource/action pair."""
 
