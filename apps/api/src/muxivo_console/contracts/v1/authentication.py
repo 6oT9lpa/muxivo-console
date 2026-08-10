@@ -1,6 +1,7 @@
 """Versioned public contracts for first-party Console authentication."""
 
 from typing import Literal
+from uuid import UUID
 
 from pydantic import BaseModel, EmailStr, Field, SecretStr
 
@@ -20,3 +21,11 @@ class EmailPasswordRegistrationResponse(BaseModel):
 class EmailPasswordLoginRequest(BaseModel):
     email: EmailStr
     password: SecretStr = Field(min_length=1, max_length=1024)
+
+
+class BrowserSessionResponse(BaseModel):
+    """Non-secret projection used by the browser to restore first-party Console state."""
+
+    user_id: UUID
+    session_id: UUID
+    assurance_level: Literal["password", "recent_authentication"]

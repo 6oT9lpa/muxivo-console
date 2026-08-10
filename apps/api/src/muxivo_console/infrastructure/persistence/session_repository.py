@@ -2,8 +2,10 @@
 
 from collections.abc import Callable
 from contextlib import AbstractAsyncContextManager
+from datetime import datetime
+from uuid import UUID
 
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -75,3 +77,48 @@ class SqlAlchemyAuthSessionReader:
             )
         except ValueError:
             return None
+
+
+class SqlAlchemyAuthSessionRevoker:
+    def __init__(
+        self, session_factory: Callable[[], AbstractAsyncContextManager[AsyncSession]]
+    ) -> None:
+        self._session_factory = session_factory
+
+    async def revoke(
+        self,
+        *,
+        session_id: UUID,
+        user_id: UUID,
+        revoked_at: datetime,
+        audit_event: AuditEvent,
+    ) -> bool:
+        """Atomically transition an active owned session to revoked and append audit."""
+        async with self._session_factory() as database_session:
+            async with database_session.begin():
+                result = await database_session.execute(
+                    update(AuthSessionRecord)
+                    .where(
+                        AuthSessionRecord.id == session_id,
+                        AuthSessionRecord.user_id == user_id,
+                        AuthSessionRecord.revoked_at.is_(None),
+                    )
+                    .values(revoked_at=revoked_at)
+                    .returning(AuthSessionRecord.id)
+                )
+                if result.scalar_one_or_none() is None:
+                    return False
+                database_session.add(
+                    AuditEventRecord(
+                        id=audit_event.id,
+                        correlation_id=audit_event.correlation_id,
+                        actor_id=audit_event.actor_id,
+                        organization_id=audit_event.organization_id,
+                        action=audit_event.action,
+                        resource_type=audit_event.resource_type,
+                        resource_id=audit_event.resource_id,
+                        result=audit_event.result,
+                    )
+                )
+                await database_session.flush()
+        return True

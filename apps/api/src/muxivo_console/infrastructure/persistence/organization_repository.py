@@ -1,4 +1,4 @@
-"""SQLAlchemy adapters for Console-owned organization creation and user status."""
+"""SQLAlchemy adapters for Console-owned organizations and user status."""
 
 from collections.abc import Callable
 from contextlib import AbstractAsyncContextManager
@@ -15,6 +15,7 @@ from muxivo_console.domain.identity import UserStatus
 from muxivo_console.domain.organizations import (
     MembershipResourceScope,
     Organization,
+    OrganizationAccess,
     OrganizationMembership,
     OrganizationRole,
 )
@@ -143,3 +144,52 @@ class SqlAlchemyOrganizationMembershipReader:
             )
         except ValueError:
             return None
+
+
+class SqlAlchemyOrganizationAccessReader:
+    """List only tenants with a membership owned by the current actor."""
+
+    def __init__(
+        self, session_factory: Callable[[], AbstractAsyncContextManager[AsyncSession]]
+    ) -> None:
+        self._session_factory = session_factory
+
+    async def list_for_actor(
+        self,
+        *,
+        actor_id: UUID,
+        after_organization_id: UUID | None,
+        limit: int,
+    ) -> list[OrganizationAccess]:
+        statement = (
+            select(OrganizationRecord, OrganizationMembershipRecord.role)
+            .join(
+                OrganizationMembershipRecord,
+                OrganizationMembershipRecord.organization_id == OrganizationRecord.id,
+            )
+            .where(OrganizationMembershipRecord.user_id == actor_id)
+            .order_by(OrganizationRecord.id)
+            .limit(limit)
+        )
+        if after_organization_id is not None:
+            statement = statement.where(OrganizationRecord.id > after_organization_id)
+
+        async with self._session_factory() as session:
+            rows = (await session.execute(statement)).all()
+
+        accesses: list[OrganizationAccess] = []
+        for organization, raw_role in rows:
+            try:
+                accesses.append(
+                    OrganizationAccess(
+                        organization=Organization(
+                            id=organization.id,
+                            name=organization.name,
+                            slug=organization.slug,
+                        ),
+                        role=OrganizationRole(raw_role),
+                    )
+                )
+            except ValueError:
+                continue
+        return accesses

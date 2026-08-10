@@ -1,4 +1,5 @@
 from collections.abc import Sequence
+from datetime import datetime
 from typing import Protocol
 from uuid import UUID
 
@@ -16,7 +17,11 @@ from muxivo_console.domain.identity import (
     UserStatus,
 )
 from muxivo_console.domain.identity_linking import IdentityLinkTransaction
-from muxivo_console.domain.organizations import Organization, OrganizationMembership
+from muxivo_console.domain.organizations import (
+    Organization,
+    OrganizationAccess,
+    OrganizationMembership,
+)
 from muxivo_console.domain.sessions import AuthSession
 
 
@@ -61,6 +66,14 @@ class OrganizationMembershipReader(Protocol):
     async def get_membership(
         self, *, actor_id: UUID, organization_id: UUID
     ) -> OrganizationMembership | None: ...
+
+
+class OrganizationAccessReader(Protocol):
+    """Lists only organizations reached through the actor's own memberships."""
+
+    async def list_for_actor(
+        self, *, actor_id: UUID, after_organization_id: UUID | None, limit: int
+    ) -> Sequence[OrganizationAccess]: ...
 
 
 class IdentifierGenerator(Protocol):
@@ -229,6 +242,19 @@ class AuthSessionReader(Protocol):
     """Looks up a stored Console session by a keyed hash, never raw bearer data."""
 
     async def find_by_token_hash(self, *, token_hash: str) -> AuthSession | None: ...
+
+
+class AuthSessionRevoker(Protocol):
+    """Revokes a Console session and appends its security audit event atomically."""
+
+    async def revoke(
+        self,
+        *,
+        session_id: UUID,
+        user_id: UUID,
+        revoked_at: datetime,
+        audit_event: AuditEvent,
+    ) -> bool: ...
 
 
 class EmailPasswordAccountReader(Protocol):
