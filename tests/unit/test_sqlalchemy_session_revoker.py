@@ -6,12 +6,13 @@ from typing import Self
 from uuid import UUID, uuid4
 
 import pytest
+from sqlalchemy.exc import IntegrityError
+
 from muxivo_console.domain.audit import AuditEvent
 from muxivo_console.infrastructure.persistence.models import AuditEventRecord
 from muxivo_console.infrastructure.persistence.session_repository import (
     SqlAlchemyAuthSessionRevoker,
 )
-from sqlalchemy.exc import IntegrityError
 
 
 @dataclass
@@ -125,17 +126,17 @@ async def test_revoker_does_not_create_audit_when_no_session_matches() -> None:
 
 
 @pytest.mark.asyncio
-async def test_revoker_reduces_audit_persistence_conflict_to_safe_failure() -> None:
+async def test_revoker_propagates_audit_failure_so_revocation_can_roll_back() -> None:
     actor_id = uuid4()
     session_id = uuid4()
     database_session = FakeSession(matched_id=session_id, integrity_error=True)
 
-    revoked = await SqlAlchemyAuthSessionRevoker(lambda: database_session).revoke(
-        session_id=session_id,
-        user_id=actor_id,
-        revoked_at=datetime(2026, 8, 10, 13, 30, tzinfo=UTC),
-        audit_event=audit(actor_id, session_id),
-    )
+    with pytest.raises(IntegrityError):
+        await SqlAlchemyAuthSessionRevoker(lambda: database_session).revoke(
+            session_id=session_id,
+            user_id=actor_id,
+            revoked_at=datetime(2026, 8, 10, 13, 30, tzinfo=UTC),
+            audit_event=audit(actor_id, session_id),
+        )
 
-    assert revoked is False
     assert database_session.transaction.exc_type is IntegrityError
