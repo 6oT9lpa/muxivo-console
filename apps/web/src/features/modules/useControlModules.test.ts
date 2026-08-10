@@ -16,6 +16,16 @@ class StubGateway implements ControlModuleGateway {
   }
 }
 
+class DeferredGateway implements ControlModuleGateway {
+  resolve: ((value: ControlModuleList) => void) | null = null;
+
+  async list(): Promise<ControlModuleList> {
+    return new Promise((resolve) => {
+      this.resolve = resolve;
+    });
+  }
+}
+
 describe("useControlModules", () => {
   it("loads platform-neutral modules returned for the selected tenant", async () => {
     const response: ControlModuleList = {
@@ -56,5 +66,30 @@ describe("useControlModules", () => {
 
     expect(state).toBe("unavailable");
     expect(catalog.items.value).toEqual([]);
+  });
+
+  it("discards an in-flight tenant response after scoped state is cleared", async () => {
+    const gateway = new DeferredGateway();
+    const catalog = useControlModules(gateway);
+    const pending = catalog.load(organizationId);
+
+    catalog.clear();
+    gateway.resolve?.({
+      organization_id: organizationId,
+      items: [
+        {
+          key: "discord.health",
+          display_name: "Platform health",
+          platform: "discord",
+          capability: "view",
+          status: "available",
+        },
+      ],
+    });
+    await pending;
+
+    expect(catalog.state.value).toBe("idle");
+    expect(catalog.items.value).toEqual([]);
+    expect(catalog.organizationId.value).toBe("");
   });
 });

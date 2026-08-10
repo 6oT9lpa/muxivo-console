@@ -34,20 +34,24 @@ export function useControlModules(
   const state = ref<ControlModuleState>("idle");
   const items = ref<ControlModule[]>([]);
   const organizationId = ref("");
+  let generation = 0;
 
   async function load(targetOrganizationId: string): Promise<ControlModuleState> {
-    clear();
+    const requestGeneration = ++generation;
+    resetState();
     if (!targetOrganizationId) return state.value;
     organizationId.value = targetOrganizationId;
     state.value = "loading";
     try {
       const response = await gateway.list(targetOrganizationId);
+      if (requestGeneration !== generation) return state.value;
       if (response.organization_id !== targetOrganizationId) {
         throw new Error("Control module response belongs to a different organization");
       }
       items.value = response.items;
       state.value = response.items.length === 0 ? "empty" : "ready";
     } catch {
+      if (requestGeneration !== generation) return state.value;
       items.value = [];
       state.value = "unavailable";
     }
@@ -55,6 +59,11 @@ export function useControlModules(
   }
 
   function clear(): void {
+    generation += 1;
+    resetState();
+  }
+
+  function resetState(): void {
     state.value = "idle";
     items.value = [];
     organizationId.value = "";

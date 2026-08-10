@@ -33,6 +33,16 @@ class StubGateway implements OrganizationGateway {
   }
 }
 
+class DeferredGateway implements OrganizationGateway {
+  resolve: ((value: OrganizationPage) => void) | null = null;
+
+  async list(): Promise<OrganizationPage> {
+    return new Promise((resolve) => {
+      this.resolve = resolve;
+    });
+  }
+}
+
 describe("useOrganizations", () => {
   it("loads only server-projected memberships and selects the first tenant", async () => {
     const directory = useOrganizations(
@@ -75,6 +85,20 @@ describe("useOrganizations", () => {
     const state = await directory.load();
 
     expect(state).toBe("unavailable");
+    expect(directory.items.value).toEqual([]);
+    expect(directory.selectedId.value).toBe("");
+  });
+
+  it("does not restore memberships after logout while a request is in flight", async () => {
+    const gateway = new DeferredGateway();
+    const directory = useOrganizations(gateway);
+    const pending = directory.load();
+
+    directory.clear();
+    gateway.resolve?.({ items: [first], next_cursor: null });
+    await pending;
+
+    expect(directory.state.value).toBe("idle");
     expect(directory.items.value).toEqual([]);
     expect(directory.selectedId.value).toBe("");
   });
