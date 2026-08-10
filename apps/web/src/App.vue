@@ -1,11 +1,16 @@
 <script setup lang="ts">
-import { onMounted, ref } from "vue";
+import { computed, onMounted, ref } from "vue";
 import { consoleApi, ConsoleApiError } from "./api/consoleApi";
 import { useBrowserSession } from "./features/auth/useBrowserSession";
 import DashboardSummaryPanel from "./features/dashboard/DashboardSummaryPanel.vue";
 import { useDashboardSummary } from "./features/dashboard/useDashboardSummary";
 import { useControlModules } from "./features/modules/useControlModules";
-import { useOrganizations } from "./features/organizations/useOrganizations";
+import OrganizationMembersPanel from "./features/organizations/OrganizationMembersPanel.vue";
+import { useOrganizationMembers } from "./features/organizations/useOrganizationMembers";
+import {
+  type OrganizationRole,
+  useOrganizations,
+} from "./features/organizations/useOrganizations";
 import {
   type Platform,
   usePlatformAdapters,
@@ -26,6 +31,13 @@ const organizationDirectory = useOrganizations();
 const organizationState = organizationDirectory.state;
 const organizations = organizationDirectory.items;
 const organizationId = organizationDirectory.selectedId;
+const selectedOrganizationRole = computed(
+  () => organizationDirectory.selected.value?.role ?? null,
+);
+const canViewOrganizationMembers = computed(
+  () => selectedOrganizationRole.value === "owner" || selectedOrganizationRole.value === "admin",
+);
+const organizationMembers = useOrganizationMembers();
 const platformAdapters = usePlatformAdapters();
 const connectionPlatforms = platformAdapters.connectionPlatforms;
 const moduleCatalog = useControlModules();
@@ -154,15 +166,45 @@ async function selectOrganization(event: Event) {
 async function loadSelectedWorkspace() {
   const requestGeneration = ++workspaceGeneration;
   clearPlatformState();
+  organizationMembers.clear();
   const targetOrganizationId = organizationId.value;
   if (!targetOrganizationId) return;
 
+  const memberRequest = canViewOrganizationMembers.value
+    ? organizationMembers.load(targetOrganizationId)
+    : Promise.resolve("idle" as const);
   const [loadedConnections] = await Promise.all([
     loadConnections(targetOrganizationId, requestGeneration),
     moduleCatalog.load(targetOrganizationId),
+    memberRequest,
   ]);
   if (!workspaceIsCurrent(targetOrganizationId, requestGeneration)) return;
   await loadDashboardModule(targetOrganizationId, loadedConnections);
+}
+
+async function loadMoreOrganizationMembers() {
+  await organizationMembers.loadMore();
+}
+
+async function reloadOrganizationMembers() {
+  const targetOrganizationId = organizationId.value;
+  if (!targetOrganizationId || !canViewOrganizationMembers.value) return;
+  await organizationMembers.load(targetOrganizationId);
+}
+
+async function changeOrganizationMemberRole(
+  membershipId: string,
+  role: OrganizationRole,
+) {
+  const targetOrganizationId = organizationId.value;
+  const requestGeneration = workspaceGeneration;
+  if (!targetOrganizationId) return;
+  notice.value = "";
+  const changed = await organizationMembers.changeRole(membershipId, role);
+  if (!workspaceIsCurrent(targetOrganizationId, requestGeneration)) return;
+  notice.value = changed
+    ? "Organization member role updated."
+    : "Role change was not applied. Reload the member list and try again.";
 }
 
 async function loadConnections(
@@ -286,6 +328,7 @@ function workspaceIsCurrent(targetOrganizationId: string, requestGeneration: num
 
 function invalidateWorkspace() {
   workspaceGeneration += 1;
+  organizationMembers.clear();
   clearPlatformState();
 }
 
@@ -302,6 +345,7 @@ function clearConsoleState() {
   platform.value = "";
   platformAdapters.clear();
   organizationDirectory.clear();
+  organizationMembers.clear();
   clearPlatformState();
 }
 
@@ -380,6 +424,20 @@ function messageFor(error: unknown): string {
           <button type="button" :disabled="busy" @click="linkDiscord">Link Discord</button>
         </div>
       </section>
+
+      <OrganizationMembersPanel
+        v-if="organizationState === 'ready' && organizationId && canViewOrganizationMembers && selectedOrganizationRole"
+        :state="organizationMembers.state.value"
+        :members="organizationMembers.items.value"
+        :actor-role="selectedOrganizationRole"
+        :next-cursor="organizationMembers.nextCursor.value"
+        :loading-more="organizationMembers.loadingMore.value"
+        :updating-member-id="organizationMembers.updatingMemberId.value"
+        :mutation-failed="organizationMembers.mutationFailed.value"
+        @retry="reloadOrganizationMembers"
+        @load-more="loadMoreOrganizationMembers"
+        @change-role="changeOrganizationMemberRole"
+      />
 
       <section v-if="organizationState === 'ready' && organizationId" class="card workspace">
         <div class="section-heading">
