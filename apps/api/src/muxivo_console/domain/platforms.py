@@ -11,6 +11,7 @@ class PlatformAdapterCapability(StrEnum):
     CONTROL_MODULES = "control_modules"
     HEALTH = "health"
     DASHBOARD_SUMMARY = "dashboard_summary"
+    SERVER_STATS = "server_stats"
 
 
 @dataclass(frozen=True, slots=True)

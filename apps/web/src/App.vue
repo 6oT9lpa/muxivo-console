@@ -16,6 +16,7 @@ import {
   type Platform,
   usePlatformAdapters,
 } from "./features/platforms/usePlatformAdapters";
+import ServerStatsPanel from "./features/serverStats/ServerStatsPanel.vue";
 
 const email = ref("");
 const password = ref("");
@@ -43,6 +44,14 @@ const platformAdapters = usePlatformAdapters();
 const connectionPlatforms = platformAdapters.connectionPlatforms;
 const moduleCatalog = useControlModules();
 const dashboardSummary = useDashboardSummary();
+const serverStatsConnectionId = computed(
+  () =>
+    connections.value.find(
+      (connection) =>
+        connection.platform === "discord" &&
+        (connection.status === "active" || connection.status === "degraded"),
+    )?.id ?? "",
+);
 let workspaceGeneration = 0;
 
 onMounted(() => {
@@ -476,6 +485,12 @@ function messageFor(error: unknown): string {
           :summary="dashboardSummary.summary.value"
         />
       </section>
+
+      <ServerStatsPanel
+        v-if="organizationState === 'ready' && organizationId && serverStatsConnectionId && isControlModuleAvailable('discord.server-stats')"
+        :organization-id="organizationId"
+        :connection-id="serverStatsConnectionId"
+      />
 
       <section v-if="organizationState === 'ready' && organizationId" class="card workspace">
         <div class="section-heading">

@@ -12,10 +12,12 @@ from muxivo_console.domain.platforms import (
     PlatformAdapterCapability,
     PlatformAdapterDescriptor,
 )
+from muxivo_console.domain.server_stats import PlatformServerStats
 from muxivo_console.infrastructure.discord_control_api import (
     DiscordControlApiCatalog,
     DiscordPlatformConnectionVerifier,
 )
+from muxivo_console.infrastructure.discord_server_stats_api import DiscordServerStatsApi
 
 
 class PlatformControlAdapter(Protocol):
@@ -41,6 +43,16 @@ class PlatformControlAdapter(Protocol):
         correlation_id: UUID,
     ) -> PlatformDashboardSummary: ...
 
+    async def get_server_stats(
+        self,
+        *,
+        organization_id: UUID,
+        actor_id: UUID,
+        external_resource_id: str,
+        period_days: int,
+        correlation_id: UUID,
+    ) -> PlatformServerStats: ...
+
     async def verify_connection(
         self,
         *,
@@ -61,6 +73,7 @@ class DiscordPlatformControlAdapter:
             PlatformAdapterCapability.CONTROL_MODULES,
             PlatformAdapterCapability.HEALTH,
             PlatformAdapterCapability.DASHBOARD_SUMMARY,
+            PlatformAdapterCapability.SERVER_STATS,
         }
     )
 
@@ -71,6 +84,13 @@ class DiscordPlatformControlAdapter:
     ) -> None:
         self._catalog = catalog
         self._verifier = verifier
+        self._server_stats = DiscordServerStatsApi(
+            base_url=catalog.base_url,
+            assertions=catalog.assertions,
+            timeout=catalog.timeout,
+            transport=catalog.transport,
+            allow_insecure_http=catalog.allow_insecure_http,
+        )
 
     async def list_modules(
         self, *, organization_id: UUID, actor_id: UUID, correlation_id: UUID
@@ -102,6 +122,23 @@ class DiscordPlatformControlAdapter:
             organization_id=organization_id,
             actor_id=actor_id,
             external_resource_id=external_resource_id,
+            correlation_id=correlation_id,
+        )
+
+    async def get_server_stats(
+        self,
+        *,
+        organization_id: UUID,
+        actor_id: UUID,
+        external_resource_id: str,
+        period_days: int,
+        correlation_id: UUID,
+    ) -> PlatformServerStats:
+        return await self._server_stats.get_for_connection(
+            organization_id=organization_id,
+            actor_id=actor_id,
+            external_resource_id=external_resource_id,
+            period_days=period_days,
             correlation_id=correlation_id,
         )
 
@@ -187,6 +224,24 @@ class PlatformControlRegistry:
             organization_id=organization_id,
             actor_id=actor_id,
             external_resource_id=external_resource_id,
+            correlation_id=correlation_id,
+        )
+
+    async def get_server_stats_for_connection(
+        self,
+        *,
+        platform: Platform,
+        organization_id: UUID,
+        actor_id: UUID,
+        external_resource_id: str,
+        period_days: int,
+        correlation_id: UUID,
+    ) -> PlatformServerStats:
+        return await self._require(platform).get_server_stats(
+            organization_id=organization_id,
+            actor_id=actor_id,
+            external_resource_id=external_resource_id,
+            period_days=period_days,
             correlation_id=correlation_id,
         )
 
