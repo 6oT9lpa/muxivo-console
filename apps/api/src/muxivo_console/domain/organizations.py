@@ -58,6 +58,20 @@ class OrganizationAccess:
 
 
 @dataclass(frozen=True, slots=True)
+class OrganizationMember:
+    """Non-secret Console-owned projection of one tenant membership."""
+
+    membership_id: UUID
+    user_id: UUID
+    display_name: str
+    role: OrganizationRole
+
+    def __post_init__(self) -> None:
+        if not self.display_name.strip() or len(self.display_name) > 64:
+            raise ValueError("Member display name must contain 1 to 64 non-blank characters.")
+
+
+@dataclass(frozen=True, slots=True)
 class MembershipResourceScope:
     """An explicit grant to one platform-neutral Console resource/action pair."""
 
@@ -95,6 +109,11 @@ def _role_supports(role: OrganizationRole, request: AuthorizationRequest) -> boo
         return request.action is AuthorizationAction.READ
     if request.resource is AuthorizationResource.PLATFORM_CONNECTIONS:
         return role is OrganizationRole.ADMIN and request.action in {
+            AuthorizationAction.READ,
+            AuthorizationAction.MANAGE,
+        }
+    if request.resource is AuthorizationResource.ORGANIZATION_MEMBERSHIPS:
+        return role in {OrganizationRole.OWNER, OrganizationRole.ADMIN} and request.action in {
             AuthorizationAction.READ,
             AuthorizationAction.MANAGE,
         }
