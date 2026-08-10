@@ -83,6 +83,7 @@ async def test_dashboard_summary_is_bound_to_owned_usable_connection() -> None:
         "connection_id": stored.id,
     }
     assert dashboard.arguments == {
+        "platform": Platform.DISCORD,
         "organization_id": stored.organization_id,
         "actor_id": actor_id,
         "external_resource_id": "123456789",

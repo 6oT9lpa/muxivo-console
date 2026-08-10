@@ -57,6 +57,7 @@ class GetPlatformHealth:
         ):
             raise PlatformHealthUnavailableError("No usable platform connection exists.")
         return await self.health.get_for_organization(
+            platform=platform,
             organization_id=organization_id,
             actor_id=actor_id,
             correlation_id=correlation_id,

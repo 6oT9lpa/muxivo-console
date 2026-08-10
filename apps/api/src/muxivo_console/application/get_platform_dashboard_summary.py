@@ -57,6 +57,7 @@ class GetPlatformDashboardSummary:
         }:
             raise PlatformHealthUnavailableError("No usable platform connection exists.")
         summary = await self.dashboard.get_for_connection(
+            platform=connection.platform,
             organization_id=organization_id,
             actor_id=actor_id,
             external_resource_id=connection.external_resource_id,
