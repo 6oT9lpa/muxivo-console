@@ -1,7 +1,7 @@
 """Platform-neutral authorization facts used at Console application boundaries.
 
 The Console authorizes every request from facts it owns: who is acting, which
-organization they selected, and the exact resource/action pair.  Platform
+organization they selected, and the exact resource/action pair. Platform
 services must perform their own authorization after Console grants access.
 """
 
@@ -22,6 +22,7 @@ class AuthorizationResource(StrEnum):
 
     CONTROL_MODULES = "console.control_modules"
     PLATFORM_CONNECTIONS = "console.platform_connections"
+    ORGANIZATION_MEMBERSHIPS = "console.organization_memberships"
 
 
 @dataclass(frozen=True, slots=True)

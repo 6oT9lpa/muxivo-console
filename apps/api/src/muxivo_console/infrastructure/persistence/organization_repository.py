@@ -16,6 +16,7 @@ from muxivo_console.domain.organizations import (
     MembershipResourceScope,
     Organization,
     OrganizationAccess,
+    OrganizationMember,
     OrganizationMembership,
     OrganizationRole,
 )
@@ -193,3 +194,47 @@ class SqlAlchemyOrganizationAccessReader:
             except ValueError:
                 continue
         return accesses
+
+
+class SqlAlchemyOrganizationMemberReader:
+    """List non-secret member projections for exactly one Console tenant."""
+
+    def __init__(
+        self, session_factory: Callable[[], AbstractAsyncContextManager[AsyncSession]]
+    ) -> None:
+        self._session_factory = session_factory
+
+    async def list_for_organization(
+        self,
+        *,
+        organization_id: UUID,
+        after_membership_id: UUID | None,
+        limit: int,
+    ) -> list[OrganizationMember]:
+        statement = (
+            select(OrganizationMembershipRecord, UserRecord.display_name)
+            .join(UserRecord, UserRecord.id == OrganizationMembershipRecord.user_id)
+            .where(OrganizationMembershipRecord.organization_id == organization_id)
+            .order_by(OrganizationMembershipRecord.id)
+            .limit(limit)
+        )
+        if after_membership_id is not None:
+            statement = statement.where(OrganizationMembershipRecord.id > after_membership_id)
+
+        async with self._session_factory() as session:
+            rows = (await session.execute(statement)).all()
+
+        members: list[OrganizationMember] = []
+        for membership, display_name in rows:
+            try:
+                members.append(
+                    OrganizationMember(
+                        membership_id=membership.id,
+                        user_id=membership.user_id,
+                        display_name=display_name,
+                        role=OrganizationRole(membership.role),
+                    )
+                )
+            except ValueError:
+                continue
+        return members
