@@ -9,6 +9,7 @@ from muxivo_console.application.create_browser_session import CreateBrowserSessi
 from muxivo_console.application.create_organization import CreateOrganization
 from muxivo_console.application.get_platform_dashboard_summary import GetPlatformDashboardSummary
 from muxivo_console.application.get_platform_health import GetPlatformHealth
+from muxivo_console.application.get_platform_server_stats import GetPlatformServerStats
 from muxivo_console.application.link_verified_identity import LinkVerifiedIdentity
 from muxivo_console.application.list_audit_events import ListAuditEvents
 from muxivo_console.application.list_control_modules import ListControlModules
@@ -89,6 +90,7 @@ from muxivo_console.presentation.organization_members import create_organization
 from muxivo_console.presentation.organization_roles import create_organization_role_router
 from muxivo_console.presentation.organizations import create_organization_query_router
 from muxivo_console.presentation.platform_adapters import create_platform_adapter_router
+from muxivo_console.presentation.server_stats import create_server_stats_router
 
 
 def create_production_app(settings: ConsoleSettings):
@@ -196,6 +198,11 @@ def create_production_app(settings: ConsoleSettings):
         connections=connection_reader,
         dashboard=platform_controls,
     )
+    platform_server_stats = GetPlatformServerStats(
+        authorizer=authorizer,
+        connections=connection_reader,
+        stats=platform_controls,
+    )
     discord_identity_link_start = None
     discord_identity_link_complete = None
     discord_authorization_url = None
@@ -267,4 +274,5 @@ def create_production_app(settings: ConsoleSettings):
     app.include_router(create_audit_event_router(audit_timeline))
     app.include_router(create_platform_adapter_router(ListPlatformAdapters(platform_controls)))
     app.include_router(create_dashboard_router(platform_dashboard))
+    app.include_router(create_server_stats_router(platform_server_stats))
     return app
