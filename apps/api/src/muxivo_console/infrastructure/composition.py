@@ -5,6 +5,7 @@ from muxivo_console.application.begin_identity_link import BeginIdentityLink
 from muxivo_console.application.complete_identity_link import CompleteIdentityLink
 from muxivo_console.application.create_browser_session import CreateBrowserSession
 from muxivo_console.application.create_organization import CreateOrganization
+from muxivo_console.application.get_platform_dashboard_summary import GetPlatformDashboardSummary
 from muxivo_console.application.get_platform_health import GetPlatformHealth
 from muxivo_console.application.link_verified_identity import LinkVerifiedIdentity
 from muxivo_console.application.list_control_modules import ListControlModules
@@ -65,6 +66,7 @@ from muxivo_console.infrastructure.security import (
 from muxivo_console.infrastructure.settings import ConsoleSettings
 from muxivo_console.presentation.api import create_app
 from muxivo_console.presentation.browser_sessions import create_browser_session_router
+from muxivo_console.presentation.dashboard import create_dashboard_router
 from muxivo_console.presentation.organizations import create_organization_query_router
 
 
@@ -109,13 +111,16 @@ def create_production_app(settings: ConsoleSettings):
         clock=clock,
     )
     organization_memberships = SqlAlchemyOrganizationMembershipReader(sessions)
+    authorizer = MembershipOrganizationAuthorizer(organization_memberships)
+    connection_reader = SqlAlchemyPlatformConnectionReader(sessions)
+    discord_control = DiscordControlApiCatalog(
+        settings.discord_control_base_url,
+        assertions,
+        allow_insecure_http=settings.allow_insecure_discord_control_http,
+    )
     modules = ListControlModules(
-        authorizer=MembershipOrganizationAuthorizer(organization_memberships),
-        catalog=DiscordControlApiCatalog(
-            settings.discord_control_base_url,
-            assertions,
-            allow_insecure_http=settings.allow_insecure_discord_control_http,
-        ),
+        authorizer=authorizer,
+        catalog=discord_control,
     )
     organizations = CreateOrganization(
         identifiers=identifiers,
@@ -124,7 +129,7 @@ def create_production_app(settings: ConsoleSettings):
         organizations=SqlAlchemyOrganizationCreationWriter(sessions),
     )
     platform_connections = RegisterPlatformConnection(
-        authorizer=MembershipOrganizationAuthorizer(organization_memberships),
+        authorizer=authorizer,
         verifier=DiscordPlatformConnectionVerifier(
             settings.discord_control_base_url,
             assertions,
@@ -135,17 +140,18 @@ def create_production_app(settings: ConsoleSettings):
         connections=SqlAlchemyPlatformConnectionWriter(sessions),
     )
     listed_platform_connections = ListPlatformConnections(
-        authorizer=MembershipOrganizationAuthorizer(organization_memberships),
-        connections=SqlAlchemyPlatformConnectionReader(sessions),
+        authorizer=authorizer,
+        connections=connection_reader,
     )
     platform_health = GetPlatformHealth(
-        authorizer=MembershipOrganizationAuthorizer(organization_memberships),
-        connections=SqlAlchemyPlatformConnectionReader(sessions),
-        health=DiscordControlApiCatalog(
-            settings.discord_control_base_url,
-            assertions,
-            allow_insecure_http=settings.allow_insecure_discord_control_http,
-        ),
+        authorizer=authorizer,
+        connections=connection_reader,
+        health=discord_control,
+    )
+    platform_dashboard = GetPlatformDashboardSummary(
+        authorizer=authorizer,
+        connections=connection_reader,
+        dashboard=discord_control,
     )
     discord_identity_link_start = None
     discord_identity_link_complete = None
@@ -212,4 +218,5 @@ def create_production_app(settings: ConsoleSettings):
             ListOrganizations(organizations=SqlAlchemyOrganizationAccessReader(sessions))
         )
     )
+    app.include_router(create_dashboard_router(platform_dashboard))
     return app
