@@ -6,7 +6,8 @@ export type PlatformAdapterCapability =
   | "connection_registration"
   | "control_modules"
   | "health"
-  | "dashboard_summary";
+  | "dashboard_summary"
+  | "server_stats";
 
 export type PlatformAdapter = {
   platform: Platform;
