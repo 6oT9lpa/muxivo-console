@@ -9,7 +9,7 @@ from muxivo_console.domain.activity import (
     Platform,
 )
 from muxivo_console.domain.dashboard import PlatformDashboardSummary
-from muxivo_console.domain.health import HealthSignal, PlatformHealth, SignalStatus
+from muxivo_console.domain.health import HealthSignal, HealthStatus, PlatformHealth
 from muxivo_console.infrastructure.platform_control_registry import PlatformControlRegistry
 
 
@@ -34,7 +34,7 @@ class Adapter:
         self.calls.append(("health", kwargs))
         return PlatformHealth(
             platform=self.platform,
-            signals=(HealthSignal("api", "API", "ok", SignalStatus.OPERATIONAL, 10),),
+            signals=(HealthSignal("api", "API", "ok", HealthStatus.OPERATIONAL, 10),),
         )
 
     async def get_dashboard(self, **kwargs):
