@@ -8,6 +8,10 @@ from muxivo_console.application.list_control_modules import PlatformControlUnava
 from muxivo_console.domain.activity import ControlModule, Platform
 from muxivo_console.domain.dashboard import PlatformDashboardSummary
 from muxivo_console.domain.health import PlatformHealth
+from muxivo_console.domain.platforms import (
+    PlatformAdapterCapability,
+    PlatformAdapterDescriptor,
+)
 from muxivo_console.infrastructure.discord_control_api import (
     DiscordControlApiCatalog,
     DiscordPlatformConnectionVerifier,
@@ -18,6 +22,7 @@ class PlatformControlAdapter(Protocol):
     """One platform-specific Control API facade hidden behind the registry."""
 
     platform: Platform
+    capabilities: frozenset[PlatformAdapterCapability]
 
     async def list_modules(
         self, *, organization_id: UUID, actor_id: UUID, correlation_id: UUID
@@ -50,6 +55,14 @@ class DiscordPlatformControlAdapter:
     """Keeps Discord-specific HTTP and identity adapters separate from generic routing."""
 
     platform = Platform.DISCORD
+    capabilities = frozenset(
+        {
+            PlatformAdapterCapability.CONNECTION_REGISTRATION,
+            PlatformAdapterCapability.CONTROL_MODULES,
+            PlatformAdapterCapability.HEALTH,
+            PlatformAdapterCapability.DASHBOARD_SUMMARY,
+        }
+    )
 
     def __init__(
         self,
@@ -123,6 +136,16 @@ class PlatformControlRegistry:
     def supported_platforms(self) -> tuple[Platform, ...]:
         return tuple(sorted(self._adapters, key=lambda platform: platform.value))
 
+    def list_configured(self) -> tuple[PlatformAdapterDescriptor, ...]:
+        """Describe deployment capabilities; this is not a user authorization decision."""
+        return tuple(
+            PlatformAdapterDescriptor(
+                platform=platform,
+                capabilities=self._adapters[platform].capabilities,
+            )
+            for platform in self.supported_platforms
+        )
+
     async def list_for_organization(
         self, *, organization_id: UUID, actor_id: UUID, correlation_id: UUID
     ) -> Sequence[ControlModule]:
@@ -177,7 +200,7 @@ class PlatformControlRegistry:
         correlation_id: UUID,
     ) -> bool:
         adapter = self._adapters.get(platform)
-        if adapter is None:
+        if adapter is None or PlatformAdapterCapability.CONNECTION_REGISTRATION not in adapter.capabilities:
             return False
         return await adapter.verify_connection(
             actor_id=actor_id,
