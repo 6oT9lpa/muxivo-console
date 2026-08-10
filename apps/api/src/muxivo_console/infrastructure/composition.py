@@ -3,6 +3,7 @@
 from muxivo_console.application.authenticate_email_password import AuthenticateEmailPassword
 from muxivo_console.application.begin_identity_link import BeginIdentityLink
 from muxivo_console.application.change_organization_member_role import ChangeOrganizationMemberRole
+from muxivo_console.application.check_readiness import CheckReadiness, NamedReadinessProbe
 from muxivo_console.application.complete_identity_link import CompleteIdentityLink
 from muxivo_console.application.create_browser_session import CreateBrowserSession
 from muxivo_console.application.create_organization import CreateOrganization
@@ -55,6 +56,7 @@ from muxivo_console.infrastructure.persistence.organization_role_repository impo
     SqlAlchemyOrganizationMemberLookup,
     SqlAlchemyOrganizationMemberRoleWriter,
 )
+from muxivo_console.infrastructure.persistence.readiness import SqlAlchemyDatabaseReadinessProbe
 from muxivo_console.infrastructure.persistence.registration_writer import (
     SqlAlchemyEmailPasswordRegistrationWriter,
 )
@@ -82,6 +84,7 @@ from muxivo_console.presentation.api import create_app
 from muxivo_console.presentation.audit_events import create_audit_event_router
 from muxivo_console.presentation.browser_sessions import create_browser_session_router
 from muxivo_console.presentation.dashboard import create_dashboard_router
+from muxivo_console.presentation.operations import create_operations_router
 from muxivo_console.presentation.organization_members import create_organization_member_router
 from muxivo_console.presentation.organization_roles import create_organization_role_router
 from muxivo_console.presentation.organizations import create_organization_query_router
@@ -93,6 +96,9 @@ def create_production_app(settings: ConsoleSettings):
     sessions = create_session_factory(settings.database_url)
     identifiers = Uuid7IdentifierGenerator()
     clock = UtcClock()
+    readiness = CheckReadiness(
+        (NamedReadinessProbe("database", SqlAlchemyDatabaseReadinessProbe(sessions)),)
+    )
     user_statuses = SqlAlchemyUserStatusReader(sessions)
     email_protector = FernetEmailProtector(
         lookup_key=settings.email_lookup_key,
@@ -250,6 +256,7 @@ def create_production_app(settings: ConsoleSettings):
             )
         )
     )
+    app.include_router(create_operations_router(readiness))
     app.include_router(
         create_organization_query_router(
             ListOrganizations(organizations=SqlAlchemyOrganizationAccessReader(sessions))
