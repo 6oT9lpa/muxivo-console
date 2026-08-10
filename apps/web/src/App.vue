@@ -2,22 +2,26 @@
 import { onMounted, ref } from "vue";
 import { consoleApi, ConsoleApiError } from "./api/consoleApi";
 import { useBrowserSession } from "./features/auth/useBrowserSession";
+import { useOrganizations } from "./features/organizations/useOrganizations";
 
 const email = ref("");
 const password = ref("");
 const organizationName = ref("");
 const busy = ref(false);
 const notice = ref("");
-const organizationId = ref("");
 const platform = ref<"discord" | "twitch" | "telegram">("discord");
 const externalResourceId = ref("");
 const connections = ref<PlatformConnection[]>([]);
 const platformHealth = ref<PlatformHealth | null>(null);
 const browserSession = useBrowserSession();
 const sessionState = browserSession.state;
+const organizationDirectory = useOrganizations();
+const organizationState = organizationDirectory.state;
+const organizations = organizationDirectory.items;
+const organizationId = organizationDirectory.selectedId;
 
 onMounted(() => {
-  void browserSession.refresh();
+  void restoreConsoleSession();
 });
 
 type Organization = { id: string; name: string; slug: string };
@@ -41,6 +45,11 @@ type PlatformHealth = {
   signals: PlatformHealthSignal[];
 };
 
+async function restoreConsoleSession() {
+  const restoredState = await browserSession.refresh();
+  if (restoredState === "authenticated") await loadOrganizationsAndWorkspace();
+}
+
 async function signIn() {
   busy.value = true;
   notice.value = "";
@@ -51,10 +60,12 @@ async function signIn() {
     });
     const restoredState = await browserSession.refresh();
     password.value = "";
-    notice.value =
-      restoredState === "authenticated"
-        ? "Signed in to Muxivo Console."
-        : "Sign-in succeeded, but the Console session could not be restored.";
+    if (restoredState === "authenticated") {
+      await loadOrganizationsAndWorkspace();
+      notice.value = "Signed in to Muxivo Console.";
+    } else {
+      notice.value = "Sign-in succeeded, but the Console session could not be restored.";
+    }
   } catch (error) {
     notice.value = messageFor(error);
   } finally {
@@ -98,9 +109,10 @@ async function createOrganization() {
       body: JSON.stringify({ name: organizationName.value }),
     });
     organizationName.value = "";
-    organizationId.value = organization.id;
-    notice.value = `Organization ${organization.name} is ready (${organization.slug}).`;
+    organizationDirectory.addAndSelect({ ...organization, role: "owner" });
+    clearPlatformState();
     await loadConnections();
+    notice.value = `Organization ${organization.name} is ready (${organization.slug}).`;
   } catch (error) {
     notice.value = messageFor(error);
   } finally {
@@ -108,13 +120,30 @@ async function createOrganization() {
   }
 }
 
+async function loadOrganizationsAndWorkspace() {
+  clearPlatformState();
+  const state = await organizationDirectory.load();
+  if (state === "ready" && organizationId.value) await loadConnections();
+}
+
+async function loadMoreOrganizations() {
+  await organizationDirectory.loadMore();
+}
+
+async function selectOrganization(event: Event) {
+  const selectedId = (event.target as HTMLSelectElement).value;
+  if (!organizationDirectory.select(selectedId)) return;
+  clearPlatformState();
+  await loadConnections();
+}
+
 async function loadConnections() {
-  if (!organizationId.value.trim()) return;
+  if (!organizationId.value) return;
   busy.value = true;
   notice.value = "";
   try {
     const payload = await consoleApi<{ items: PlatformConnection[] }>(
-      `/api/v1/organizations/${encodeURIComponent(organizationId.value.trim())}/platform-connections`,
+      `/api/v1/organizations/${encodeURIComponent(organizationId.value)}/platform-connections`,
     );
     connections.value = payload.items;
     platformHealth.value = null;
@@ -126,12 +155,12 @@ async function loadConnections() {
 }
 
 async function loadDiscordHealth() {
-  if (!organizationId.value.trim()) return;
+  if (!organizationId.value) return;
   busy.value = true;
   notice.value = "";
   try {
     platformHealth.value = await consoleApi<PlatformHealth>(
-      `/api/v1/organizations/${encodeURIComponent(organizationId.value.trim())}/platforms/discord/health`,
+      `/api/v1/organizations/${encodeURIComponent(organizationId.value)}/platforms/discord/health`,
     );
   } catch (error) {
     platformHealth.value = null;
@@ -142,12 +171,12 @@ async function loadDiscordHealth() {
 }
 
 async function registerConnection() {
-  if (!organizationId.value.trim()) return;
+  if (!organizationId.value) return;
   busy.value = true;
   notice.value = "";
   try {
     const connection = await consoleApi<PlatformConnection>(
-      `/api/v1/organizations/${encodeURIComponent(organizationId.value.trim())}/platform-connections`,
+      `/api/v1/organizations/${encodeURIComponent(organizationId.value)}/platform-connections`,
       {
         method: "POST",
         body: JSON.stringify({ platform: platform.value, external_resource_id: externalResourceId.value }),
@@ -163,11 +192,15 @@ async function registerConnection() {
   }
 }
 
-function clearWorkspaceState() {
-  organizationId.value = "";
+function clearPlatformState() {
   externalResourceId.value = "";
   connections.value = [];
   platformHealth.value = null;
+}
+
+function clearWorkspaceState() {
+  organizationDirectory.clear();
+  clearPlatformState();
 }
 
 function messageFor(error: unknown): string {
@@ -187,31 +220,50 @@ function messageFor(error: unknown): string {
     <section v-else-if="sessionState === 'unavailable'" class="card" role="alert">
       <h2>Console is temporarily unavailable</h2>
       <p>Your sign-in state could not be verified. No platform access has been granted.</p>
-      <button type="button" :disabled="busy" @click="browserSession.refresh">Retry</button>
+      <button type="button" :disabled="busy" @click="restoreConsoleSession">Retry</button>
     </section>
     <section v-else-if="sessionState === 'anonymous'" class="card">
       <h2>Sign in</h2>
       <form @submit.prevent="signIn"><label>Email<input v-model="email" type="email" autocomplete="email" required /></label><label>Password<input v-model="password" type="password" autocomplete="current-password" minlength="12" required /></label><button :disabled="busy">{{ busy ? "Signing in…" : "Sign in" }}</button></form>
     </section>
-    <section v-else class="card">
-      <div class="section-heading">
-        <div><h2>Create an organization</h2><p>Organizations own Console memberships and platform connections; bot credentials stay with their platform services.</p></div>
-        <button type="button" :disabled="busy" @click="signOut">{{ busy ? "Working…" : "Sign out" }}</button>
-      </div>
-      <form @submit.prevent="createOrganization"><label>Name<input v-model="organizationName" maxlength="128" required /></label><button :disabled="busy">{{ busy ? "Creating…" : "Create organization" }}</button></form>
-      <div class="identity-link"><h3>Discord identity</h3><p>Link your Discord account before registering a Discord server connection. Discord remains the authority for your server access.</p><button type="button" :disabled="busy" @click="linkDiscord">Link Discord</button></div>
-    </section>
-    <section v-if="sessionState === 'authenticated'" class="card workspace">
-      <h2>Platform connections</h2>
-      <p>Choose an organization, then connect a platform resource. The platform service independently verifies the request.</p>
-      <form @submit.prevent="loadConnections"><label>Organization ID<input v-model="organizationId" inputmode="text" placeholder="UUID" required /></label><button :disabled="busy">{{ busy ? "Loading…" : "Load connections" }}</button></form>
-      <form v-if="organizationId" class="connection-form" @submit.prevent="registerConnection"><label>Platform<select v-model="platform"><option value="discord">Discord</option><option value="twitch">Twitch</option><option value="telegram">Telegram</option></select></label><label>External resource ID<input v-model="externalResourceId" required /></label><button :disabled="busy">Register connection</button></form>
-      <ul v-if="connections.length" class="connections"><li v-for="connection in connections" :key="connection.id"><strong>{{ connection.platform }}</strong><span>{{ connection.external_resource_id }}</span><em :data-status="connection.status">{{ connection.status.replaceAll("_", " ") }}</em></li></ul>
-      <section v-if="organizationId" class="platform-health" aria-labelledby="discord-health-heading">
-        <div class="section-heading"><div><h3 id="discord-health-heading">Discord platform health</h3><p>Read-only runtime signals are requested through the Console BFF; Discord credentials never enter the browser.</p></div><button type="button" :disabled="busy" @click="loadDiscordHealth">{{ busy ? "Loading…" : "Load health" }}</button></div>
-        <ul v-if="platformHealth" class="health-signals"><li v-for="signal in platformHealth.signals" :key="signal.key"><span><strong>{{ signal.display_name }}</strong><small>{{ signal.value }}</small></span><em :data-status="signal.status">{{ signal.status }}</em></li></ul>
+    <template v-else>
+      <section class="card">
+        <div class="section-heading">
+          <div><h2>Organizations</h2><p>Choose the tenant whose platform resources you are allowed to manage.</p></div>
+          <button type="button" :disabled="busy" @click="signOut">{{ busy ? "Working…" : "Sign out" }}</button>
+        </div>
+        <div v-if="organizationState === 'loading'" class="directory-state" aria-live="polite">Loading your organizations…</div>
+        <div v-else-if="organizationState === 'unavailable'" class="directory-state" role="alert">
+          <p>Organization access could not be verified. Platform controls stay hidden.</p>
+          <button type="button" :disabled="busy" @click="loadOrganizationsAndWorkspace">Retry organizations</button>
+        </div>
+        <div v-else-if="organizationState === 'ready'" class="organization-switcher">
+          <label>Current organization
+            <select :value="organizationId" :disabled="busy" @change="selectOrganization">
+              <option v-for="organization in organizations" :key="organization.id" :value="organization.id">
+                {{ organization.name }} · {{ organization.role }}
+              </option>
+            </select>
+          </label>
+          <button v-if="organizationDirectory.nextCursor.value" type="button" :disabled="organizationDirectory.loadingMore.value" @click="loadMoreOrganizations">
+            {{ organizationDirectory.loadingMore.value ? "Loading…" : "Load more" }}
+          </button>
+        </div>
+        <p v-else-if="organizationState === 'empty'" class="directory-state">You do not belong to an organization yet. Create the first one below.</p>
+        <form class="create-organization" @submit.prevent="createOrganization"><label>New organization name<input v-model="organizationName" maxlength="128" required /></label><button :disabled="busy">{{ busy ? "Creating…" : "Create organization" }}</button></form>
+        <div class="identity-link"><h3>Discord identity</h3><p>Link your Discord account before registering a Discord server connection. Discord remains the authority for server-native access.</p><button type="button" :disabled="busy" @click="linkDiscord">Link Discord</button></div>
       </section>
-    </section>
+      <section v-if="organizationState === 'ready' && organizationId" class="card workspace">
+        <div class="section-heading"><div><h2>Platform connections</h2><p>Connections belong to the selected organization. Platform services independently verify ownership and capability.</p></div><span v-if="organizationDirectory.selected.value" class="role-badge">{{ organizationDirectory.selected.value.role }}</span></div>
+        <form class="connection-form" @submit.prevent="registerConnection"><label>Platform<select v-model="platform"><option value="discord">Discord</option><option value="twitch">Twitch</option><option value="telegram">Telegram</option></select></label><label>External resource ID<input v-model="externalResourceId" required /></label><button :disabled="busy">Register connection</button></form>
+        <ul v-if="connections.length" class="connections"><li v-for="connection in connections" :key="connection.id"><strong>{{ connection.platform }}</strong><span>{{ connection.external_resource_id }}</span><em :data-status="connection.status">{{ connection.status.replaceAll("_", " ") }}</em></li></ul>
+        <p v-else class="empty-state">No platform connections are visible for this organization.</p>
+        <section class="platform-health" aria-labelledby="discord-health-heading">
+          <div class="section-heading"><div><h3 id="discord-health-heading">Discord platform health</h3><p>Read-only runtime signals are requested through the Console BFF; Discord credentials never enter the browser.</p></div><button type="button" :disabled="busy" @click="loadDiscordHealth">{{ busy ? "Loading…" : "Load health" }}</button></div>
+          <ul v-if="platformHealth" class="health-signals"><li v-for="signal in platformHealth.signals" :key="signal.key"><span><strong>{{ signal.display_name }}</strong><small>{{ signal.value }}</small></span><em :data-status="signal.status">{{ signal.status }}</em></li></ul>
+        </section>
+      </section>
+    </template>
     <p v-if="notice" class="notice" role="status">{{ notice }}</p>
   </main>
 </template>
