@@ -40,14 +40,15 @@ export function useOrganizations(
   const selected = computed(
     () => items.value.find((organization) => organization.id === selectedId.value) ?? null,
   );
+  let generation = 0;
 
   async function load(preferredId?: string): Promise<OrganizationDirectoryState> {
+    const requestGeneration = ++generation;
+    resetState();
     state.value = "loading";
-    items.value = [];
-    selectedId.value = "";
-    nextCursor.value = null;
     try {
       const page = await gateway.list(undefined, 50);
+      if (requestGeneration !== generation) return state.value;
       items.value = page.items;
       nextCursor.value = page.next_cursor;
       const preferred = preferredId
@@ -56,6 +57,7 @@ export function useOrganizations(
       selectedId.value = preferred?.id ?? page.items[0]?.id ?? "";
       state.value = page.items.length === 0 ? "empty" : "ready";
     } catch {
+      if (requestGeneration !== generation) return state.value;
       state.value = "unavailable";
     }
     return state.value;
@@ -63,9 +65,12 @@ export function useOrganizations(
 
   async function loadMore(): Promise<void> {
     if (!nextCursor.value || loadingMore.value) return;
+    const requestGeneration = generation;
+    const cursor = nextCursor.value;
     loadingMore.value = true;
     try {
-      const page = await gateway.list(nextCursor.value, 50);
+      const page = await gateway.list(cursor, 50);
+      if (requestGeneration !== generation) return;
       const knownIds = new Set(items.value.map((organization) => organization.id));
       items.value = [
         ...items.value,
@@ -73,9 +78,9 @@ export function useOrganizations(
       ];
       nextCursor.value = page.next_cursor;
     } catch {
-      // Preserve the already verified tenant set and cursor so the user can retry safely.
+      // Preserve verified memberships and cursor so the user can retry.
     } finally {
-      loadingMore.value = false;
+      if (requestGeneration === generation) loadingMore.value = false;
     }
   }
 
@@ -86,15 +91,22 @@ export function useOrganizations(
   }
 
   function addAndSelect(organization: OrganizationAccess): void {
+    generation += 1;
     items.value = [
       organization,
       ...items.value.filter((current) => current.id !== organization.id),
     ];
     selectedId.value = organization.id;
     state.value = "ready";
+    loadingMore.value = false;
   }
 
   function clear(): void {
+    generation += 1;
+    resetState();
+  }
+
+  function resetState(): void {
     state.value = "idle";
     items.value = [];
     selectedId.value = "";

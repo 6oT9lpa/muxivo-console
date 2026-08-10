@@ -2,6 +2,9 @@
 import { onMounted, ref } from "vue";
 import { consoleApi, ConsoleApiError } from "./api/consoleApi";
 import { useBrowserSession } from "./features/auth/useBrowserSession";
+import DashboardSummaryPanel from "./features/dashboard/DashboardSummaryPanel.vue";
+import { useDashboardSummary } from "./features/dashboard/useDashboardSummary";
+import { useControlModules } from "./features/modules/useControlModules";
 import { useOrganizations } from "./features/organizations/useOrganizations";
 
 const email = ref("");
@@ -19,6 +22,9 @@ const organizationDirectory = useOrganizations();
 const organizationState = organizationDirectory.state;
 const organizations = organizationDirectory.items;
 const organizationId = organizationDirectory.selectedId;
+const moduleCatalog = useControlModules();
+const dashboardSummary = useDashboardSummary();
+let workspaceGeneration = 0;
 
 onMounted(() => {
   void restoreConsoleSession();
@@ -110,8 +116,7 @@ async function createOrganization() {
     });
     organizationName.value = "";
     organizationDirectory.addAndSelect({ ...organization, role: "owner" });
-    clearPlatformState();
-    await loadConnections();
+    await loadSelectedWorkspace();
     notice.value = `Organization ${organization.name} is ready (${organization.slug}).`;
   } catch (error) {
     notice.value = messageFor(error);
@@ -121,9 +126,9 @@ async function createOrganization() {
 }
 
 async function loadOrganizationsAndWorkspace() {
-  clearPlatformState();
+  invalidateWorkspace();
   const state = await organizationDirectory.load();
-  if (state === "ready" && organizationId.value) await loadConnections();
+  if (state === "ready" && organizationId.value) await loadSelectedWorkspace();
 }
 
 async function loadMoreOrganizations() {
@@ -133,72 +138,142 @@ async function loadMoreOrganizations() {
 async function selectOrganization(event: Event) {
   const selectedId = (event.target as HTMLSelectElement).value;
   if (!organizationDirectory.select(selectedId)) return;
-  clearPlatformState();
-  await loadConnections();
+  await loadSelectedWorkspace();
 }
 
-async function loadConnections() {
-  if (!organizationId.value) return;
+async function loadSelectedWorkspace() {
+  const requestGeneration = ++workspaceGeneration;
+  clearPlatformState();
+  const targetOrganizationId = organizationId.value;
+  if (!targetOrganizationId) return;
+
+  const [loadedConnections] = await Promise.all([
+    loadConnections(targetOrganizationId, requestGeneration),
+    moduleCatalog.load(targetOrganizationId),
+  ]);
+  if (!workspaceIsCurrent(targetOrganizationId, requestGeneration)) return;
+  await loadDashboardModule(targetOrganizationId, loadedConnections);
+}
+
+async function loadConnections(
+  targetOrganizationId: string,
+  requestGeneration: number,
+): Promise<PlatformConnection[]> {
   busy.value = true;
   notice.value = "";
   try {
     const payload = await consoleApi<{ items: PlatformConnection[] }>(
-      `/api/v1/organizations/${encodeURIComponent(organizationId.value)}/platform-connections`,
+      `/api/v1/organizations/${encodeURIComponent(targetOrganizationId)}/platform-connections`,
     );
-    connections.value = payload.items;
-    platformHealth.value = null;
+    if (workspaceIsCurrent(targetOrganizationId, requestGeneration)) {
+      connections.value = payload.items;
+      platformHealth.value = null;
+    }
+    return payload.items;
   } catch (error) {
-    notice.value = messageFor(error);
+    if (workspaceIsCurrent(targetOrganizationId, requestGeneration)) notice.value = messageFor(error);
+    return [];
   } finally {
-    busy.value = false;
+    if (workspaceIsCurrent(targetOrganizationId, requestGeneration)) busy.value = false;
   }
 }
 
+async function loadDashboardModule(
+  targetOrganizationId: string,
+  loadedConnections: PlatformConnection[],
+) {
+  dashboardSummary.clear();
+  if (!isControlModuleAvailable("discord.dashboard-summary")) return;
+  const connection = loadedConnections.find(
+    (item) =>
+      item.platform === "discord" && (item.status === "active" || item.status === "degraded"),
+  );
+  if (!connection) return;
+  await dashboardSummary.load(targetOrganizationId, connection.id);
+}
+
 async function loadDiscordHealth() {
-  if (!organizationId.value) return;
+  const targetOrganizationId = organizationId.value;
+  const requestGeneration = workspaceGeneration;
+  if (!targetOrganizationId) return;
   busy.value = true;
   notice.value = "";
   try {
-    platformHealth.value = await consoleApi<PlatformHealth>(
-      `/api/v1/organizations/${encodeURIComponent(organizationId.value)}/platforms/discord/health`,
+    const health = await consoleApi<PlatformHealth>(
+      `/api/v1/organizations/${encodeURIComponent(targetOrganizationId)}/platforms/discord/health`,
     );
+    if (
+      health.organization_id !== targetOrganizationId ||
+      health.platform !== "discord"
+    ) {
+      throw new Error("Platform health response does not match the selected resource");
+    }
+    if (workspaceIsCurrent(targetOrganizationId, requestGeneration)) platformHealth.value = health;
   } catch (error) {
-    platformHealth.value = null;
-    notice.value = messageFor(error);
+    if (workspaceIsCurrent(targetOrganizationId, requestGeneration)) {
+      platformHealth.value = null;
+      notice.value = messageFor(error);
+    }
   } finally {
-    busy.value = false;
+    if (workspaceIsCurrent(targetOrganizationId, requestGeneration)) busy.value = false;
   }
 }
 
 async function registerConnection() {
-  if (!organizationId.value) return;
+  const targetOrganizationId = organizationId.value;
+  const requestGeneration = workspaceGeneration;
+  if (!targetOrganizationId) return;
   busy.value = true;
   notice.value = "";
   try {
     const connection = await consoleApi<PlatformConnection>(
-      `/api/v1/organizations/${encodeURIComponent(organizationId.value)}/platform-connections`,
+      `/api/v1/organizations/${encodeURIComponent(targetOrganizationId)}/platform-connections`,
       {
         method: "POST",
         body: JSON.stringify({ platform: platform.value, external_resource_id: externalResourceId.value }),
       },
     );
+    if (connection.organization_id !== targetOrganizationId) {
+      throw new Error("Platform connection response does not match the selected organization");
+    }
+    if (!workspaceIsCurrent(targetOrganizationId, requestGeneration)) return;
     externalResourceId.value = "";
     connections.value = [connection, ...connections.value];
     notice.value = `${connection.platform} connection is pending verification.`;
   } catch (error) {
-    notice.value = messageFor(error);
+    if (workspaceIsCurrent(targetOrganizationId, requestGeneration)) notice.value = messageFor(error);
   } finally {
-    busy.value = false;
+    if (workspaceIsCurrent(targetOrganizationId, requestGeneration)) busy.value = false;
   }
+}
+
+function isControlModuleAvailable(key: string): boolean {
+  return moduleCatalog.items.value.some(
+    (module) => module.key === key && module.status === "available",
+  );
+}
+
+function workspaceIsCurrent(targetOrganizationId: string, requestGeneration: number): boolean {
+  return (
+    requestGeneration === workspaceGeneration && organizationId.value === targetOrganizationId
+  );
+}
+
+function invalidateWorkspace() {
+  workspaceGeneration += 1;
+  clearPlatformState();
 }
 
 function clearPlatformState() {
   externalResourceId.value = "";
   connections.value = [];
   platformHealth.value = null;
+  moduleCatalog.clear();
+  dashboardSummary.clear();
 }
 
 function clearWorkspaceState() {
+  workspaceGeneration += 1;
   organizationDirectory.clear();
   clearPlatformState();
 }
@@ -254,11 +329,24 @@ function messageFor(error: unknown): string {
         <div class="identity-link"><h3>Discord identity</h3><p>Link your Discord account before registering a Discord server connection. Discord remains the authority for server-native access.</p><button type="button" :disabled="busy" @click="linkDiscord">Link Discord</button></div>
       </section>
       <section v-if="organizationState === 'ready' && organizationId" class="card workspace">
-        <div class="section-heading"><div><h2>Platform connections</h2><p>Connections belong to the selected organization. Platform services independently verify ownership and capability.</p></div><span v-if="organizationDirectory.selected.value" class="role-badge">{{ organizationDirectory.selected.value.role }}</span></div>
+        <div class="section-heading"><div><h2>Control modules</h2><p>Browser-ready capabilities are discovered through the Console BFF and each platform's versioned Control API.</p></div><span v-if="organizationDirectory.selected.value" class="role-badge">{{ organizationDirectory.selected.value.role }}</span></div>
+        <p v-if="moduleCatalog.state.value === 'loading'" class="directory-state">Loading authorized modules…</p>
+        <p v-else-if="moduleCatalog.state.value === 'unavailable'" class="directory-state">Control modules are temporarily unavailable. No capability has been assumed.</p>
+        <p v-else-if="moduleCatalog.state.value === 'empty'" class="directory-state">No browser-ready modules are exposed for this organization yet.</p>
+        <ul v-else-if="moduleCatalog.state.value === 'ready'" class="module-grid">
+          <li v-for="module in moduleCatalog.items.value" :key="module.key">
+            <div><span class="module-platform">{{ module.platform }}</span><strong>{{ module.display_name }}</strong><small>{{ module.key }}</small></div>
+            <div class="module-meta"><span>{{ module.capability }}</span><em :data-status="module.status">{{ module.status.replaceAll("_", " ") }}</em></div>
+          </li>
+        </ul>
+        <DashboardSummaryPanel v-if="isControlModuleAvailable('discord.dashboard-summary')" :state="dashboardSummary.state.value" :summary="dashboardSummary.summary.value" />
+      </section>
+      <section v-if="organizationState === 'ready' && organizationId" class="card workspace">
+        <div class="section-heading"><div><h2>Platform connections</h2><p>Connections belong to the selected organization. Platform services independently verify ownership and capability.</p></div></div>
         <form class="connection-form" @submit.prevent="registerConnection"><label>Platform<select v-model="platform"><option value="discord">Discord</option><option value="twitch">Twitch</option><option value="telegram">Telegram</option></select></label><label>External resource ID<input v-model="externalResourceId" required /></label><button :disabled="busy">Register connection</button></form>
         <ul v-if="connections.length" class="connections"><li v-for="connection in connections" :key="connection.id"><strong>{{ connection.platform }}</strong><span>{{ connection.external_resource_id }}</span><em :data-status="connection.status">{{ connection.status.replaceAll("_", " ") }}</em></li></ul>
         <p v-else class="empty-state">No platform connections are visible for this organization.</p>
-        <section class="platform-health" aria-labelledby="discord-health-heading">
+        <section v-if="isControlModuleAvailable('discord.health')" class="platform-health" aria-labelledby="discord-health-heading">
           <div class="section-heading"><div><h3 id="discord-health-heading">Discord platform health</h3><p>Read-only runtime signals are requested through the Console BFF; Discord credentials never enter the browser.</p></div><button type="button" :disabled="busy" @click="loadDiscordHealth">{{ busy ? "Loading…" : "Load health" }}</button></div>
           <ul v-if="platformHealth" class="health-signals"><li v-for="signal in platformHealth.signals" :key="signal.key"><span><strong>{{ signal.display_name }}</strong><small>{{ signal.value }}</small></span><em :data-status="signal.status">{{ signal.status }}</em></li></ul>
         </section>

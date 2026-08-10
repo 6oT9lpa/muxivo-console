@@ -4,7 +4,10 @@ from dataclasses import dataclass
 from uuid import UUID
 
 from muxivo_console.application.get_platform_health import PlatformHealthUnavailableError
-from muxivo_console.application.list_control_modules import AccessDeniedError
+from muxivo_console.application.list_control_modules import (
+    AccessDeniedError,
+    PlatformControlUnavailableError,
+)
 from muxivo_console.application.ports import (
     OrganizationAuthorizer,
     PlatformConnectionReader,
@@ -53,9 +56,14 @@ class GetPlatformDashboardSummary:
             ConnectionStatus.DEGRADED,
         }:
             raise PlatformHealthUnavailableError("No usable platform connection exists.")
-        return await self.dashboard.get_for_connection(
+        summary = await self.dashboard.get_for_connection(
             organization_id=organization_id,
             actor_id=actor_id,
             external_resource_id=connection.external_resource_id,
             correlation_id=correlation_id,
         )
+        if summary.platform is not connection.platform:
+            raise PlatformControlUnavailableError(
+                "Platform dashboard response does not match the selected connection."
+            )
+        return summary
