@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from "vue";
 import { consoleApi, ConsoleApiError } from "./api/consoleApi";
+import AuditTimelinePanel from "./features/audit/AuditTimelinePanel.vue";
 import { useBrowserSession } from "./features/auth/useBrowserSession";
 import DashboardSummaryPanel from "./features/dashboard/DashboardSummaryPanel.vue";
 import { useDashboardSummary } from "./features/dashboard/useDashboardSummary";
@@ -437,6 +438,12 @@ function messageFor(error: unknown): string {
         @retry="reloadOrganizationMembers"
         @load-more="loadMoreOrganizationMembers"
         @change-role="changeOrganizationMemberRole"
+      />
+
+      <AuditTimelinePanel
+        v-if="organizationState === 'ready' && organizationId && selectedOrganizationRole"
+        :organization-id="organizationId"
+        :actor-role="selectedOrganizationRole"
       />
 
       <section v-if="organizationState === 'ready' && organizationId" class="card workspace">
