@@ -117,4 +117,10 @@ def _role_supports(role: OrganizationRole, request: AuthorizationRequest) -> boo
             AuthorizationAction.READ,
             AuthorizationAction.MANAGE,
         }
+    if request.resource is AuthorizationResource.AUDIT_EVENTS:
+        return role in {
+            OrganizationRole.OWNER,
+            OrganizationRole.ADMIN,
+            OrganizationRole.ANALYST,
+        } and request.action is AuthorizationAction.READ
     return False

@@ -9,6 +9,7 @@ from muxivo_console.application.create_organization import CreateOrganization
 from muxivo_console.application.get_platform_dashboard_summary import GetPlatformDashboardSummary
 from muxivo_console.application.get_platform_health import GetPlatformHealth
 from muxivo_console.application.link_verified_identity import LinkVerifiedIdentity
+from muxivo_console.application.list_audit_events import ListAuditEvents
 from muxivo_console.application.list_control_modules import ListControlModules
 from muxivo_console.application.list_organization_members import ListOrganizationMembers
 from muxivo_console.application.list_organizations import ListOrganizations
@@ -26,6 +27,7 @@ from muxivo_console.infrastructure.discord_control_api import (
 )
 from muxivo_console.infrastructure.discord_oauth import DiscordOAuthClient
 from muxivo_console.infrastructure.naming import RandomSuffixOrganizationSlugGenerator
+from muxivo_console.infrastructure.persistence.audit_repository import SqlAlchemyAuditEntryReader
 from muxivo_console.infrastructure.persistence.connection_repository import (
     SqlAlchemyPlatformConnectionReader,
     SqlAlchemyPlatformConnectionWriter,
@@ -77,6 +79,7 @@ from muxivo_console.infrastructure.security import (
 )
 from muxivo_console.infrastructure.settings import ConsoleSettings
 from muxivo_console.presentation.api import create_app
+from muxivo_console.presentation.audit_events import create_audit_event_router
 from muxivo_console.presentation.browser_sessions import create_browser_session_router
 from muxivo_console.presentation.dashboard import create_dashboard_router
 from muxivo_console.presentation.organization_members import create_organization_member_router
@@ -162,6 +165,10 @@ def create_production_app(settings: ConsoleSettings):
         members=SqlAlchemyOrganizationMemberLookup(sessions),
         roles=SqlAlchemyOrganizationMemberRoleWriter(sessions),
         identifiers=identifiers,
+    )
+    audit_timeline = ListAuditEvents(
+        authorizer=authorizer,
+        audit_events=SqlAlchemyAuditEntryReader(sessions),
     )
     platform_connections = RegisterPlatformConnection(
         authorizer=authorizer,
@@ -250,6 +257,7 @@ def create_production_app(settings: ConsoleSettings):
     )
     app.include_router(create_organization_member_router(listed_organization_members))
     app.include_router(create_organization_role_router(organization_role_changes))
+    app.include_router(create_audit_event_router(audit_timeline))
     app.include_router(create_platform_adapter_router(ListPlatformAdapters(platform_controls)))
     app.include_router(create_dashboard_router(platform_dashboard))
     return app
