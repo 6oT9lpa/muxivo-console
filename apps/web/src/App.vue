@@ -2,6 +2,7 @@
 import { onMounted, ref } from "vue";
 import { consoleApi, ConsoleApiError } from "./api/consoleApi";
 import { useBrowserSession } from "./features/auth/useBrowserSession";
+import { useControlModules } from "./features/modules/useControlModules";
 import { useOrganizations } from "./features/organizations/useOrganizations";
 
 const email = ref("");
@@ -19,6 +20,7 @@ const organizationDirectory = useOrganizations();
 const organizationState = organizationDirectory.state;
 const organizations = organizationDirectory.items;
 const organizationId = organizationDirectory.selectedId;
+const moduleCatalog = useControlModules();
 
 onMounted(() => {
   void restoreConsoleSession();
@@ -110,8 +112,7 @@ async function createOrganization() {
     });
     organizationName.value = "";
     organizationDirectory.addAndSelect({ ...organization, role: "owner" });
-    clearPlatformState();
-    await loadConnections();
+    await loadSelectedWorkspace();
     notice.value = `Organization ${organization.name} is ready (${organization.slug}).`;
   } catch (error) {
     notice.value = messageFor(error);
@@ -123,7 +124,7 @@ async function createOrganization() {
 async function loadOrganizationsAndWorkspace() {
   clearPlatformState();
   const state = await organizationDirectory.load();
-  if (state === "ready" && organizationId.value) await loadConnections();
+  if (state === "ready" && organizationId.value) await loadSelectedWorkspace();
 }
 
 async function loadMoreOrganizations() {
@@ -133,8 +134,13 @@ async function loadMoreOrganizations() {
 async function selectOrganization(event: Event) {
   const selectedId = (event.target as HTMLSelectElement).value;
   if (!organizationDirectory.select(selectedId)) return;
+  await loadSelectedWorkspace();
+}
+
+async function loadSelectedWorkspace() {
   clearPlatformState();
-  await loadConnections();
+  if (!organizationId.value) return;
+  await Promise.all([loadConnections(), moduleCatalog.load(organizationId.value)]);
 }
 
 async function loadConnections() {
@@ -196,6 +202,7 @@ function clearPlatformState() {
   externalResourceId.value = "";
   connections.value = [];
   platformHealth.value = null;
+  moduleCatalog.clear();
 }
 
 function clearWorkspaceState() {
@@ -254,7 +261,19 @@ function messageFor(error: unknown): string {
         <div class="identity-link"><h3>Discord identity</h3><p>Link your Discord account before registering a Discord server connection. Discord remains the authority for server-native access.</p><button type="button" :disabled="busy" @click="linkDiscord">Link Discord</button></div>
       </section>
       <section v-if="organizationState === 'ready' && organizationId" class="card workspace">
-        <div class="section-heading"><div><h2>Platform connections</h2><p>Connections belong to the selected organization. Platform services independently verify ownership and capability.</p></div><span v-if="organizationDirectory.selected.value" class="role-badge">{{ organizationDirectory.selected.value.role }}</span></div>
+        <div class="section-heading"><div><h2>Control modules</h2><p>Browser-ready capabilities are discovered through the Console BFF and each platform's versioned Control API.</p></div><span v-if="organizationDirectory.selected.value" class="role-badge">{{ organizationDirectory.selected.value.role }}</span></div>
+        <p v-if="moduleCatalog.state.value === 'loading'" class="directory-state">Loading authorized modules…</p>
+        <p v-else-if="moduleCatalog.state.value === 'unavailable'" class="directory-state">Control modules are temporarily unavailable. No capability has been assumed.</p>
+        <p v-else-if="moduleCatalog.state.value === 'empty'" class="directory-state">No browser-ready modules are exposed for this organization yet.</p>
+        <ul v-else-if="moduleCatalog.state.value === 'ready'" class="module-grid">
+          <li v-for="module in moduleCatalog.items.value" :key="module.key">
+            <div><span class="module-platform">{{ module.platform }}</span><strong>{{ module.display_name }}</strong><small>{{ module.key }}</small></div>
+            <div class="module-meta"><span>{{ module.capability }}</span><em :data-status="module.status">{{ module.status.replaceAll("_", " ") }}</em></div>
+          </li>
+        </ul>
+      </section>
+      <section v-if="organizationState === 'ready' && organizationId" class="card workspace">
+        <div class="section-heading"><div><h2>Platform connections</h2><p>Connections belong to the selected organization. Platform services independently verify ownership and capability.</p></div></div>
         <form class="connection-form" @submit.prevent="registerConnection"><label>Platform<select v-model="platform"><option value="discord">Discord</option><option value="twitch">Twitch</option><option value="telegram">Telegram</option></select></label><label>External resource ID<input v-model="externalResourceId" required /></label><button :disabled="busy">Register connection</button></form>
         <ul v-if="connections.length" class="connections"><li v-for="connection in connections" :key="connection.id"><strong>{{ connection.platform }}</strong><span>{{ connection.external_resource_id }}</span><em :data-status="connection.status">{{ connection.status.replaceAll("_", " ") }}</em></li></ul>
         <p v-else class="empty-state">No platform connections are visible for this organization.</p>
