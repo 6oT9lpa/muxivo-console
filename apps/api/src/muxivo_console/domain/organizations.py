@@ -50,6 +50,14 @@ class Organization:
 
 
 @dataclass(frozen=True, slots=True)
+class OrganizationAccess:
+    """A tenant the actor may enter, paired with the actor's Console role."""
+
+    organization: Organization
+    role: OrganizationRole
+
+
+@dataclass(frozen=True, slots=True)
 class MembershipResourceScope:
     """An explicit grant to one platform-neutral Console resource/action pair."""
 

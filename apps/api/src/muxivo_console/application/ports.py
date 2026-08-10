@@ -17,7 +17,11 @@ from muxivo_console.domain.identity import (
     UserStatus,
 )
 from muxivo_console.domain.identity_linking import IdentityLinkTransaction
-from muxivo_console.domain.organizations import Organization, OrganizationMembership
+from muxivo_console.domain.organizations import (
+    Organization,
+    OrganizationAccess,
+    OrganizationMembership,
+)
 from muxivo_console.domain.sessions import AuthSession
 
 
@@ -62,6 +66,14 @@ class OrganizationMembershipReader(Protocol):
     async def get_membership(
         self, *, actor_id: UUID, organization_id: UUID
     ) -> OrganizationMembership | None: ...
+
+
+class OrganizationAccessReader(Protocol):
+    """Lists only organizations reached through the actor's own memberships."""
+
+    async def list_for_actor(
+        self, *, actor_id: UUID, after_organization_id: UUID | None, limit: int
+    ) -> Sequence[OrganizationAccess]: ...
 
 
 class IdentifierGenerator(Protocol):
