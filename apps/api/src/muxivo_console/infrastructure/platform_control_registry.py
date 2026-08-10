@@ -200,7 +200,11 @@ class PlatformControlRegistry:
         correlation_id: UUID,
     ) -> bool:
         adapter = self._adapters.get(platform)
-        if adapter is None or PlatformAdapterCapability.CONNECTION_REGISTRATION not in adapter.capabilities:
+        supports_registration = (
+            adapter is not None
+            and PlatformAdapterCapability.CONNECTION_REGISTRATION in adapter.capabilities
+        )
+        if not supports_registration or adapter is None:
             return False
         return await adapter.verify_connection(
             actor_id=actor_id,
