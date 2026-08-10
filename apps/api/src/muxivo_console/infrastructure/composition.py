@@ -2,6 +2,7 @@
 
 from muxivo_console.application.authenticate_email_password import AuthenticateEmailPassword
 from muxivo_console.application.begin_identity_link import BeginIdentityLink
+from muxivo_console.application.change_organization_member_role import ChangeOrganizationMemberRole
 from muxivo_console.application.complete_identity_link import CompleteIdentityLink
 from muxivo_console.application.create_browser_session import CreateBrowserSession
 from muxivo_console.application.create_organization import CreateOrganization
@@ -48,6 +49,10 @@ from muxivo_console.infrastructure.persistence.organization_repository import (
     SqlAlchemyOrganizationMembershipReader,
     SqlAlchemyUserStatusReader,
 )
+from muxivo_console.infrastructure.persistence.organization_role_repository import (
+    SqlAlchemyOrganizationMemberLookup,
+    SqlAlchemyOrganizationMemberRoleWriter,
+)
 from muxivo_console.infrastructure.persistence.registration_writer import (
     SqlAlchemyEmailPasswordRegistrationWriter,
 )
@@ -75,6 +80,7 @@ from muxivo_console.presentation.api import create_app
 from muxivo_console.presentation.browser_sessions import create_browser_session_router
 from muxivo_console.presentation.dashboard import create_dashboard_router
 from muxivo_console.presentation.organization_members import create_organization_member_router
+from muxivo_console.presentation.organization_roles import create_organization_role_router
 from muxivo_console.presentation.organizations import create_organization_query_router
 from muxivo_console.presentation.platform_adapters import create_platform_adapter_router
 
@@ -149,6 +155,13 @@ def create_production_app(settings: ConsoleSettings):
     listed_organization_members = ListOrganizationMembers(
         authorizer=authorizer,
         members=SqlAlchemyOrganizationMemberReader(sessions),
+    )
+    organization_role_changes = ChangeOrganizationMemberRole(
+        authorizer=authorizer,
+        memberships=organization_memberships,
+        members=SqlAlchemyOrganizationMemberLookup(sessions),
+        roles=SqlAlchemyOrganizationMemberRoleWriter(sessions),
+        identifiers=identifiers,
     )
     platform_connections = RegisterPlatformConnection(
         authorizer=authorizer,
@@ -236,6 +249,7 @@ def create_production_app(settings: ConsoleSettings):
         )
     )
     app.include_router(create_organization_member_router(listed_organization_members))
+    app.include_router(create_organization_role_router(organization_role_changes))
     app.include_router(create_platform_adapter_router(ListPlatformAdapters(platform_controls)))
     app.include_router(create_dashboard_router(platform_dashboard))
     return app
