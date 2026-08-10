@@ -6,13 +6,12 @@ from typing import Self
 from uuid import UUID, uuid4
 
 import pytest
-from sqlalchemy.exc import IntegrityError
-
 from muxivo_console.domain.audit import AuditEvent
 from muxivo_console.infrastructure.persistence.models import AuditEventRecord
 from muxivo_console.infrastructure.persistence.session_repository import (
     SqlAlchemyAuthSessionRevoker,
 )
+from sqlalchemy.exc import IntegrityError
 
 
 @dataclass
