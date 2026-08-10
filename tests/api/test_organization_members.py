@@ -83,4 +83,4 @@ def test_requires_browser_session() -> None:
 
     response = TestClient(app).get(f"/api/v1/organizations/{uuid4()}/members")
 
-    assert response.status_code == 403
+    assert response.status_code == 401
