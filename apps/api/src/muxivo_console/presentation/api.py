@@ -48,6 +48,7 @@ from muxivo_console.application.register_platform_connection import (
 )
 from muxivo_console.application.resolve_browser_session import ResolveBrowserSession
 from muxivo_console.contracts.v1.authentication import (
+    BrowserSessionResponse,
     EmailPasswordLoginRequest,
     EmailPasswordRegistrationRequest,
     EmailPasswordRegistrationResponse,
@@ -71,6 +72,7 @@ from muxivo_console.contracts.v1.platform_health import (
 )
 from muxivo_console.domain.activity import Platform
 from muxivo_console.domain.identity import LoginIdentityProvider
+from muxivo_console.domain.sessions import SessionAssuranceLevel
 from muxivo_console.infrastructure.development import (
     DenyByDefaultOrganizationAuthorizer,
     StaticModuleCatalog,
@@ -152,6 +154,31 @@ def create_app(
     @app.get("/healthz", tags=["operations"])
     async def healthz() -> dict[str, str]:
         return {"status": "ok"}
+
+    @app.get(
+        "/api/v1/auth/sessions/current",
+        response_model=BrowserSessionResponse,
+        tags=["authentication"],
+    )
+    async def get_current_browser_session(request: Request) -> BrowserSessionResponse:
+        """Restore browser UI state from a valid first-party Console session only."""
+        actor_id = getattr(request.state, "actor_id", None)
+        session_id = getattr(request.state, "session_id", None)
+        assurance_level = getattr(request.state, "assurance_level", None)
+        if (
+            not isinstance(actor_id, UUID)
+            or not isinstance(session_id, UUID)
+            or not isinstance(assurance_level, SessionAssuranceLevel)
+        ):
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Authentication required",
+            )
+        return BrowserSessionResponse(
+            user_id=actor_id,
+            session_id=session_id,
+            assurance_level=assurance_level.value,
+        )
 
     @app.post(
         "/api/v1/identity-links/discord/authorizations",

@@ -1,11 +1,11 @@
 <script setup lang="ts">
-import { ref } from "vue";
+import { onMounted, ref } from "vue";
 import { consoleApi, ConsoleApiError } from "./api/consoleApi";
+import { useBrowserSession } from "./features/auth/useBrowserSession";
 
 const email = ref("");
 const password = ref("");
 const organizationName = ref("");
-const authenticated = ref(false);
 const busy = ref(false);
 const notice = ref("");
 const organizationId = ref("");
@@ -13,6 +13,12 @@ const platform = ref<"discord" | "twitch" | "telegram">("discord");
 const externalResourceId = ref("");
 const connections = ref<PlatformConnection[]>([]);
 const platformHealth = ref<PlatformHealth | null>(null);
+const browserSession = useBrowserSession();
+const sessionState = browserSession.state;
+
+onMounted(() => {
+  void browserSession.refresh();
+});
 
 type Organization = { id: string; name: string; slug: string };
 type PlatformConnection = {
@@ -43,9 +49,12 @@ async function signIn() {
       method: "POST",
       body: JSON.stringify({ email: email.value, password: password.value }),
     });
-    authenticated.value = true;
+    const restoredState = await browserSession.refresh();
     password.value = "";
-    notice.value = "Signed in to Muxivo Console.";
+    notice.value =
+      restoredState === "authenticated"
+        ? "Signed in to Muxivo Console."
+        : "Sign-in succeeded, but the Console session could not be restored.";
   } catch (error) {
     notice.value = messageFor(error);
   } finally {
@@ -152,7 +161,16 @@ function messageFor(error: unknown): string {
 <template>
   <main class="shell">
     <header><span class="eyebrow">MUXIVO</span><h1>Console</h1><p>One browser control plane for every Muxivo bot platform.</p></header>
-    <section v-if="!authenticated" class="card">
+    <section v-if="sessionState === 'checking'" class="card" aria-live="polite">
+      <h2>Restoring your session</h2>
+      <p>Checking the first-party Muxivo Console session.</p>
+    </section>
+    <section v-else-if="sessionState === 'unavailable'" class="card" role="alert">
+      <h2>Console is temporarily unavailable</h2>
+      <p>Your sign-in state could not be verified. No platform access has been granted.</p>
+      <button type="button" :disabled="busy" @click="browserSession.refresh">Retry</button>
+    </section>
+    <section v-else-if="sessionState === 'anonymous'" class="card">
       <h2>Sign in</h2>
       <form @submit.prevent="signIn"><label>Email<input v-model="email" type="email" autocomplete="email" required /></label><label>Password<input v-model="password" type="password" autocomplete="current-password" minlength="12" required /></label><button :disabled="busy">{{ busy ? "Signing in…" : "Sign in" }}</button></form>
     </section>
@@ -162,7 +180,7 @@ function messageFor(error: unknown): string {
       <form @submit.prevent="createOrganization"><label>Name<input v-model="organizationName" maxlength="128" required /></label><button :disabled="busy">{{ busy ? "Creating…" : "Create organization" }}</button></form>
       <div class="identity-link"><h3>Discord identity</h3><p>Link your Discord account before registering a Discord server connection. Discord remains the authority for your server access.</p><button type="button" :disabled="busy" @click="linkDiscord">Link Discord</button></div>
     </section>
-    <section v-if="authenticated" class="card workspace">
+    <section v-if="sessionState === 'authenticated'" class="card workspace">
       <h2>Platform connections</h2>
       <p>Choose an organization, then connect a platform resource. The platform service independently verifies the request.</p>
       <form @submit.prevent="loadConnections"><label>Organization ID<input v-model="organizationId" inputmode="text" placeholder="UUID" required /></label><button :disabled="busy">{{ busy ? "Loading…" : "Load connections" }}</button></form>
