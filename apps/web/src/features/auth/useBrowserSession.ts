@@ -11,11 +11,16 @@ export type BrowserSessionState = "checking" | "authenticated" | "anonymous" | "
 
 export interface BrowserSessionGateway {
   current(): Promise<BrowserSession>;
+  revokeCurrent(): Promise<void>;
 }
 
 export class ConsoleBrowserSessionGateway implements BrowserSessionGateway {
   async current(): Promise<BrowserSession> {
     return consoleApi<BrowserSession>("/api/v1/auth/sessions/current");
+  }
+
+  async revokeCurrent(): Promise<void> {
+    await consoleApi<void>("/api/v1/auth/sessions/current", { method: "DELETE" });
   }
 }
 
@@ -38,9 +43,22 @@ export function useBrowserSession(
     return state.value;
   }
 
+  async function signOut(): Promise<BrowserSessionState> {
+    state.value = "checking";
+    session.value = null;
+    try {
+      await gateway.revokeCurrent();
+      state.value = "anonymous";
+    } catch {
+      state.value = "unavailable";
+    }
+    return state.value;
+  }
+
   return {
     state: readonly(state),
     session: readonly(session),
     refresh,
+    signOut,
   };
 }

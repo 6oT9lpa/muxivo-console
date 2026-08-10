@@ -7,11 +7,21 @@ import {
 } from "./useBrowserSession";
 
 class StubGateway implements BrowserSessionGateway {
-  constructor(private readonly result: BrowserSession | Error) {}
+  revoked = false;
+
+  constructor(
+    private readonly currentResult: BrowserSession | Error,
+    private readonly revocationError: Error | null = null,
+  ) {}
 
   async current(): Promise<BrowserSession> {
-    if (this.result instanceof Error) throw this.result;
-    return this.result;
+    if (this.currentResult instanceof Error) throw this.currentResult;
+    return this.currentResult;
+  }
+
+  async revokeCurrent(): Promise<void> {
+    if (this.revocationError) throw this.revocationError;
+    this.revoked = true;
   }
 }
 
@@ -46,6 +56,30 @@ describe("useBrowserSession", () => {
     const browserSession = useBrowserSession(new StubGateway(new Error("network failure")));
 
     const state = await browserSession.refresh();
+
+    expect(state).toBe("unavailable");
+    expect(browserSession.session.value).toBeNull();
+  });
+
+  it("revokes the server session before transitioning to anonymous", async () => {
+    const gateway = new StubGateway(session);
+    const browserSession = useBrowserSession(gateway);
+    await browserSession.refresh();
+
+    const state = await browserSession.signOut();
+
+    expect(gateway.revoked).toBe(true);
+    expect(state).toBe("anonymous");
+    expect(browserSession.session.value).toBeNull();
+  });
+
+  it("fails closed when server-side revocation cannot be confirmed", async () => {
+    const browserSession = useBrowserSession(
+      new StubGateway(session, new Error("revocation unavailable")),
+    );
+    await browserSession.refresh();
+
+    const state = await browserSession.signOut();
 
     expect(state).toBe("unavailable");
     expect(browserSession.session.value).toBeNull();

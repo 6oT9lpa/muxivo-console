@@ -62,6 +62,18 @@ async function signIn() {
   }
 }
 
+async function signOut() {
+  busy.value = true;
+  notice.value = "";
+  clearWorkspaceState();
+  const state = await browserSession.signOut();
+  notice.value =
+    state === "anonymous"
+      ? "Signed out of Muxivo Console."
+      : "Sign-out could not be confirmed. Console access is hidden until the session is checked.";
+  busy.value = false;
+}
+
 async function linkDiscord() {
   busy.value = true;
   notice.value = "";
@@ -151,6 +163,13 @@ async function registerConnection() {
   }
 }
 
+function clearWorkspaceState() {
+  organizationId.value = "";
+  externalResourceId.value = "";
+  connections.value = [];
+  platformHealth.value = null;
+}
+
 function messageFor(error: unknown): string {
   if (error instanceof ConsoleApiError && error.status === 401) return "Email or password is incorrect.";
   if (error instanceof ConsoleApiError && error.status === 403) return "Your current session cannot perform this action.";
@@ -175,8 +194,10 @@ function messageFor(error: unknown): string {
       <form @submit.prevent="signIn"><label>Email<input v-model="email" type="email" autocomplete="email" required /></label><label>Password<input v-model="password" type="password" autocomplete="current-password" minlength="12" required /></label><button :disabled="busy">{{ busy ? "Signing in…" : "Sign in" }}</button></form>
     </section>
     <section v-else class="card">
-      <h2>Create an organization</h2>
-      <p>Organizations own Console memberships and platform connections; bot credentials stay with their platform services.</p>
+      <div class="section-heading">
+        <div><h2>Create an organization</h2><p>Organizations own Console memberships and platform connections; bot credentials stay with their platform services.</p></div>
+        <button type="button" :disabled="busy" @click="signOut">{{ busy ? "Working…" : "Sign out" }}</button>
+      </div>
       <form @submit.prevent="createOrganization"><label>Name<input v-model="organizationName" maxlength="128" required /></label><button :disabled="busy">{{ busy ? "Creating…" : "Create organization" }}</button></form>
       <div class="identity-link"><h3>Discord identity</h3><p>Link your Discord account before registering a Discord server connection. Discord remains the authority for your server access.</p><button type="button" :disabled="busy" @click="linkDiscord">Link Discord</button></div>
     </section>
