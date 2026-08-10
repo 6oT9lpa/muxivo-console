@@ -1,4 +1,5 @@
 from collections.abc import Sequence
+from datetime import datetime
 from typing import Protocol
 from uuid import UUID
 
@@ -229,6 +230,19 @@ class AuthSessionReader(Protocol):
     """Looks up a stored Console session by a keyed hash, never raw bearer data."""
 
     async def find_by_token_hash(self, *, token_hash: str) -> AuthSession | None: ...
+
+
+class AuthSessionRevoker(Protocol):
+    """Revokes a Console session and appends its security audit event atomically."""
+
+    async def revoke(
+        self,
+        *,
+        session_id: UUID,
+        user_id: UUID,
+        revoked_at: datetime,
+        audit_event: AuditEvent,
+    ) -> bool: ...
 
 
 class EmailPasswordAccountReader(Protocol):

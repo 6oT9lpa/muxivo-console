@@ -13,6 +13,7 @@ from muxivo_console.application.organization_authorizer import MembershipOrganiz
 from muxivo_console.application.register_email_password import RegisterEmailPassword
 from muxivo_console.application.register_platform_connection import RegisterPlatformConnection
 from muxivo_console.application.resolve_browser_session import ResolveBrowserSession
+from muxivo_console.application.revoke_browser_session import RevokeBrowserSession
 from muxivo_console.infrastructure.discord_control_api import (
     DiscordControlApiCatalog,
     DiscordPlatformConnectionVerifier,
@@ -46,6 +47,7 @@ from muxivo_console.infrastructure.persistence.registration_writer import (
 )
 from muxivo_console.infrastructure.persistence.session_repository import (
     SqlAlchemyAuthSessionReader,
+    SqlAlchemyAuthSessionRevoker,
     SqlAlchemyAuthSessionWriter,
 )
 from muxivo_console.infrastructure.security import (
@@ -60,6 +62,7 @@ from muxivo_console.infrastructure.security import (
 )
 from muxivo_console.infrastructure.settings import ConsoleSettings
 from muxivo_console.presentation.api import create_app
+from muxivo_console.presentation.browser_sessions import create_browser_session_router
 
 
 def create_production_app(settings: ConsoleSettings):
@@ -181,7 +184,7 @@ def create_production_app(settings: ConsoleSettings):
             linker=identity_linker,
         )
         discord_authorization_url = oauth_client.authorization_url
-    return create_app(
+    app = create_app(
         control_modules_use_case=modules,
         registration_use_case=registrations,
         authentication_use_case=authentication,
@@ -199,3 +202,13 @@ def create_production_app(settings: ConsoleSettings):
             user_statuses=user_statuses,
         ),
     )
+    app.include_router(
+        create_browser_session_router(
+            RevokeBrowserSession(
+                identifiers=identifiers,
+                clock=clock,
+                sessions=SqlAlchemyAuthSessionRevoker(sessions),
+            )
+        )
+    )
+    return app
