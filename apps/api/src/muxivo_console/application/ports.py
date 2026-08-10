@@ -26,7 +26,7 @@ from muxivo_console.domain.sessions import AuthSession
 
 
 class ModuleCatalog(Protocol):
-    """Outbound port implemented by a platform Control API adapter."""
+    """Outbound port implemented by a platform Control API registry."""
 
     async def list_for_organization(
         self, *, organization_id: UUID, actor_id: UUID, correlation_id: UUID
@@ -34,19 +34,25 @@ class ModuleCatalog(Protocol):
 
 
 class PlatformHealthReader(Protocol):
-    """Reads aggregate, non-secret health from an authorized Control API."""
+    """Reads aggregate, non-secret health from the selected platform adapter."""
 
     async def get_for_organization(
-        self, *, organization_id: UUID, actor_id: UUID, correlation_id: UUID
+        self,
+        *,
+        platform: Platform,
+        organization_id: UUID,
+        actor_id: UUID,
+        correlation_id: UUID,
     ) -> PlatformHealth: ...
 
 
 class PlatformDashboardReader(Protocol):
-    """Reads a resource-bound, aggregate dashboard summary from a Control API."""
+    """Reads a resource-bound dashboard summary from the selected platform adapter."""
 
     async def get_for_connection(
         self,
         *,
+        platform: Platform,
         organization_id: UUID,
         actor_id: UUID,
         external_resource_id: str,
@@ -183,7 +189,7 @@ class OrganizationCreationWriter(Protocol):
 
 
 class PlatformConnectionVerifier(Protocol):
-    """Asks the platform service to validate native ownership before registration."""
+    """Asks the selected platform service to validate native ownership before registration."""
 
     async def verify_registration(
         self,

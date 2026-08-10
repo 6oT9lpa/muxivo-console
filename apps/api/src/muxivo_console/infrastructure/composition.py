@@ -53,6 +53,10 @@ from muxivo_console.infrastructure.persistence.session_repository import (
     SqlAlchemyAuthSessionRevoker,
     SqlAlchemyAuthSessionWriter,
 )
+from muxivo_console.infrastructure.platform_control_registry import (
+    DiscordPlatformControlAdapter,
+    PlatformControlRegistry,
+)
 from muxivo_console.infrastructure.security import (
     Argon2idPasswordHasher,
     FernetEmailProtector,
@@ -118,9 +122,18 @@ def create_production_app(settings: ConsoleSettings):
         assertions,
         allow_insecure_http=settings.allow_insecure_discord_control_http,
     )
+    discord_verifier = DiscordPlatformConnectionVerifier(
+        settings.discord_control_base_url,
+        assertions,
+        SqlAlchemyLoginIdentityReader(sessions),
+        allow_insecure_http=settings.allow_insecure_discord_control_http,
+    )
+    platform_controls = PlatformControlRegistry(
+        (DiscordPlatformControlAdapter(discord_control, discord_verifier),)
+    )
     modules = ListControlModules(
         authorizer=authorizer,
-        catalog=discord_control,
+        catalog=platform_controls,
     )
     organizations = CreateOrganization(
         identifiers=identifiers,
@@ -130,12 +143,7 @@ def create_production_app(settings: ConsoleSettings):
     )
     platform_connections = RegisterPlatformConnection(
         authorizer=authorizer,
-        verifier=DiscordPlatformConnectionVerifier(
-            settings.discord_control_base_url,
-            assertions,
-            SqlAlchemyLoginIdentityReader(sessions),
-            allow_insecure_http=settings.allow_insecure_discord_control_http,
-        ),
+        verifier=platform_controls,
         identifiers=identifiers,
         connections=SqlAlchemyPlatformConnectionWriter(sessions),
     )
@@ -146,12 +154,12 @@ def create_production_app(settings: ConsoleSettings):
     platform_health = GetPlatformHealth(
         authorizer=authorizer,
         connections=connection_reader,
-        health=discord_control,
+        health=platform_controls,
     )
     platform_dashboard = GetPlatformDashboardSummary(
         authorizer=authorizer,
         connections=connection_reader,
-        dashboard=discord_control,
+        dashboard=platform_controls,
     )
     discord_identity_link_start = None
     discord_identity_link_complete = None
