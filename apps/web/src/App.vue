@@ -16,6 +16,7 @@ const platformHealth = ref<PlatformHealth | null>(null);
 const selectedDiscordConnectionId = ref("");
 const dashboardSummary = ref<PlatformDashboardSummary | null>(null);
 const channelCatalog = ref<PlatformChannelCatalog | null>(null);
+const welcomeSettings = ref<PlatformWelcomeSettings | null>(null);
 
 type Organization = { id: string; name: string; slug: string };
 type PlatformConnection = {
@@ -56,6 +57,20 @@ type PlatformChannelCatalog = {
   connection_id: string;
   platform: "discord";
   items: PlatformChannel[];
+};
+type PlatformWelcomeSettings = {
+  organization_id: string;
+  connection_id: string;
+  platform: "discord";
+  title: string;
+  description: string;
+  thumbnail_url: string | null;
+  footer_text: string | null;
+  footer_icon_url: string | null;
+  color: number;
+  is_enabled: boolean;
+  rules_channel_id: string | null;
+  roles_channel_id: string | null;
 };
 
 const usableDiscordConnections = computed(() =>
@@ -130,6 +145,7 @@ async function loadConnections() {
     platformHealth.value = null;
     dashboardSummary.value = null;
     channelCatalog.value = null;
+    welcomeSettings.value = null;
     selectedDiscordConnectionId.value = usableDiscordConnections.value[0]?.id ?? "";
   } catch (error) {
     notice.value = messageFor(error);
@@ -170,9 +186,26 @@ async function loadDiscordChannels() {
   }
 }
 
+async function loadDiscordWelcomeSettings() {
+  if (!organizationId.value.trim() || !selectedDiscordConnectionId.value) return;
+  busy.value = true;
+  notice.value = "";
+  try {
+    welcomeSettings.value = await consoleApi<PlatformWelcomeSettings>(
+      `/api/v1/organizations/${encodeURIComponent(organizationId.value.trim())}/platform-connections/${encodeURIComponent(selectedDiscordConnectionId.value)}/welcome-settings`,
+    );
+  } catch (error) {
+    welcomeSettings.value = null;
+    notice.value = messageFor(error);
+  } finally {
+    busy.value = false;
+  }
+}
+
 function selectDiscordConnection() {
   dashboardSummary.value = null;
   channelCatalog.value = null;
+  welcomeSettings.value = null;
 }
 
 async function loadDiscordHealth() {
@@ -252,6 +285,10 @@ function messageFor(error: unknown): string {
         <div class="section-heading"><div><h3 id="discord-channels-heading">Discord channels</h3><p>Generic channel resources for the selected connection. Configuration changes are not available yet.</p></div><button type="button" :disabled="busy || !selectedDiscordConnectionId" @click="loadDiscordChannels">{{ busy ? "Loading…" : "Load channels" }}</button></div>
         <ul v-if="channelCatalog?.items.length" class="health-signals"><li v-for="channel in channelCatalog.items" :key="channel.id"><span><strong>{{ channel.name }}</strong><small>{{ channel.kind }}</small></span></li></ul>
         <p v-else-if="channelCatalog && !channelCatalog.items.length">No browser-ready channels are available for this connection.</p>
+      </section>
+      <section v-if="usableDiscordConnections.length" class="platform-dashboard" aria-labelledby="discord-welcome-heading">
+        <div class="section-heading"><div><h3 id="discord-welcome-heading">Discord welcome settings</h3><p>Read-only view of the existing Discord Activity welcome configuration. Editing and test sends remain in Activity for now.</p></div><button type="button" :disabled="busy || !selectedDiscordConnectionId" @click="loadDiscordWelcomeSettings">{{ busy ? "Loading…" : "Load welcome settings" }}</button></div>
+        <div v-if="welcomeSettings" class="welcome-settings"><p><strong>{{ welcomeSettings.is_enabled ? "Enabled" : "Disabled" }}</strong> · color #{{ welcomeSettings.color.toString(16).padStart(6, "0") }}</p><dl><div><dt>Title</dt><dd>{{ welcomeSettings.title }}</dd></div><div><dt>Description</dt><dd>{{ welcomeSettings.description }}</dd></div><div><dt>Rules channel</dt><dd>{{ welcomeSettings.rules_channel_id ?? "Not selected" }}</dd></div><div><dt>Roles channel</dt><dd>{{ welcomeSettings.roles_channel_id ?? "Not selected" }}</dd></div></dl></div>
       </section>
     </section>
     <p v-if="notice" class="notice" role="status">{{ notice }}</p>
