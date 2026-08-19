@@ -5,8 +5,8 @@ from muxivo_console.application.begin_identity_link import BeginIdentityLink
 from muxivo_console.application.complete_identity_link import CompleteIdentityLink
 from muxivo_console.application.create_browser_session import CreateBrowserSession
 from muxivo_console.application.create_organization import CreateOrganization
-from muxivo_console.application.get_platform_dashboard_summary import GetPlatformDashboardSummary
 from muxivo_console.application.get_platform_channel_purposes import GetPlatformChannelPurposes
+from muxivo_console.application.get_platform_dashboard_summary import GetPlatformDashboardSummary
 from muxivo_console.application.get_platform_health import GetPlatformHealth
 from muxivo_console.application.get_platform_welcome_settings import (
     GetPlatformWelcomeSettings,
