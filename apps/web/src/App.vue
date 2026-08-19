@@ -13,6 +13,7 @@ const platform = ref<"discord" | "twitch" | "telegram">("discord");
 const externalResourceId = ref("");
 const connections = ref<PlatformConnection[]>([]);
 const platformHealth = ref<PlatformHealth | null>(null);
+const selectedConnectionId = ref("");
 const selectedDiscordConnectionId = ref("");
 const dashboardSummary = ref<PlatformDashboardSummary | null>(null);
 const channelCatalog = ref<PlatformChannelCatalog | null>(null);
@@ -50,7 +51,7 @@ type PlatformHealth = {
 type PlatformDashboardSummary = {
   organization_id: string;
   connection_id: string;
-  platform: "discord";
+  platform: "discord" | "twitch" | "telegram";
   messages_today: number;
   ai_flagged_today: number;
   creator_sources: number;
@@ -64,7 +65,7 @@ type PlatformChannel = {
 type PlatformChannelCatalog = {
   organization_id: string;
   connection_id: string;
-  platform: "discord";
+  platform: "discord" | "twitch" | "telegram";
   items: PlatformChannel[];
 };
 type PlatformWelcomeSettings = {
@@ -110,12 +111,17 @@ type AuditEvent = {
 };
 type AuditEventPage = { items: AuditEvent[]; next_cursor: string | null };
 
-const usableDiscordConnections = computed(() =>
+const usableConnections = computed(() =>
   connections.value.filter(
     (connection) =>
-      connection.platform === "discord" &&
       (connection.status === "active" || connection.status === "degraded"),
   ),
+);
+const usableDiscordConnections = computed(() =>
+  usableConnections.value.filter((connection) => connection.platform === "discord"),
+);
+const selectedConnection = computed(() =>
+  usableConnections.value.find((connection) => connection.id === selectedConnectionId.value) ?? null,
 );
 
 async function signIn() {
@@ -228,12 +234,51 @@ async function loadConnections() {
     aiModerationPolicy.value = null;
     auditEvents.value = [];
     auditEventsNextCursor.value = null;
+    selectedConnectionId.value = usableConnections.value[0]?.id ?? "";
     selectedDiscordConnectionId.value = usableDiscordConnections.value[0]?.id ?? "";
   } catch (error) {
     notice.value = messageFor(error);
   } finally {
     busy.value = false;
   }
+}
+
+async function loadPlatformDashboard() {
+  if (!organizationId.value.trim() || !selectedConnectionId.value) return;
+  busy.value = true;
+  notice.value = "";
+  try {
+    dashboardSummary.value = await consoleApi<PlatformDashboardSummary>(
+      `/api/v1/organizations/${encodeURIComponent(organizationId.value.trim())}/platform-connections/${encodeURIComponent(selectedConnectionId.value)}/dashboard`,
+    );
+  } catch (error) {
+    dashboardSummary.value = null;
+    notice.value = messageFor(error);
+  } finally {
+    busy.value = false;
+  }
+}
+
+async function loadPlatformChannels() {
+  if (!organizationId.value.trim() || !selectedConnectionId.value) return;
+  busy.value = true;
+  notice.value = "";
+  try {
+    channelCatalog.value = await consoleApi<PlatformChannelCatalog>(
+      `/api/v1/organizations/${encodeURIComponent(organizationId.value.trim())}/platform-connections/${encodeURIComponent(selectedConnectionId.value)}/channels`,
+    );
+  } catch (error) {
+    channelCatalog.value = null;
+    notice.value = messageFor(error);
+  } finally {
+    busy.value = false;
+  }
+}
+
+function selectPlatformConnection() {
+  dashboardSummary.value = null;
+  channelCatalog.value = null;
+  platformHealth.value = null;
 }
 
 async function loadDiscordDashboard() {
@@ -437,13 +482,13 @@ function selectDiscordConnection() {
   auditEventsNextCursor.value = null;
 }
 
-async function loadDiscordHealth() {
-  if (!organizationId.value.trim()) return;
+async function loadPlatformHealth() {
+  if (!organizationId.value.trim() || !selectedConnection.value) return;
   busy.value = true;
   notice.value = "";
   try {
     platformHealth.value = await consoleApi<PlatformHealth>(
-      `/api/v1/organizations/${encodeURIComponent(organizationId.value.trim())}/platforms/discord/health`,
+      `/api/v1/organizations/${encodeURIComponent(organizationId.value.trim())}/platforms/${selectedConnection.value.platform}/health`,
     );
   } catch (error) {
     platformHealth.value = null;
@@ -503,8 +548,16 @@ function messageFor(error: unknown): string {
       <form @submit.prevent="loadConnections"><label>Organization ID<input v-model="organizationId" inputmode="text" placeholder="UUID" required /></label><button :disabled="busy">{{ busy ? "Loading…" : "Load connections" }}</button></form>
       <form v-if="organizationId" class="connection-form" @submit.prevent="registerConnection"><label>Platform<select v-model="platform"><option value="discord">Discord</option><option value="twitch">Twitch</option><option value="telegram">Telegram</option></select></label><label>External resource ID<input v-model="externalResourceId" required /></label><button :disabled="busy">Register connection</button></form>
       <ul v-if="connections.length" class="connections"><li v-for="connection in connections" :key="connection.id"><strong>{{ connection.platform }}</strong><span>{{ connection.external_resource_id }}</span><em :data-status="connection.status">{{ connection.status.replaceAll("_", " ") }}</em></li></ul>
-      <section v-if="organizationId" class="platform-health" aria-labelledby="discord-health-heading">
-        <div class="section-heading"><div><h3 id="discord-health-heading">Discord platform health</h3><p>Read-only runtime signals are requested through the Console BFF; Discord credentials never enter the browser.</p></div><button type="button" :disabled="busy" @click="loadDiscordHealth">{{ busy ? "Loading…" : "Load health" }}</button></div>
+      <section v-if="usableConnections.length" class="platform-dashboard" aria-labelledby="platform-activity-heading">
+        <div class="section-heading"><div><h3 id="platform-activity-heading">Platform activity</h3><p>Common browser controls use a selected connection's platform adapter. Platform credentials never enter the browser.</p></div></div>
+        <label class="connection-picker">Connection<select v-model="selectedConnectionId" @change="selectPlatformConnection"><option v-for="connection in usableConnections" :key="connection.id" :value="connection.id">{{ connection.platform }} · {{ connection.external_resource_id }} · {{ connection.status }}</option></select></label>
+        <div class="section-heading"><div><h4>Dashboard summary</h4><p>Safe aggregate counters for the selected bot connection.</p></div><button type="button" :disabled="busy || !selectedConnectionId" @click="loadPlatformDashboard">{{ busy ? "Loading…" : "Load summary" }}</button></div>
+        <dl v-if="dashboardSummary" class="dashboard-metrics"><div><dt>Messages today</dt><dd>{{ dashboardSummary.messages_today }}</dd></div><div><dt>AI flagged today</dt><dd>{{ dashboardSummary.ai_flagged_today }}</dd></div><div><dt>Creator sources</dt><dd>{{ dashboardSummary.creator_sources }}</dd></div><div><dt>Bot latency</dt><dd>{{ dashboardSummary.bot_latency_ms === null ? "Unavailable" : `${dashboardSummary.bot_latency_ms} ms` }}</dd></div></dl>
+        <div class="section-heading"><div><h4>Channels</h4><p>Generic resources supplied by the selected platform adapter.</p></div><button type="button" :disabled="busy || !selectedConnectionId" @click="loadPlatformChannels">{{ busy ? "Loading…" : "Load channels" }}</button></div>
+        <ul v-if="channelCatalog?.items.length" class="health-signals"><li v-for="channel in channelCatalog.items" :key="channel.id"><span><strong>{{ channel.name }}</strong><small>{{ channel.kind }}</small></span></li></ul>
+      </section>
+      <section v-if="selectedConnection" class="platform-health" aria-labelledby="platform-health-heading">
+        <div class="section-heading"><div><h3 id="platform-health-heading">{{ selectedConnection.platform }} platform health</h3><p>Read-only runtime signals are requested through the Console BFF; platform credentials never enter the browser.</p></div><button type="button" :disabled="busy" @click="loadPlatformHealth">{{ busy ? "Loading…" : "Load health" }}</button></div>
         <ul v-if="platformHealth" class="health-signals"><li v-for="signal in platformHealth.signals" :key="signal.key"><span><strong>{{ signal.display_name }}</strong><small>{{ signal.value }}</small></span><em :data-status="signal.status">{{ signal.status }}</em></li></ul>
       </section>
       <section v-if="organizationId" class="platform-dashboard" aria-labelledby="organization-audit-heading">
