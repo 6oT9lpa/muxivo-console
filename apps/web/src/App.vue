@@ -13,6 +13,7 @@ const platform = ref<"discord" | "twitch" | "telegram">("discord");
 const externalResourceId = ref("");
 const connections = ref<PlatformConnection[]>([]);
 const platformHealth = ref<PlatformHealth | null>(null);
+const controlModules = ref<ControlModule[]>([]);
 const selectedConnectionId = ref("");
 const selectedDiscordConnectionId = ref("");
 const dashboardSummary = ref<PlatformDashboardSummary | null>(null);
@@ -47,6 +48,13 @@ type PlatformHealth = {
   organization_id: string;
   platform: "discord" | "twitch" | "telegram";
   signals: PlatformHealthSignal[];
+};
+type ControlModule = {
+  key: string;
+  display_name: string;
+  platform: "discord" | "twitch" | "telegram";
+  capability: "view" | "manage";
+  status: "available" | "unavailable" | "requires_reauthorization";
 };
 type PlatformDashboardSummary = {
   organization_id: string;
@@ -226,6 +234,7 @@ async function loadConnections() {
     );
     connections.value = payload.items;
     platformHealth.value = null;
+    controlModules.value = [];
     dashboardSummary.value = null;
     channelCatalog.value = null;
     welcomeSettings.value = null;
@@ -237,6 +246,23 @@ async function loadConnections() {
     selectedConnectionId.value = usableConnections.value[0]?.id ?? "";
     selectedDiscordConnectionId.value = usableDiscordConnections.value[0]?.id ?? "";
   } catch (error) {
+    notice.value = messageFor(error);
+  } finally {
+    busy.value = false;
+  }
+}
+
+async function loadControlModules() {
+  if (!organizationId.value.trim()) return;
+  busy.value = true;
+  notice.value = "";
+  try {
+    const payload = await consoleApi<{ items: ControlModule[] }>(
+      `/api/v1/organizations/${encodeURIComponent(organizationId.value.trim())}/control-modules`,
+    );
+    controlModules.value = payload.items;
+  } catch (error) {
+    controlModules.value = [];
     notice.value = messageFor(error);
   } finally {
     busy.value = false;
@@ -548,6 +574,10 @@ function messageFor(error: unknown): string {
       <form @submit.prevent="loadConnections"><label>Organization ID<input v-model="organizationId" inputmode="text" placeholder="UUID" required /></label><button :disabled="busy">{{ busy ? "Loading…" : "Load connections" }}</button></form>
       <form v-if="organizationId" class="connection-form" @submit.prevent="registerConnection"><label>Platform<select v-model="platform"><option value="discord">Discord</option><option value="twitch">Twitch</option><option value="telegram">Telegram</option></select></label><label>External resource ID<input v-model="externalResourceId" required /></label><button :disabled="busy">Register connection</button></form>
       <ul v-if="connections.length" class="connections"><li v-for="connection in connections" :key="connection.id"><strong>{{ connection.platform }}</strong><span>{{ connection.external_resource_id }}</span><em :data-status="connection.status">{{ connection.status.replaceAll("_", " ") }}</em></li></ul>
+      <section v-if="organizationId" class="platform-dashboard" aria-labelledby="control-modules-heading">
+        <div class="section-heading"><div><h3 id="control-modules-heading">Available bot modules</h3><p>Each platform advertises browser-ready capabilities through its Control API. Unsupported features stay unavailable rather than being emulated in Console.</p></div><button type="button" :disabled="busy" @click="loadControlModules">{{ busy ? "Loading…" : "Load modules" }}</button></div>
+        <ul v-if="controlModules.length" class="health-signals"><li v-for="module in controlModules" :key="module.key"><span><strong>{{ module.display_name }}</strong><small>{{ module.platform }} · {{ module.capability }}</small></span><em :data-status="module.status">{{ module.status.replaceAll("_", " ") }}</em></li></ul>
+      </section>
       <section v-if="usableConnections.length" class="platform-dashboard" aria-labelledby="platform-activity-heading">
         <div class="section-heading"><div><h3 id="platform-activity-heading">Platform activity</h3><p>Common browser controls use a selected connection's platform adapter. Platform credentials never enter the browser.</p></div></div>
         <label class="connection-picker">Connection<select v-model="selectedConnectionId" @change="selectPlatformConnection"><option v-for="connection in usableConnections" :key="connection.id" :value="connection.id">{{ connection.platform }} · {{ connection.external_resource_id }} · {{ connection.status }}</option></select></label>
