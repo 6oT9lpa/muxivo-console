@@ -22,6 +22,7 @@ from muxivo_console.domain.activity import (
 )
 from muxivo_console.domain.authorization import AuthorizationAction, AuthorizationResource
 from muxivo_console.domain.channels import ChannelKind, PlatformChannel, PlatformChannelCatalog
+from muxivo_console.domain.channel_purposes import ChannelPurpose, PlatformChannelPurposes
 from muxivo_console.domain.dashboard import PlatformDashboardSummary
 from muxivo_console.domain.health import HealthSignal, HealthStatus, PlatformHealth
 from muxivo_console.domain.identity import LoginIdentityProvider
@@ -213,6 +214,38 @@ class DiscordControlApiCatalog:
                 "Discord Control API channel catalog request failed."
             ) from error
         return _parse_discord_channel_catalog(payload)
+
+    async def get_channel_purposes_for_connection(
+        self,
+        *,
+        organization_id: UUID,
+        actor_id: UUID,
+        external_resource_id: str,
+        correlation_id: UUID,
+    ) -> PlatformChannelPurposes:
+        assertion = self.assertions.issue(
+            actor_id=actor_id,
+            organization_id=organization_id,
+            resource=AuthorizationResource.CONTROL_MODULES,
+            action=AuthorizationAction.READ,
+            correlation_id=correlation_id,
+            platform_resource_id=external_resource_id,
+        )
+        try:
+            async with httpx.AsyncClient(
+                base_url=self.base_url, timeout=self.timeout, transport=self.transport
+            ) as client:
+                response = await client.get(
+                    f"/control/v1/organizations/{organization_id}/connections/{external_resource_id}/channel-purposes",
+                    headers={"Authorization": f"Bearer {assertion}"},
+                )
+                response.raise_for_status()
+                payload = response.json()
+        except (httpx.HTTPError, ValueError, json.JSONDecodeError) as error:
+            raise PlatformControlUnavailableError(
+                "Discord Control API channel purposes request failed."
+            ) from error
+        return _parse_discord_channel_purposes(payload)
 
     async def get_welcome_settings_for_connection(
         self,
@@ -466,6 +499,24 @@ def _parse_discord_channel_catalog(payload: Any) -> PlatformChannelCatalog:
     except (KeyError, TypeError, ValueError) as error:
         raise PlatformControlUnavailableError(
             "Discord Control API returned an invalid channel catalog."
+        ) from error
+
+
+def _parse_discord_channel_purposes(payload: Any) -> PlatformChannelPurposes:
+    if not isinstance(payload, dict) or not isinstance(payload.get("items"), dict):
+        raise PlatformControlUnavailableError(
+            "Discord Control API returned an invalid channel purposes payload."
+        )
+    try:
+        assignments = {
+            ChannelPurpose(purpose): channel_id for purpose, channel_id in payload["items"].items()
+        }
+        if not all(isinstance(channel_id, str) for channel_id in assignments.values()):
+            raise ValueError("Channel purpose identifier must be a string.")
+        return PlatformChannelPurposes(Platform.DISCORD, assignments)
+    except (TypeError, ValueError) as error:
+        raise PlatformControlUnavailableError(
+            "Discord Control API returned invalid channel purposes."
         ) from error
 
 

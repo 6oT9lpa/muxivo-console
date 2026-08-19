@@ -6,6 +6,7 @@ from muxivo_console.domain.activity import ControlModule, Platform
 from muxivo_console.domain.audit import AuditEvent
 from muxivo_console.domain.authorization import AuthorizationDecision, AuthorizationRequest
 from muxivo_console.domain.channels import PlatformChannelCatalog
+from muxivo_console.domain.channel_purposes import PlatformChannelPurposes
 from muxivo_console.domain.connections import PlatformConnection
 from muxivo_console.domain.dashboard import PlatformDashboardSummary
 from muxivo_console.domain.health import PlatformHealth
@@ -62,6 +63,17 @@ class PlatformChannelCatalogReader(Protocol):
         external_resource_id: str,
         correlation_id: UUID,
     ) -> PlatformChannelCatalog: ...
+
+
+class PlatformChannelPurposesReader(Protocol):
+    async def get_channel_purposes_for_connection(
+        self,
+        *,
+        organization_id: UUID,
+        actor_id: UUID,
+        external_resource_id: str,
+        correlation_id: UUID,
+    ) -> PlatformChannelPurposes: ...
 
 
 class PlatformWelcomeSettingsReader(Protocol):
