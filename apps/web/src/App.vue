@@ -202,6 +202,37 @@ async function loadDiscordWelcomeSettings() {
   }
 }
 
+async function saveDiscordWelcomeSettings() {
+  if (!organizationId.value.trim() || !selectedDiscordConnectionId.value || !welcomeSettings.value) return;
+  busy.value = true;
+  notice.value = "";
+  try {
+    const settings = welcomeSettings.value;
+    welcomeSettings.value = await consoleApi<PlatformWelcomeSettings>(
+      `/api/v1/organizations/${encodeURIComponent(organizationId.value.trim())}/platform-connections/${encodeURIComponent(selectedDiscordConnectionId.value)}/welcome-settings`,
+      {
+        method: "PUT",
+        body: JSON.stringify({
+          title: settings.title,
+          description: settings.description,
+          thumbnail_url: settings.thumbnail_url,
+          footer_text: settings.footer_text,
+          footer_icon_url: settings.footer_icon_url,
+          color: settings.color,
+          is_enabled: settings.is_enabled,
+          rules_channel_id: settings.rules_channel_id?.trim() || null,
+          roles_channel_id: settings.roles_channel_id?.trim() || null,
+        }),
+      },
+    );
+    notice.value = "Discord welcome settings saved.";
+  } catch (error) {
+    notice.value = messageFor(error);
+  } finally {
+    busy.value = false;
+  }
+}
+
 function selectDiscordConnection() {
   dashboardSummary.value = null;
   channelCatalog.value = null;
@@ -288,7 +319,7 @@ function messageFor(error: unknown): string {
       </section>
       <section v-if="usableDiscordConnections.length" class="platform-dashboard" aria-labelledby="discord-welcome-heading">
         <div class="section-heading"><div><h3 id="discord-welcome-heading">Discord welcome settings</h3><p>Read-only view of the existing Discord Activity welcome configuration. Editing and test sends remain in Activity for now.</p></div><button type="button" :disabled="busy || !selectedDiscordConnectionId" @click="loadDiscordWelcomeSettings">{{ busy ? "Loading…" : "Load welcome settings" }}</button></div>
-        <div v-if="welcomeSettings" class="welcome-settings"><p><strong>{{ welcomeSettings.is_enabled ? "Enabled" : "Disabled" }}</strong> · color #{{ welcomeSettings.color.toString(16).padStart(6, "0") }}</p><dl><div><dt>Title</dt><dd>{{ welcomeSettings.title }}</dd></div><div><dt>Description</dt><dd>{{ welcomeSettings.description }}</dd></div><div><dt>Rules channel</dt><dd>{{ welcomeSettings.rules_channel_id ?? "Not selected" }}</dd></div><div><dt>Roles channel</dt><dd>{{ welcomeSettings.roles_channel_id ?? "Not selected" }}</dd></div></dl></div>
+        <form v-if="welcomeSettings" class="welcome-settings" @submit.prevent="saveDiscordWelcomeSettings"><label><input v-model="welcomeSettings.is_enabled" type="checkbox" /> Welcome enabled</label><label>Title<input v-model="welcomeSettings.title" maxlength="256" required /></label><label>Description<textarea v-model="welcomeSettings.description" maxlength="4096" required></textarea></label><label>Color<input v-model.number="welcomeSettings.color" type="number" min="0" max="16777215" required /></label><label>Rules channel ID<input v-model="welcomeSettings.rules_channel_id" inputmode="numeric" /></label><label>Roles channel ID<input v-model="welcomeSettings.roles_channel_id" inputmode="numeric" /></label><p>Changes are re-authorized by Discord and recorded in Discord Activity.</p><button :disabled="busy">{{ busy ? "Saving…" : "Save welcome settings" }}</button></form>
       </section>
     </section>
     <p v-if="notice" class="notice" role="status">{{ notice }}</p>
