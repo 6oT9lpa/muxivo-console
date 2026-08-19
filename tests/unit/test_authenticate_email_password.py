@@ -90,6 +90,7 @@ async def test_authenticates_active_account_and_delegates_session_creation() -> 
     assert accounts.received_lookup_hash == "hash:creator@example.com"
     assert passwords.verify_calls == [("$argon2id$stored-hash", "password")]
     assert session_creator.command.user_id == user_id
+    assert session_creator.command.assurance_level is SessionAssuranceLevel.RECENT_AUTHENTICATION
 
 
 @pytest.mark.asyncio

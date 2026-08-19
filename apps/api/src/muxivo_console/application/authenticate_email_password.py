@@ -16,6 +16,7 @@ from muxivo_console.application.ports import (
     PasswordHasher,
 )
 from muxivo_console.domain.identity import UserStatus
+from muxivo_console.domain.sessions import SessionAssuranceLevel
 
 
 class AuthenticationRejectedError(PermissionError):
@@ -57,6 +58,7 @@ class AuthenticateEmailPassword:
                 CreateBrowserSessionCommand(
                     user_id=account.user_id,
                     correlation_id=command.correlation_id,
+                    assurance_level=SessionAssuranceLevel.RECENT_AUTHENTICATION,
                 )
             )
         except SessionCreationRejectedError as error:
