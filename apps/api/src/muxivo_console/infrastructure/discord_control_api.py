@@ -21,6 +21,7 @@ from muxivo_console.domain.activity import (
     Platform,
 )
 from muxivo_console.domain.authorization import AuthorizationAction, AuthorizationResource
+from muxivo_console.domain.channels import ChannelKind, PlatformChannel, PlatformChannelCatalog
 from muxivo_console.domain.dashboard import PlatformDashboardSummary
 from muxivo_console.domain.health import HealthSignal, HealthStatus, PlatformHealth
 from muxivo_console.domain.identity import LoginIdentityProvider
@@ -178,6 +179,38 @@ class DiscordControlApiCatalog:
                 "Discord Control API dashboard request failed."
             ) from error
         return _parse_discord_dashboard(payload)
+
+    async def get_channel_catalog_for_connection(
+        self,
+        *,
+        organization_id: UUID,
+        actor_id: UUID,
+        external_resource_id: str,
+        correlation_id: UUID,
+    ) -> PlatformChannelCatalog:
+        assertion = self.assertions.issue(
+            actor_id=actor_id,
+            organization_id=organization_id,
+            resource=AuthorizationResource.CONTROL_MODULES,
+            action=AuthorizationAction.READ,
+            correlation_id=correlation_id,
+            platform_resource_id=external_resource_id,
+        )
+        try:
+            async with httpx.AsyncClient(
+                base_url=self.base_url, timeout=self.timeout, transport=self.transport
+            ) as client:
+                response = await client.get(
+                    f"/control/v1/organizations/{organization_id}/connections/{external_resource_id}/channels",
+                    headers={"Authorization": f"Bearer {assertion}"},
+                )
+                response.raise_for_status()
+                payload = response.json()
+        except (httpx.HTTPError, ValueError, json.JSONDecodeError) as error:
+            raise PlatformControlUnavailableError(
+                "Discord Control API channel catalog request failed."
+            ) from error
+        return _parse_discord_channel_catalog(payload)
 
 
 @dataclass(frozen=True, slots=True)
@@ -337,6 +370,26 @@ def _parse_discord_dashboard(payload: Any) -> PlatformDashboardSummary:
     except (KeyError, TypeError, ValueError) as error:
         raise PlatformControlUnavailableError(
             "Discord Control API returned an invalid dashboard summary."
+        ) from error
+
+
+def _parse_discord_channel_catalog(payload: Any) -> PlatformChannelCatalog:
+    if not isinstance(payload, dict) or not isinstance(payload.get("items"), list):
+        raise PlatformControlUnavailableError(
+            "Discord Control API returned an invalid channel catalog payload."
+        )
+    try:
+        channels = tuple(
+            PlatformChannel(id=item["id"], name=item["name"], kind=ChannelKind(item["kind"]))
+            for item in payload["items"]
+            if isinstance(item, dict)
+        )
+        if len(channels) != len(payload["items"]):
+            raise ValueError("Channel item must be an object.")
+        return PlatformChannelCatalog(platform=Platform.DISCORD, items=channels)
+    except (KeyError, TypeError, ValueError) as error:
+        raise PlatformControlUnavailableError(
+            "Discord Control API returned an invalid channel catalog."
         ) from error
 
 

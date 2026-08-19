@@ -5,6 +5,7 @@ from uuid import UUID
 from muxivo_console.domain.activity import ControlModule, Platform
 from muxivo_console.domain.audit import AuditEvent
 from muxivo_console.domain.authorization import AuthorizationDecision, AuthorizationRequest
+from muxivo_console.domain.channels import PlatformChannelCatalog
 from muxivo_console.domain.connections import PlatformConnection
 from muxivo_console.domain.dashboard import PlatformDashboardSummary
 from muxivo_console.domain.health import PlatformHealth
@@ -47,6 +48,19 @@ class PlatformDashboardReader(Protocol):
         external_resource_id: str,
         correlation_id: UUID,
     ) -> PlatformDashboardSummary: ...
+
+
+class PlatformChannelCatalogReader(Protocol):
+    """Reads generic channels from one resource-bound platform connection."""
+
+    async def get_channel_catalog_for_connection(
+        self,
+        *,
+        organization_id: UUID,
+        actor_id: UUID,
+        external_resource_id: str,
+        correlation_id: UUID,
+    ) -> PlatformChannelCatalog: ...
 
 
 class OrganizationAuthorizer(Protocol):

@@ -38,6 +38,9 @@ from muxivo_console.application.list_control_modules import (
     ListControlModules,
     PlatformControlUnavailableError,
 )
+from muxivo_console.application.list_platform_connection_channels import (
+    ListPlatformConnectionChannels,
+)
 from muxivo_console.application.list_platform_connections import ListPlatformConnections
 from muxivo_console.application.register_email_password import (
     RegisterEmailPassword,
@@ -62,6 +65,10 @@ from muxivo_console.contracts.v1.control_modules import (
 from muxivo_console.contracts.v1.organizations import (
     OrganizationCreateRequest,
     OrganizationResponse,
+)
+from muxivo_console.contracts.v1.platform_channels import (
+    PlatformChannelCatalogResponse,
+    PlatformChannelResponse,
 )
 from muxivo_console.contracts.v1.platform_connections import (
     PlatformConnectionCreateRequest,
@@ -101,6 +108,7 @@ def create_app(
     platform_connections_use_case: ListPlatformConnections | None = None,
     platform_health_use_case: GetPlatformHealth | None = None,
     platform_dashboard_use_case: GetPlatformDashboardSummary | None = None,
+    platform_channels_use_case: ListPlatformConnectionChannels | None = None,
     discord_identity_link_start: BeginIdentityLink | None = None,
     discord_identity_link_complete: CompleteIdentityLink | None = None,
     discord_authorization_url: Callable[..., str] | None = None,
@@ -528,6 +536,53 @@ def create_app(
             ai_flagged_today=summary.ai_flagged_today,
             creator_sources=summary.creator_sources,
             bot_latency_ms=summary.bot_latency_ms,
+        )
+
+    @app.get(
+        "/api/v1/organizations/{organization_id}/platform-connections/{connection_id}/channels",
+        response_model=PlatformChannelCatalogResponse,
+        tags=["platform-channels"],
+    )
+    async def list_platform_connection_channels(
+        organization_id: UUID, connection_id: UUID, request: Request
+    ) -> PlatformChannelCatalogResponse:
+        actor_id = getattr(request.state, "actor_id", None)
+        if not isinstance(actor_id, UUID):
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied")
+        if platform_channels_use_case is None:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Platform channels are unavailable",
+            )
+        try:
+            catalog = await platform_channels_use_case.execute(
+                actor_id=actor_id,
+                organization_id=organization_id,
+                connection_id=connection_id,
+                correlation_id=request.state.correlation_id,
+            )
+        except AccessDeniedError as error:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN, detail="Access denied"
+            ) from error
+        except PlatformHealthUnavailableError as error:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Platform channels are unavailable",
+            ) from error
+        except PlatformControlUnavailableError as error:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Platform control service is unavailable",
+            ) from error
+        return PlatformChannelCatalogResponse(
+            organization_id=str(organization_id),
+            connection_id=str(connection_id),
+            platform=catalog.platform,
+            items=[
+                PlatformChannelResponse.model_validate(item, from_attributes=True)
+                for item in catalog.items
+            ],
         )
 
     return app

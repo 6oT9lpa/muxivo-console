@@ -239,6 +239,50 @@ async def test_catalog_binds_dashboard_request_to_one_discord_resource() -> None
     assert summary.bot_latency_ms == 12
 
 
+@pytest.mark.asyncio
+async def test_catalog_binds_channel_request_to_one_discord_resource() -> None:
+    actor_id, organization_id, correlation_id = uuid4(), uuid4(), uuid4()
+    guild_id = "123456789012345678"
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        assert (
+            request.url.path
+            == f"/control/v1/organizations/{organization_id}/connections/{guild_id}/channels"
+        )
+        claims = decode_claims(request.headers["Authorization"].removeprefix("Bearer "))
+        assert claims["platform_resource_id"] == guild_id
+        return httpx.Response(
+            200,
+            json={
+                "guild_id": guild_id,
+                "items": [
+                    {"id": "10", "name": "general", "kind": "text"},
+                    {"id": "11", "name": "voice", "kind": "voice"},
+                ],
+            },
+        )
+
+    catalog = DiscordControlApiCatalog(
+        "http://discord-control.test",
+        assertion_issuer(),
+        transport=httpx.MockTransport(handler),
+        allow_insecure_http=True,
+    )
+
+    channels = await catalog.get_channel_catalog_for_connection(
+        actor_id=actor_id,
+        organization_id=organization_id,
+        external_resource_id=guild_id,
+        correlation_id=correlation_id,
+    )
+
+    assert channels.platform is Platform.DISCORD
+    assert [(item.id, item.kind) for item in channels.items] == [
+        ("10", "text"),
+        ("11", "voice"),
+    ]
+
+
 def test_catalog_requires_https_outside_explicit_local_development() -> None:
     with pytest.raises(ValueError, match="absolute service URL"):
         DiscordControlApiCatalog("http://discord-control.test", assertion_issuer())
