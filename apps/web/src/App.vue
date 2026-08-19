@@ -21,6 +21,7 @@ const channelCatalog = ref<PlatformChannelCatalog | null>(null);
 const botSettings = ref<PlatformBotSettings | null>(null);
 const integrations = ref<PlatformIntegrations | null>(null);
 const serverStatistics = ref<PlatformServerStatistics | null>(null);
+const auditTimeline = ref<PlatformAuditTimeline | null>(null);
 const welcomeSettings = ref<PlatformWelcomeSettings | null>(null);
 const channelPurposes = ref<PlatformChannelPurposes | null>(null);
 const aiModerationSummary = ref<PlatformAiModerationSummary | null>(null);
@@ -110,6 +111,13 @@ type PlatformServerStatistics = {
   leaves: number;
   net_member_growth: number;
   moderation_events: number;
+};
+type PlatformAuditTimeline = {
+  organization_id: string;
+  connection_id: string;
+  platform: "discord" | "twitch" | "telegram";
+  items: { event_type: string; occurred_at: string }[];
+  limit: number;
 };
 type PlatformWelcomeSettings = {
   organization_id: string;
@@ -380,6 +388,22 @@ async function loadPlatformServerStatistics() {
     );
   } catch (error) {
     serverStatistics.value = null;
+    notice.value = messageFor(error);
+  } finally {
+    busy.value = false;
+  }
+}
+
+async function loadPlatformAuditTimeline() {
+  if (!organizationId.value.trim() || !selectedConnectionId.value) return;
+  busy.value = true;
+  notice.value = "";
+  try {
+    auditTimeline.value = await consoleApi<PlatformAuditTimeline>(
+      `/api/v1/organizations/${encodeURIComponent(organizationId.value.trim())}/platform-connections/${encodeURIComponent(selectedConnectionId.value)}/audit-timeline`,
+    );
+  } catch (error) {
+    auditTimeline.value = null;
     notice.value = messageFor(error);
   } finally {
     busy.value = false;
@@ -678,6 +702,9 @@ function messageFor(error: unknown): string {
         <dl v-if="integrations" class="dashboard-metrics"><div><dt>Discord bot</dt><dd>{{ integrations.discord_bot_status }}</dd></div><div><dt>Creator platforms</dt><dd>{{ integrations.creator_platforms_status }}</dd></div><div><dt>Creator poll</dt><dd>{{ integrations.creator_poll_interval_seconds }} s</dd></div><div><dt>Muxivo Core</dt><dd>{{ integrations.muxivo_core_status }}</dd></div><div><dt>Database</dt><dd>{{ integrations.database_status }}</dd></div></dl>
         <div class="section-heading"><div><h4>Server statistics</h4><p>Aggregate platform counters only. Member profiles, message history and review queues remain in the platform Activity.</p></div><button type="button" :disabled="busy || !selectedConnectionId" @click="loadPlatformServerStatistics">{{ busy ? "Loading…" : "Load statistics" }}</button></div>
         <dl v-if="serverStatistics" class="dashboard-metrics"><div><dt>Period</dt><dd>{{ serverStatistics.period_days }} days</dd></div><div><dt>Messages</dt><dd>{{ serverStatistics.total_messages }}</dd></div><div><dt>Active users</dt><dd>{{ serverStatistics.active_users }}</dd></div><div><dt>Active channels</dt><dd>{{ serverStatistics.active_channels }}</dd></div><div><dt>Members</dt><dd>{{ serverStatistics.current_member_count }}</dd></div><div><dt>Voice minutes</dt><dd>{{ serverStatistics.total_voice_minutes }}</dd></div><div><dt>Net member growth</dt><dd>{{ serverStatistics.net_member_growth }}</dd></div><div><dt>Moderation events</dt><dd>{{ serverStatistics.moderation_events }}</dd></div></dl>
+        <div class="section-heading"><div><h4>Audit timeline</h4><p>Event type and time only. Discord member identities, message content, reasons and raw audit details remain in Discord Activity.</p></div><button type="button" :disabled="busy || !selectedConnectionId" @click="loadPlatformAuditTimeline">{{ busy ? "Loading…" : "Load timeline" }}</button></div>
+        <ul v-if="auditTimeline?.items.length" class="health-signals"><li v-for="event in auditTimeline.items" :key="`${event.event_type}-${event.occurred_at}`"><span><strong>{{ event.event_type }}</strong><small>{{ new Date(event.occurred_at).toLocaleString() }}</small></span></li></ul>
+        <p v-else-if="auditTimeline">No browser-safe audit timeline events are available.</p>
       </section>
       <section v-if="selectedConnection" class="platform-health" aria-labelledby="platform-health-heading">
         <div class="section-heading"><div><h3 id="platform-health-heading">{{ selectedConnection.platform }} platform health</h3><p>Read-only runtime signals are requested through the Console BFF; platform credentials never enter the browser.</p></div><button type="button" :disabled="busy" @click="loadPlatformHealth">{{ busy ? "Loading…" : "Load health" }}</button></div>

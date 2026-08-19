@@ -28,6 +28,10 @@ from muxivo_console.domain.ai_moderation_policy import (
     PlatformAiModerationPolicy,
     PlatformAiModerationPolicyState,
 )
+from muxivo_console.domain.audit_timeline import (
+    PlatformAuditTimeline,
+    PlatformAuditTimelineEvent,
+)
 from muxivo_console.domain.authorization import AuthorizationAction, AuthorizationResource
 from muxivo_console.domain.bot_settings import PlatformBotSettings
 from muxivo_console.domain.channel_purposes import ChannelPurpose, PlatformChannelPurposes
@@ -317,6 +321,50 @@ class DiscordControlApiCatalog:
                 "Discord Control API server statistics request failed."
             ) from error
         return _parse_discord_server_statistics(payload)
+
+    async def get_audit_timeline_for_connection(
+        self,
+        *,
+        organization_id: UUID,
+        actor_id: UUID,
+        external_resource_id: str,
+        correlation_id: UUID,
+    ) -> PlatformAuditTimeline:
+        if self.identities is None:
+            raise PlatformControlUnavailableError("Discord identity verification is unavailable.")
+        subject = await self.identities.find_provider_subject(
+            user_id=actor_id,
+            provider=LoginIdentityProvider.DISCORD,
+        )
+        if subject is None:
+            raise PlatformControlUnavailableError("A linked Discord identity is required.")
+        assertion = self.assertions.issue(
+            actor_id=actor_id,
+            organization_id=organization_id,
+            resource=AuthorizationResource.CONTROL_MODULES,
+            action=AuthorizationAction.READ,
+            correlation_id=correlation_id,
+            platform_subject=subject,
+            platform_resource_id=external_resource_id,
+        )
+        try:
+            async with httpx.AsyncClient(
+                base_url=self.base_url,
+                timeout=self.timeout,
+                transport=self.transport,
+            ) as client:
+                response = await client.get(
+                    f"/control/v1/organizations/{organization_id}/connections/"
+                    f"{external_resource_id}/audit-timeline",
+                    headers={"Authorization": f"Bearer {assertion}"},
+                )
+                response.raise_for_status()
+                payload = response.json()
+        except (httpx.HTTPError, ValueError, json.JSONDecodeError) as error:
+            raise PlatformControlUnavailableError(
+                "Discord Control API audit timeline request failed."
+            ) from error
+        return _parse_discord_audit_timeline(payload)
 
     async def get_channel_catalog_for_connection(
         self,
@@ -809,6 +857,34 @@ def _parse_discord_server_statistics(payload: Any) -> PlatformServerStatistics:
     except (KeyError, TypeError, ValueError) as error:
         raise PlatformControlUnavailableError(
             "Discord Control API returned invalid aggregate server statistics."
+        ) from error
+
+
+def _parse_discord_audit_timeline(payload: Any) -> PlatformAuditTimeline:
+    if not isinstance(payload, dict) or not isinstance(payload.get("timeline"), dict):
+        raise PlatformControlUnavailableError(
+            "Discord Control API returned an invalid audit timeline payload."
+        )
+    timeline = payload["timeline"]
+    try:
+        items = timeline["items"]
+        limit = timeline["limit"]
+        if not isinstance(items, list) or not isinstance(limit, int) or isinstance(limit, bool):
+            raise ValueError("Audit timeline fields are invalid.")
+        events = tuple(
+            PlatformAuditTimelineEvent(
+                event_type=item["event_type"],
+                occurred_at=item["occurred_at"],
+            )
+            for item in items
+            if isinstance(item, dict)
+        )
+        if len(events) != len(items):
+            raise ValueError("Audit timeline item must be an object.")
+        return PlatformAuditTimeline(Platform.DISCORD, events, limit)
+    except (KeyError, TypeError, ValueError) as error:
+        raise PlatformControlUnavailableError(
+            "Discord Control API returned invalid sanitized audit timeline data."
         ) from error
 
 

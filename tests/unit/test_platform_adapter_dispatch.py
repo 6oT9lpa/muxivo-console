@@ -1,6 +1,7 @@
 from uuid import uuid4
 
 import pytest
+from muxivo_console.application.get_platform_audit_timeline import GetPlatformAuditTimeline
 from muxivo_console.application.get_platform_dashboard_summary import (
     GetPlatformDashboardSummary,
 )
@@ -15,6 +16,7 @@ from muxivo_console.application.list_platform_connection_channels import (
     ListPlatformConnectionChannels,
 )
 from muxivo_console.domain.activity import Platform
+from muxivo_console.domain.audit_timeline import PlatformAuditTimeline
 from muxivo_console.domain.authorization import AuthorizationDecision
 from muxivo_console.domain.channels import ChannelKind, PlatformChannel, PlatformChannelCatalog
 from muxivo_console.domain.connections import ConnectionStatus, PlatformConnection
@@ -63,6 +65,10 @@ class TwitchAdapter:
     async def get_server_statistics_for_connection(self, **_: object) -> PlatformServerStatistics:
         self.calls.append("server-statistics")
         return PlatformServerStatistics(Platform.TWITCH, 7, 12, 4, 1, 20, 0, 1, 0, 0)
+
+    async def get_audit_timeline_for_connection(self, **_: object) -> PlatformAuditTimeline:
+        self.calls.append("audit-timeline")
+        return PlatformAuditTimeline(Platform.TWITCH, (), 20)
 
 
 def connection() -> PlatformConnection:
@@ -117,6 +123,22 @@ async def test_server_statistics_uses_the_adapter_registered_for_the_connection_
 
     assert result.platform is Platform.TWITCH
     assert adapter.calls == ["server-statistics"]
+
+
+@pytest.mark.asyncio
+async def test_audit_timeline_uses_the_adapter_registered_for_the_connection_platform() -> None:
+    adapter, current = TwitchAdapter(), connection()
+    result = await GetPlatformAuditTimeline(
+        Authorizer(), Connections(current), {Platform.TWITCH: adapter}
+    ).execute(
+        actor_id=uuid4(),
+        organization_id=current.organization_id,
+        connection_id=current.id,
+        correlation_id=uuid4(),
+    )
+
+    assert result.platform is Platform.TWITCH
+    assert adapter.calls == ["audit-timeline"]
 
 
 @pytest.mark.asyncio

@@ -9,6 +9,7 @@ from muxivo_console.domain.ai_moderation_policy import (
     PlatformAiModerationPolicyState,
 )
 from muxivo_console.domain.audit import AuditEvent, AuditLogEntry
+from muxivo_console.domain.audit_timeline import PlatformAuditTimeline
 from muxivo_console.domain.authorization import AuthorizationDecision, AuthorizationRequest
 from muxivo_console.domain.bot_settings import PlatformBotSettings
 from muxivo_console.domain.channel_purposes import ChannelPurpose, PlatformChannelPurposes
@@ -48,6 +49,19 @@ class PlatformHealthReader(Protocol):
     async def get_for_organization(
         self, *, organization_id: UUID, actor_id: UUID, correlation_id: UUID
     ) -> PlatformHealth: ...
+
+
+class PlatformAuditTimelineReader(Protocol):
+    """Reads an event-type/time-only timeline after native platform reauthorization."""
+
+    async def get_audit_timeline_for_connection(
+        self,
+        *,
+        organization_id: UUID,
+        actor_id: UUID,
+        external_resource_id: str,
+        correlation_id: UUID,
+    ) -> PlatformAuditTimeline: ...
 
 
 class PlatformDashboardReader(Protocol):

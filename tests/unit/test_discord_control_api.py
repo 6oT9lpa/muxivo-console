@@ -287,6 +287,53 @@ async def test_catalog_reads_assertion_bound_aggregate_server_statistics() -> No
 
 
 @pytest.mark.asyncio
+async def test_catalog_reads_sanitized_audit_timeline() -> None:
+    actor_id, organization_id, correlation_id = uuid4(), uuid4(), uuid4()
+    resource_id = "123456789012345678"
+    received_authorization: str | None = None
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        nonlocal received_authorization
+        received_authorization = request.headers["Authorization"]
+        assert request.url.path.endswith(f"/connections/{resource_id}/audit-timeline")
+        return httpx.Response(
+            200,
+            json={
+                "timeline": {
+                    "items": [
+                        {
+                            "event_type": "channel_purpose_updated",
+                            "occurred_at": "2026-08-19T12:00:00+00:00",
+                        }
+                    ],
+                    "limit": 20,
+                }
+            },
+        )
+
+    catalog = DiscordControlApiCatalog(
+        "http://discord-control.test",
+        assertion_issuer(),
+        transport=httpx.MockTransport(handler),
+        allow_insecure_http=True,
+        identities=Identities(),
+    )
+    timeline = await catalog.get_audit_timeline_for_connection(
+        actor_id=actor_id,
+        organization_id=organization_id,
+        external_resource_id=resource_id,
+        correlation_id=correlation_id,
+    )
+
+    assert timeline.events[0].event_type == "channel_purpose_updated"
+    assert not hasattr(timeline.events[0], "details")
+    assert received_authorization is not None
+    claims = decode_claims(received_authorization.removeprefix("Bearer "))
+    assert claims["platform_subject"] == "123456789012345678"
+    assert claims["platform_resource_id"] == resource_id
+
+
+@pytest.mark.asyncio
 async def test_catalog_maps_aggregate_discord_health_without_platform_secrets() -> None:
     actor_id, organization_id, correlation_id = uuid4(), uuid4(), uuid4()
 
