@@ -3,7 +3,7 @@
 from collections.abc import Callable
 from contextlib import AbstractAsyncContextManager
 
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -77,3 +77,35 @@ class SqlAlchemyAuthSessionReader:
             )
         except ValueError:
             return None
+
+
+class SqlAlchemyAuthSessionRevoker:
+    def __init__(
+        self, session_factory: Callable[[], AbstractAsyncContextManager[AsyncSession]]
+    ) -> None:
+        self._session_factory = session_factory
+
+    async def revoke(self, *, session_id, user_id, revoked_at, audit_event: AuditEvent) -> bool:
+        statement = (
+            update(AuthSessionRecord)
+            .where(
+                AuthSessionRecord.id == session_id,
+                AuthSessionRecord.user_id == user_id,
+                AuthSessionRecord.revoked_at.is_(None),
+            )
+            .values(revoked_at=revoked_at)
+        )
+        async with self._session_factory() as session:
+            async with session.begin():
+                result = await session.execute(statement)
+                if result.rowcount != 1:
+                    return False
+                session.add(
+                    AuditEventRecord(
+                        id=audit_event.id, correlation_id=audit_event.correlation_id,
+                        actor_id=audit_event.actor_id, organization_id=audit_event.organization_id,
+                        action=audit_event.action, resource_type=audit_event.resource_type,
+                        resource_id=audit_event.resource_id, result=audit_event.result,
+                    )
+                )
+        return True

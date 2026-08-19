@@ -374,6 +374,14 @@ class AuthSessionReader(Protocol):
     async def find_by_token_hash(self, *, token_hash: str) -> AuthSession | None: ...
 
 
+class AuthSessionRevoker(Protocol):
+    """Atomically revokes the current server-side session and records the security fact."""
+
+    async def revoke(
+        self, *, session_id: UUID, user_id: UUID, revoked_at, audit_event: AuditEvent
+    ) -> bool: ...
+
+
 class EmailPasswordAccountReader(Protocol):
     """Loads a password credential projection by a keyed email lookup hash."""
 
