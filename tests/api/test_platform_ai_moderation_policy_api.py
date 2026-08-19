@@ -5,6 +5,10 @@ from fastapi.testclient import TestClient
 from muxivo_console.application.resolve_browser_session import BrowserSessionPrincipal
 from muxivo_console.domain.activity import Platform
 from muxivo_console.domain.ai_moderation import PlatformAiModerationSummary
+from muxivo_console.domain.ai_moderation_policy import (
+    PlatformAiModerationPolicy,
+    PlatformAiModerationPolicyState,
+)
 from muxivo_console.domain.sessions import SessionAssuranceLevel
 from muxivo_console.presentation.api import create_app
 
@@ -44,6 +48,18 @@ class PolicyUpdateUseCase:
         )
 
 
+class PolicyReadUseCase:
+    def __init__(self) -> None:
+        self.arguments: dict[str, object] | None = None
+
+    async def execute(self, **arguments: object) -> PlatformAiModerationPolicyState:
+        self.arguments = arguments
+        return PlatformAiModerationPolicyState(
+            policy=PlatformAiModerationPolicy(Platform.DISCORD),
+            is_default_policy=True,
+        )
+
+
 def test_updates_ai_moderation_policy_through_the_versioned_browser_contract() -> None:
     actor_id, organization_id, connection_id = uuid4(), uuid4(), uuid4()
     use_case = PolicyUpdateUseCase()
@@ -77,4 +93,27 @@ def test_updates_ai_moderation_policy_through_the_versioned_browser_contract() -
     assert use_case.arguments["connection_id"] == connection_id
     assert use_case.arguments["principal"].user_id == actor_id
     assert use_case.arguments["policy"].labels["spam"].risk_threshold == 42.5
+    assert "external_resource_id" not in use_case.arguments
+
+
+def test_reads_effective_ai_moderation_policy_through_the_versioned_browser_contract() -> None:
+    actor_id, organization_id, connection_id = uuid4(), uuid4(), uuid4()
+    use_case = PolicyReadUseCase()
+    client = TestClient(
+        create_app(
+            platform_ai_moderation_policy_use_case=use_case,
+            session_resolver=SessionResolver(actor_id),
+        )
+    )
+    client.cookies.set("__Host-muxivo_session", "opaque")
+
+    response = client.get(
+        f"/api/v1/organizations/{organization_id}/platform-connections/{connection_id}/ai-moderation-policy"
+    )
+
+    assert response.status_code == 200
+    assert response.json()["is_default_policy"] is True
+    assert response.json()["policy"]["enforcement_mode"] == "SHADOW"
+    assert use_case.arguments is not None
+    assert use_case.arguments["organization_id"] == organization_id
     assert "external_resource_id" not in use_case.arguments

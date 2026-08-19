@@ -111,3 +111,51 @@ class AiModerationPolicyUpdateRequest(BaseModel):
             allow_automated_kick=self.allow_automated_kick,
             allow_automated_ban=self.allow_automated_ban,
         )
+
+    @classmethod
+    def from_domain_policy(
+        cls, policy: PlatformAiModerationPolicy
+    ) -> "AiModerationPolicyUpdateRequest":
+        return cls(
+            blacklist_words=list(policy.blacklist_words),
+            allowed_domains=list(policy.allowed_domains),
+            labels={
+                label: AiModerationLabelRuleRequest(
+                    risk_threshold=rule.risk_threshold,
+                    min_action=rule.min_action.value,
+                    max_action=rule.max_action.value,
+                )
+                for label, rule in policy.labels.items()
+            },
+            blacklist_action=policy.blacklist_action.value,
+            unapproved_domain_action=policy.unapproved_domain_action.value,
+            context_window_days=policy.context_window_days,
+            repeat_offender_threshold=policy.repeat_offender_threshold,
+            repeat_offender_action=policy.repeat_offender_action.value,
+            escalation_enabled=policy.escalation_enabled,
+            escalation_score_threshold=policy.escalation_score_threshold,
+            escalation_half_life_days=policy.escalation_half_life_days,
+            excluded_user_ids=list(policy.excluded_user_ids),
+            excluded_role_ids=list(policy.excluded_role_ids),
+            excluded_channel_ids=list(policy.excluded_channel_ids),
+            exclude_bots=policy.exclude_bots,
+            ocr_enabled=policy.ocr_enabled,
+            ocr_failure_mode=policy.ocr_failure_mode,
+            ocr_max_gif_frames=policy.ocr_max_gif_frames,
+            ocr_process_empty_result=policy.ocr_process_empty_result,
+            test_mode=policy.test_mode,
+            enforcement_mode=policy.enforcement_mode.value,
+            limited_min_confidence=policy.limited_min_confidence,
+            limited_hard_rule_labels=list(policy.limited_hard_rule_labels),
+            beta_enforcement_acknowledged=policy.beta_enforcement_acknowledged,
+            allow_automated_timeout=policy.allow_automated_timeout,
+            allow_automated_kick=policy.allow_automated_kick,
+            allow_automated_ban=policy.allow_automated_ban,
+        )
+
+
+class PlatformAiModerationPolicyResponse(BaseModel):
+    organization_id: str
+    connection_id: str
+    policy: AiModerationPolicyUpdateRequest
+    is_default_policy: bool

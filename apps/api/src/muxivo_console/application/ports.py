@@ -4,7 +4,10 @@ from uuid import UUID
 
 from muxivo_console.domain.activity import ControlModule, Platform
 from muxivo_console.domain.ai_moderation import PlatformAiModerationSummary
-from muxivo_console.domain.ai_moderation_policy import PlatformAiModerationPolicy
+from muxivo_console.domain.ai_moderation_policy import (
+    PlatformAiModerationPolicy,
+    PlatformAiModerationPolicyState,
+)
 from muxivo_console.domain.audit import AuditEvent
 from muxivo_console.domain.authorization import AuthorizationDecision, AuthorizationRequest
 from muxivo_console.domain.channel_purposes import ChannelPurpose, PlatformChannelPurposes
@@ -114,6 +117,19 @@ class PlatformAiModerationPolicyWriter(Protocol):
         policy: PlatformAiModerationPolicy,
         correlation_id: UUID,
     ) -> PlatformAiModerationSummary: ...
+
+
+class PlatformAiModerationPolicyReader(Protocol):
+    """Reads a whole policy through a resource-bound platform Control API."""
+
+    async def get_ai_moderation_policy_for_connection(
+        self,
+        *,
+        organization_id: UUID,
+        actor_id: UUID,
+        external_resource_id: str,
+        correlation_id: UUID,
+    ) -> PlatformAiModerationPolicyState: ...
 
 
 class PlatformWelcomeSettingsReader(Protocol):

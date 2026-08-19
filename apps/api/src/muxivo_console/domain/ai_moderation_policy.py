@@ -104,3 +104,11 @@ class PlatformAiModerationPolicy:
             and not self.beta_enforcement_acknowledged
         ):
             raise ValueError("Elevated automated actions require acknowledgement.")
+
+
+@dataclass(frozen=True, slots=True)
+class PlatformAiModerationPolicyState:
+    """The effective policy and whether it is inherited from the platform default."""
+
+    policy: PlatformAiModerationPolicy
+    is_default_policy: bool

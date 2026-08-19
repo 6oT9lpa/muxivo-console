@@ -26,6 +26,9 @@ from muxivo_console.application.create_organization import (
     CreateOrganizationCommand,
     OrganizationCreationRejectedError,
 )
+from muxivo_console.application.get_platform_ai_moderation_policy import (
+    GetPlatformAiModerationPolicy,
+)
 from muxivo_console.application.get_platform_ai_moderation_summary import (
     GetPlatformAiModerationSummary,
 )
@@ -77,7 +80,10 @@ from muxivo_console.application.update_platform_channel_purpose import (
 from muxivo_console.application.update_platform_welcome_settings import (
     UpdatePlatformWelcomeSettings,
 )
-from muxivo_console.contracts.v1.ai_moderation_policy import AiModerationPolicyUpdateRequest
+from muxivo_console.contracts.v1.ai_moderation_policy import (
+    AiModerationPolicyUpdateRequest,
+    PlatformAiModerationPolicyResponse,
+)
 from muxivo_console.contracts.v1.authentication import (
     EmailPasswordLoginRequest,
     EmailPasswordRegistrationRequest,
@@ -150,6 +156,7 @@ def create_app(
     platform_channels_use_case: ListPlatformConnectionChannels | None = None,
     platform_channel_purposes_use_case: GetPlatformChannelPurposes | None = None,
     platform_ai_moderation_summary_use_case: GetPlatformAiModerationSummary | None = None,
+    platform_ai_moderation_policy_use_case: GetPlatformAiModerationPolicy | None = None,
     platform_ai_moderation_policy_update_use_case: UpdatePlatformAiModerationPolicy | None = None,
     platform_channel_purpose_update_use_case: UpdatePlatformChannelPurpose | None = None,
     platform_welcome_settings_use_case: GetPlatformWelcomeSettings | None = None,
@@ -805,6 +812,50 @@ def create_app(
             automated_timeout_enabled=summary.automated_timeout_enabled,
             automated_kick_enabled=summary.automated_kick_enabled,
             automated_ban_enabled=summary.automated_ban_enabled,
+        )
+
+    @app.get(
+        "/api/v1/organizations/{organization_id}/platform-connections/{connection_id}/ai-moderation-policy",
+        response_model=PlatformAiModerationPolicyResponse,
+        tags=["platform-ai-moderation"],
+    )
+    async def get_platform_ai_moderation_policy(
+        organization_id: UUID, connection_id: UUID, request: Request
+    ) -> PlatformAiModerationPolicyResponse:
+        actor_id = getattr(request.state, "actor_id", None)
+        if not isinstance(actor_id, UUID):
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied")
+        if platform_ai_moderation_policy_use_case is None:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Platform AI moderation policy is unavailable",
+            )
+        try:
+            state = await platform_ai_moderation_policy_use_case.execute(
+                actor_id=actor_id,
+                organization_id=organization_id,
+                connection_id=connection_id,
+                correlation_id=request.state.correlation_id,
+            )
+        except AccessDeniedError as error:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN, detail="Access denied"
+            ) from error
+        except PlatformHealthUnavailableError as error:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Platform AI moderation policy is unavailable",
+            ) from error
+        except PlatformControlUnavailableError as error:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Platform control service is unavailable",
+            ) from error
+        return PlatformAiModerationPolicyResponse(
+            organization_id=str(organization_id),
+            connection_id=str(connection_id),
+            policy=AiModerationPolicyUpdateRequest.from_domain_policy(state.policy),
+            is_default_policy=state.is_default_policy,
         )
 
     @app.put(

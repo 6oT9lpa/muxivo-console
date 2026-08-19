@@ -21,7 +21,13 @@ from muxivo_console.domain.activity import (
     Platform,
 )
 from muxivo_console.domain.ai_moderation import PlatformAiModerationSummary
-from muxivo_console.domain.ai_moderation_policy import PlatformAiModerationPolicy
+from muxivo_console.domain.ai_moderation_policy import (
+    AiModerationAction,
+    AiModerationEnforcementMode,
+    AiModerationLabelRule,
+    PlatformAiModerationPolicy,
+    PlatformAiModerationPolicyState,
+)
 from muxivo_console.domain.authorization import AuthorizationAction, AuthorizationResource
 from muxivo_console.domain.channel_purposes import ChannelPurpose, PlatformChannelPurposes
 from muxivo_console.domain.channels import ChannelKind, PlatformChannel, PlatformChannelCatalog
@@ -372,6 +378,46 @@ class DiscordControlApiCatalog:
                 "Discord Control API AI moderation policy update failed."
             ) from error
         return _parse_discord_ai_moderation_summary(payload)
+
+    async def get_ai_moderation_policy_for_connection(
+        self,
+        *,
+        organization_id: UUID,
+        actor_id: UUID,
+        external_resource_id: str,
+        correlation_id: UUID,
+    ) -> PlatformAiModerationPolicyState:
+        if self.identities is None:
+            raise PlatformControlUnavailableError("Discord identity verification is unavailable.")
+        platform_subject = await self.identities.find_provider_subject(
+            user_id=actor_id, provider=LoginIdentityProvider.DISCORD
+        )
+        if platform_subject is None:
+            raise PlatformControlUnavailableError("A linked Discord identity is required.")
+        try:
+            assertion = self.assertions.issue(
+                actor_id=actor_id,
+                organization_id=organization_id,
+                resource=AuthorizationResource.CONTROL_MODULES,
+                action=AuthorizationAction.READ,
+                correlation_id=correlation_id,
+                platform_subject=platform_subject,
+                platform_resource_id=external_resource_id,
+            )
+            async with httpx.AsyncClient(
+                base_url=self.base_url, timeout=self.timeout, transport=self.transport
+            ) as client:
+                response = await client.get(
+                    f"/control/v1/organizations/{organization_id}/connections/{external_resource_id}/ai-moderation-policy",
+                    headers={"Authorization": f"Bearer {assertion}"},
+                )
+                response.raise_for_status()
+                payload = response.json()
+        except (httpx.HTTPError, ValueError, json.JSONDecodeError) as error:
+            raise PlatformControlUnavailableError(
+                "Discord Control API AI moderation policy request failed."
+            ) from error
+        return _parse_discord_ai_moderation_policy(payload)
 
     async def get_welcome_settings_for_connection(
         self,
@@ -772,6 +818,81 @@ def _discord_ai_moderation_policy_payload(policy: PlatformAiModerationPolicy) ->
         "allow_automated_kick": policy.allow_automated_kick,
         "allow_automated_ban": policy.allow_automated_ban,
     }
+
+
+def _parse_discord_ai_moderation_policy(payload: Any) -> PlatformAiModerationPolicyState:
+    if not isinstance(payload, dict) or not isinstance(payload.get("policy"), dict):
+        raise PlatformControlUnavailableError(
+            "Discord Control API returned an invalid AI moderation policy."
+        )
+    policy = payload["policy"]
+    try:
+        labels_payload = policy["labels"]
+        if not isinstance(labels_payload, dict):
+            raise ValueError("AI moderation labels must be an object.")
+        labels = {
+            str(label): AiModerationLabelRule(
+                risk_threshold=float(rule["risk_threshold"]),
+                min_action=AiModerationAction(rule["min_action"]),
+                max_action=AiModerationAction(rule["max_action"]),
+            )
+            for label, rule in labels_payload.items()
+            if isinstance(rule, dict)
+        }
+        if len(labels) != len(labels_payload):
+            raise ValueError("AI moderation label must be an object.")
+        return PlatformAiModerationPolicyState(
+            policy=PlatformAiModerationPolicy(
+                platform=Platform.DISCORD,
+                blacklist_words=_string_tuple(policy["blacklist_words"]),
+                allowed_domains=_string_tuple(policy["allowed_domains"]),
+                labels=labels,
+                blacklist_action=AiModerationAction(policy["blacklist_action"]),
+                unapproved_domain_action=AiModerationAction(policy["unapproved_domain_action"]),
+                context_window_days=int(policy["context_window_days"]),
+                repeat_offender_threshold=int(policy["repeat_offender_threshold"]),
+                repeat_offender_action=AiModerationAction(policy["repeat_offender_action"]),
+                escalation_enabled=_required_bool(policy, "escalation_enabled"),
+                escalation_score_threshold=float(policy["escalation_score_threshold"]),
+                escalation_half_life_days=float(policy["escalation_half_life_days"]),
+                excluded_user_ids=_string_tuple(policy["excluded_user_ids"]),
+                excluded_role_ids=_string_tuple(policy["excluded_role_ids"]),
+                excluded_channel_ids=_string_tuple(policy["excluded_channel_ids"]),
+                exclude_bots=_required_bool(policy, "exclude_bots"),
+                ocr_enabled=_required_bool(policy, "ocr_enabled"),
+                ocr_failure_mode=str(policy["ocr_failure_mode"]),
+                ocr_max_gif_frames=int(policy["ocr_max_gif_frames"]),
+                ocr_process_empty_result=_required_bool(policy, "ocr_process_empty_result"),
+                test_mode=_required_bool(policy, "test_mode"),
+                enforcement_mode=AiModerationEnforcementMode(policy["enforcement_mode"]),
+                limited_min_confidence=float(policy["limited_min_confidence"]),
+                limited_hard_rule_labels=_string_tuple(policy["limited_hard_rule_labels"]),
+                beta_enforcement_acknowledged=_required_bool(
+                    policy, "beta_enforcement_acknowledged"
+                ),
+                allow_automated_timeout=_required_bool(policy, "allow_automated_timeout"),
+                allow_automated_kick=_required_bool(policy, "allow_automated_kick"),
+                allow_automated_ban=_required_bool(policy, "allow_automated_ban"),
+            ),
+            is_default_policy=_required_bool(payload, "is_default_policy"),
+        )
+    except (KeyError, TypeError, ValueError) as error:
+        raise PlatformControlUnavailableError(
+            "Discord Control API returned invalid AI moderation policy values."
+        ) from error
+
+
+def _string_tuple(values: Any) -> tuple[str, ...]:
+    if not isinstance(values, list) or not all(isinstance(value, (str, int)) for value in values):
+        raise ValueError("Expected a list of identifiers or strings.")
+    return tuple(str(value) for value in values)
+
+
+def _required_bool(payload: dict[str, Any], key: str) -> bool:
+    value = payload[key]
+    if not isinstance(value, bool):
+        raise ValueError(f"{key} must be a boolean.")
+    return value
 
 
 def _discord_snowflakes(values: tuple[str, ...]) -> list[int]:

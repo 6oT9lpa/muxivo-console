@@ -7,7 +7,9 @@ import httpx
 import pytest
 from muxivo_console.application.list_control_modules import PlatformControlUnavailableError
 from muxivo_console.domain.activity import Platform
-from muxivo_console.domain.ai_moderation_policy import PlatformAiModerationPolicy
+from muxivo_console.domain.ai_moderation_policy import (
+    PlatformAiModerationPolicy,
+)
 from muxivo_console.domain.authorization import AuthorizationAction, AuthorizationResource
 from muxivo_console.domain.channel_purposes import ChannelPurpose
 from muxivo_console.domain.welcome import PlatformWelcomeSettings
@@ -465,6 +467,40 @@ async def test_catalog_updates_ai_moderation_policy_with_bound_discord_identity(
     assert result.enforcement_mode == "SHADOW"
 
 
+@pytest.mark.asyncio
+async def test_catalog_reads_effective_ai_moderation_policy_with_bound_identity() -> None:
+    actor_id, organization_id, correlation_id = uuid4(), uuid4(), uuid4()
+    guild_id = "123456789012345678"
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        assert request.method == "GET"
+        assert request.url.path.endswith(f"/{guild_id}/ai-moderation-policy")
+        claims = decode_claims(request.headers["Authorization"].removeprefix("Bearer "))
+        assert claims["platform_subject"] == "123456789012345678"
+        assert claims["platform_resource_id"] == guild_id
+        return httpx.Response(
+            200,
+            json={"policy": ai_moderation_policy_payload(), "is_default_policy": True},
+        )
+
+    catalog = DiscordControlApiCatalog(
+        "http://discord-control.test",
+        assertion_issuer(),
+        transport=httpx.MockTransport(handler),
+        allow_insecure_http=True,
+        identities=Identities(),
+    )
+    state = await catalog.get_ai_moderation_policy_for_connection(
+        actor_id=actor_id,
+        organization_id=organization_id,
+        external_resource_id=guild_id,
+        correlation_id=correlation_id,
+    )
+
+    assert state.is_default_policy is True
+    assert state.policy.labels["SPAM"].risk_threshold == 25
+
+
 def welcome_settings() -> PlatformWelcomeSettings:
     return PlatformWelcomeSettings(
         Platform.DISCORD, "Welcome!", "Hi, {user}!", None, None, None, 5769984, True, "10", None
@@ -484,6 +520,38 @@ def ai_moderation_summary_payload() -> dict[str, object]:
         "automated_timeout_enabled": False,
         "automated_kick_enabled": False,
         "automated_ban_enabled": False,
+    }
+
+
+def ai_moderation_policy_payload() -> dict[str, object]:
+    return {
+        "blacklist_words": [],
+        "allowed_domains": [],
+        "labels": {"SPAM": {"risk_threshold": 25, "min_action": "LOG", "max_action": "DELETE"}},
+        "blacklist_action": "DELETE_WARN",
+        "unapproved_domain_action": "REVIEW",
+        "context_window_days": 30,
+        "repeat_offender_threshold": 3,
+        "repeat_offender_action": "TIMEOUT",
+        "escalation_enabled": True,
+        "escalation_score_threshold": 3,
+        "escalation_half_life_days": 30,
+        "excluded_user_ids": [],
+        "excluded_role_ids": [],
+        "excluded_channel_ids": [],
+        "exclude_bots": True,
+        "ocr_enabled": False,
+        "ocr_failure_mode": "SKIP",
+        "ocr_max_gif_frames": 6,
+        "ocr_process_empty_result": False,
+        "test_mode": False,
+        "enforcement_mode": "SHADOW",
+        "limited_min_confidence": 0.95,
+        "limited_hard_rule_labels": ["INVITE", "SCAM"],
+        "beta_enforcement_acknowledged": False,
+        "allow_automated_timeout": False,
+        "allow_automated_kick": False,
+        "allow_automated_ban": False,
     }
 
 
