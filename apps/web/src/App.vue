@@ -18,6 +18,8 @@ const dashboardSummary = ref<PlatformDashboardSummary | null>(null);
 const channelCatalog = ref<PlatformChannelCatalog | null>(null);
 const welcomeSettings = ref<PlatformWelcomeSettings | null>(null);
 const channelPurposes = ref<PlatformChannelPurposes | null>(null);
+const selectedPurpose = ref("welcome");
+const selectedPurposeChannelId = ref("");
 
 type Organization = { id: string; name: string; slug: string };
 type PlatformConnection = {
@@ -205,6 +207,19 @@ async function loadDiscordChannelPurposes() {
   }
 }
 
+async function saveDiscordChannelPurpose() {
+  if (!organizationId.value.trim() || !selectedDiscordConnectionId.value || !selectedPurposeChannelId.value) return;
+  busy.value = true;
+  notice.value = "";
+  try {
+    channelPurposes.value = await consoleApi<PlatformChannelPurposes>(
+      `/api/v1/organizations/${encodeURIComponent(organizationId.value.trim())}/platform-connections/${encodeURIComponent(selectedDiscordConnectionId.value)}/channel-purposes`,
+      { method: "PUT", body: JSON.stringify({ purpose: selectedPurpose.value, channel_id: selectedPurposeChannelId.value }) },
+    );
+    notice.value = "Discord channel purpose saved.";
+  } catch (error) { notice.value = messageFor(error); } finally { busy.value = false; }
+}
+
 async function loadDiscordWelcomeSettings() {
   if (!organizationId.value.trim() || !selectedDiscordConnectionId.value) return;
   busy.value = true;
@@ -340,6 +355,7 @@ function messageFor(error: unknown): string {
       <section v-if="usableDiscordConnections.length" class="platform-dashboard" aria-labelledby="discord-channel-purposes-heading">
         <div class="section-heading"><div><h3 id="discord-channel-purposes-heading">Discord channel purposes</h3><p>Current Activity assignments. Purpose changes will be enabled after the dedicated write contract is complete.</p></div><button type="button" :disabled="busy || !selectedDiscordConnectionId" @click="loadDiscordChannelPurposes">{{ busy ? "Loading…" : "Load assignments" }}</button></div>
         <ul v-if="channelPurposes?.items.length" class="health-signals"><li v-for="assignment in channelPurposes.items" :key="assignment.purpose"><span><strong>{{ assignment.purpose }}</strong><small>{{ assignment.channel_id }}</small></span></li></ul>
+        <form v-if="channelCatalog?.items.length" @submit.prevent="saveDiscordChannelPurpose"><label>Purpose<select v-model="selectedPurpose"><option value="welcome">Welcome</option><option value="member_log">Member log</option><option value="mod_log">Moderation log</option><option value="message_log">Message log</option><option value="channel_log">Channel log</option><option value="stream_announce">Stream announcements</option><option value="dev_blog">Dev blog</option><option value="ai_moderation_log">AI moderation log</option></select></label><label>Text channel<select v-model="selectedPurposeChannelId" required><option disabled value="">Select channel</option><option v-for="channel in channelCatalog.items.filter((item) => item.kind === 'text' || item.kind === 'announcement')" :key="channel.id" :value="channel.id">{{ channel.name }}</option></select></label><button :disabled="busy">{{ busy ? "Saving…" : "Save assignment" }}</button></form>
       </section>
       <section v-if="usableDiscordConnections.length" class="platform-dashboard" aria-labelledby="discord-welcome-heading">
         <div class="section-heading"><div><h3 id="discord-welcome-heading">Discord welcome settings</h3><p>Read-only view of the existing Discord Activity welcome configuration. Editing and test sends remain in Activity for now.</p></div><button type="button" :disabled="busy || !selectedDiscordConnectionId" @click="loadDiscordWelcomeSettings">{{ busy ? "Loading…" : "Load welcome settings" }}</button></div>
