@@ -524,9 +524,17 @@ def _welcome_settings_payload(settings: PlatformWelcomeSettings) -> dict[str, An
         "footer_icon_url": settings.footer_icon_url,
         "color": settings.color,
         "is_enabled": settings.is_enabled,
-        "rules_channel_id": settings.rules_channel_id,
-        "roles_channel_id": settings.roles_channel_id,
+        "rules_channel_id": _discord_snowflake_or_none(settings.rules_channel_id),
+        "roles_channel_id": _discord_snowflake_or_none(settings.roles_channel_id),
     }
+
+
+def _discord_snowflake_or_none(value: str | None) -> int | None:
+    if value is None:
+        return None
+    if not value.isdecimal() or not 1 <= len(value) <= 20:
+        raise ValueError("Discord channel identifier must be a snowflake.")
+    return int(value)
 
 
 def _health_signal_key(name: str) -> str:

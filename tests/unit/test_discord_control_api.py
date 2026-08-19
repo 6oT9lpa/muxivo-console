@@ -8,6 +8,7 @@ import pytest
 from muxivo_console.application.list_control_modules import PlatformControlUnavailableError
 from muxivo_console.domain.activity import Platform
 from muxivo_console.domain.authorization import AuthorizationAction, AuthorizationResource
+from muxivo_console.domain.welcome import PlatformWelcomeSettings
 from muxivo_console.infrastructure.discord_control_api import (
     DiscordControlApiCatalog,
     DiscordPlatformConnectionVerifier,
@@ -290,8 +291,7 @@ async def test_catalog_binds_welcome_settings_request_to_one_discord_resource() 
 
     def handler(request: httpx.Request) -> httpx.Response:
         expected_path = (
-            f"/control/v1/organizations/{organization_id}/connections/"
-            f"{guild_id}/welcome-settings"
+            f"/control/v1/organizations/{organization_id}/connections/{guild_id}/welcome-settings"
         )
         assert request.url.path == expected_path
         claims = decode_claims(request.headers["Authorization"].removeprefix("Bearer "))
@@ -331,6 +331,57 @@ async def test_catalog_binds_welcome_settings_request_to_one_discord_resource() 
     assert settings.platform is Platform.DISCORD
     assert settings.title == "Welcome!"
     assert settings.rules_channel_id == "10"
+
+
+@pytest.mark.asyncio
+async def test_catalog_updates_welcome_settings_with_linked_discord_identity() -> None:
+    actor_id, organization_id, correlation_id = uuid4(), uuid4(), uuid4()
+    guild_id = "123456789012345678"
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        assert request.method == "PUT"
+        assert request.url.path.endswith(f"/{guild_id}/welcome-settings")
+        claims = decode_claims(request.headers["Authorization"].removeprefix("Bearer "))
+        assert claims["platform_subject"] == "123456789012345678"
+        assert json.loads(request.content)["rules_channel_id"] == 10
+        return httpx.Response(200, json={"settings": welcome_payload()})
+
+    catalog = DiscordControlApiCatalog(
+        "http://discord-control.test",
+        assertion_issuer(),
+        transport=httpx.MockTransport(handler),
+        allow_insecure_http=True,
+        identities=Identities(),
+    )
+    result = await catalog.update_welcome_settings_for_connection(
+        actor_id=actor_id,
+        organization_id=organization_id,
+        external_resource_id=guild_id,
+        correlation_id=correlation_id,
+        settings=welcome_settings(),
+    )
+
+    assert result.title == "Welcome!"
+
+
+def welcome_settings() -> PlatformWelcomeSettings:
+    return PlatformWelcomeSettings(
+        Platform.DISCORD, "Welcome!", "Hi, {user}!", None, None, None, 5769984, True, "10", None
+    )
+
+
+def welcome_payload() -> dict[str, object]:
+    return {
+        "title": "Welcome!",
+        "description": "Hi, {user}!",
+        "thumbnail_url": None,
+        "footer_text": None,
+        "footer_icon_url": None,
+        "color": 5769984,
+        "is_enabled": True,
+        "rules_channel_id": "10",
+        "roles_channel_id": None,
+    }
 
 
 def test_catalog_requires_https_outside_explicit_local_development() -> None:
