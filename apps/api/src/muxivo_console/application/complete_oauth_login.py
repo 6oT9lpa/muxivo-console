@@ -7,7 +7,6 @@ from muxivo_console.application.create_browser_session import (
     CreateBrowserSession,
     CreateBrowserSessionCommand,
     IssuedBrowserSession,
-    SessionCreationRejectedError,
 )
 from muxivo_console.application.ports import (
     Clock,
@@ -18,6 +17,7 @@ from muxivo_console.application.ports import (
     SessionTokenHasher,
 )
 from muxivo_console.domain.identity import LoginIdentityProvider
+from muxivo_console.domain.sessions import SessionAssuranceLevel
 
 
 class OAuthLoginCompletionRejectedError(PermissionError):
@@ -60,9 +60,13 @@ class CompleteOAuthLogin:
             if user_id is None:
                 raise ValueError("Provider identity is not linked.")
             return await self.sessions.execute(
-                CreateBrowserSessionCommand(user_id=user_id, correlation_id=correlation_id)
+                CreateBrowserSessionCommand(
+                    user_id=user_id,
+                    correlation_id=correlation_id,
+                    assurance_level=SessionAssuranceLevel.RECENT_AUTHENTICATION,
+                )
             )
-        except (SessionCreationRejectedError, ValueError) as error:
+        except Exception as error:
             raise OAuthLoginCompletionRejectedError(
                 "OAuth login could not be completed."
             ) from error

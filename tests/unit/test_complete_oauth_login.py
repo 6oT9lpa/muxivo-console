@@ -40,6 +40,11 @@ class Provider:
         return "123456789012345678"
 
 
+class UnavailableProvider:
+    async def resolve_subject(self, **_: object) -> str:
+        raise RuntimeError("The provider is temporarily unavailable.")
+
+
 class Identities:
     def __init__(self, user_id: UUID | None) -> None:
         self.user_id = user_id
@@ -81,6 +86,7 @@ async def test_creates_session_only_for_existing_verified_provider_identity() ->
 
     assert issued.assurance_level is SessionAssuranceLevel.PASSWORD
     assert sessions.command.user_id == user_id
+    assert sessions.command.assurance_level is SessionAssuranceLevel.RECENT_AUTHENTICATION
 
 
 @pytest.mark.asyncio
@@ -95,4 +101,21 @@ async def test_rejects_unknown_or_replayed_oauth_state_without_creating_session(
             provider=LoginIdentityProvider.DISCORD, state="state", authorization_code="code",
             correlation_id=uuid4(),
         )
+    assert sessions.command is None
+
+
+@pytest.mark.asyncio
+async def test_hides_provider_failures_without_creating_a_session() -> None:
+    sessions = Sessions()
+    use_case = CompleteOAuthLogin(
+        Clock(), Hasher(), Secrets(), Transactions(transaction()), UnavailableProvider(),
+        Identities(uuid4()), sessions,
+    )
+
+    with pytest.raises(OAuthLoginCompletionRejectedError):
+        await use_case.execute(
+            provider=LoginIdentityProvider.DISCORD, state="state", authorization_code="code",
+            correlation_id=uuid4(),
+        )
+
     assert sessions.command is None
