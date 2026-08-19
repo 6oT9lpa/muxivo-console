@@ -68,7 +68,8 @@ Set-Location 'E:\muxivo\muxivo Console'
 Open `http://127.0.0.1:5173` and sign in with
 `demo@example.com` / `muxivo-demo-password`. Create an organization and use
 the workspace controls. The script creates its random development-only keys in
-the ignored `.dev/console.env` file and starts PostgreSQL, the API and Vite.
+the ignored `.dev/console.env` file and starts PostgreSQL and the API in Docker,
+then Vite on the host.
 
 The walkthrough exercises Console-owned authentication, organization and RBAC
 flows. Browser operations that read a connected Discord guild still require the

@@ -69,13 +69,18 @@ class SqlAlchemyOrganizationCreationWriter:
         try:
             async with self._session_factory() as session:
                 async with session.begin():
+                    session.add(
+                        OrganizationRecord(
+                            id=organization.id,
+                            name=organization.name,
+                            slug=organization.slug,
+                        )
+                    )
+                    # The membership and audit records refer to the new tenant,
+                    # but domain objects intentionally carry no ORM relation.
+                    await session.flush()
                     session.add_all(
                         (
-                            OrganizationRecord(
-                                id=organization.id,
-                                name=organization.name,
-                                slug=organization.slug,
-                            ),
                             OrganizationMembershipRecord(
                                 id=owner_membership.id,
                                 organization_id=owner_membership.organization_id,

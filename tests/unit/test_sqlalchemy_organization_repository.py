@@ -53,7 +53,7 @@ class FakeSession(AbstractAsyncContextManager[Self]):
     def __init__(self, *, status: str | None = None, integrity_error: bool = False) -> None:
         self.status = status
         self.integrity_error = integrity_error
-        self.records: tuple[object, ...] = ()
+        self.records: list[object] = []
         self.transaction = FakeTransaction()
 
     async def __aenter__(self) -> Self:
@@ -73,8 +73,11 @@ class FakeSession(AbstractAsyncContextManager[Self]):
     async def execute(self, statement) -> FakeResult:
         return FakeResult(self.status)
 
+    def add(self, record: object) -> None:
+        self.records.append(record)
+
     def add_all(self, records: tuple[object, ...]) -> None:
-        self.records = records
+        self.records.extend(records)
 
     async def flush(self) -> None:
         if self.integrity_error:

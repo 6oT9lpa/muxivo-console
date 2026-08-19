@@ -36,13 +36,19 @@ class SqlAlchemyEmailPasswordRegistrationWriter:
         try:
             async with self._session_factory() as session:
                 async with session.begin():
+                    session.add(
+                        UserRecord(
+                            id=registration.user.id,
+                            status=registration.user.status.value,
+                            display_name=registration.user.display_name,
+                        )
+                    )
+                    # These records have a database foreign key to users. The
+                    # domain objects are intentionally persistence-agnostic, so
+                    # SQLAlchemy cannot infer their insertion dependency.
+                    await session.flush()
                     session.add_all(
                         (
-                            UserRecord(
-                                id=registration.user.id,
-                                status=registration.user.status.value,
-                                display_name=registration.user.display_name,
-                            ),
                             LoginIdentityRecord(
                                 id=registration.identity.id,
                                 user_id=registration.identity.user_id,

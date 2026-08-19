@@ -8,11 +8,8 @@ $runtimeDirectory = Join-Path $repositoryRoot ".dev"
 $environmentFile = Join-Path $runtimeDirectory "console.env"
 $python = Join-Path $repositoryRoot ".venv\Scripts\python.exe"
 $webDirectory = Join-Path $repositoryRoot "apps\web"
-$apiLog = Join-Path $runtimeDirectory "api.log"
-$apiErrorLog = Join-Path $runtimeDirectory "api.error.log"
 $webLog = Join-Path $runtimeDirectory "web.log"
 $webErrorLog = Join-Path $runtimeDirectory "web.error.log"
-$apiPidFile = Join-Path $runtimeDirectory "api.pid"
 $webPidFile = Join-Path $runtimeDirectory "web.pid"
 
 if (-not (Test-Path -LiteralPath $python)) {
@@ -57,7 +54,7 @@ New-Item -ItemType Directory -Path $runtimeDirectory -Force | Out-Null
 if (-not (Test-Path -LiteralPath $environmentFile)) {
     @(
         "MUXIVO_CONSOLE_ENVIRONMENT=development"
-        "MUXIVO_CONSOLE_DATABASE_URL=postgresql+asyncpg://muxivo:muxivo@127.0.0.1:5432/muxivo_console"
+        "MUXIVO_CONSOLE_DATABASE_URL=postgresql+asyncpg://muxivo:muxivo@postgres:5432/muxivo_console"
         "MUXIVO_CONSOLE_EMAIL_LOOKUP_KEY=$(New-RandomBase64)"
         "MUXIVO_CONSOLE_EMAIL_ENCRYPTION_KEY=$(New-FernetKey)"
         "MUXIVO_CONSOLE_SESSION_TOKEN_PEPPER=$(New-RandomBase64)"
@@ -65,34 +62,30 @@ if (-not (Test-Path -LiteralPath $environmentFile)) {
         "MUXIVO_DISCORD_CONTROL_SIGNING_KEY=$(New-RandomBase64)"
     ) | Set-Content -LiteralPath $environmentFile -Encoding utf8
 }
+else {
+    $environmentContent = Get-Content -LiteralPath $environmentFile -Raw
+    $legacyDatabaseUrl = "postgresql+asyncpg://muxivo:muxivo@127.0.0.1:5432/muxivo_console"
+    $containerDatabaseUrl = "postgresql+asyncpg://muxivo:muxivo@postgres:5432/muxivo_console"
+    if ($environmentContent.Contains($legacyDatabaseUrl)) {
+        $environmentContent.Replace($legacyDatabaseUrl, $containerDatabaseUrl) |
+            Set-Content -LiteralPath $environmentFile -Encoding utf8
+    }
+}
 
 Import-EnvironmentFile $environmentFile
 Push-Location $repositoryRoot
 try {
-    docker compose -f docker-compose.dev.yml up -d postgres | Out-Host
+    docker compose -f docker-compose.dev.yml up -d --build --wait postgres api | Out-Host
     if ($LASTEXITCODE -ne 0) {
         throw "Docker Desktop must be running before the Console development environment can start."
     }
-    & $python -m alembic upgrade head
-    if ($LASTEXITCODE -ne 0) {
-        throw "Console database migrations failed. See the command output above."
-    }
-
-    if (-not (Test-ProcessRunning $apiPidFile)) {
-        $api = Start-Process -FilePath $python -ArgumentList @(
-            "-m", "uvicorn", "muxivo_console.asgi_development:app", "--app-dir", "apps/api/src",
-            "--host", "127.0.0.1", "--port", "8000"
-        ) -WorkingDirectory $repositoryRoot -WindowStyle Hidden -RedirectStandardOutput $apiLog -RedirectStandardError $apiErrorLog -PassThru
-        Set-Content -LiteralPath $apiPidFile -Value $api.Id -Encoding ascii
-    }
-
     for ($attempt = 1; $attempt -le 30; $attempt++) {
         try {
             if ((Invoke-WebRequest -UseBasicParsing "http://127.0.0.1:8000/healthz").StatusCode -eq 200) { break }
         } catch {
             Start-Sleep -Seconds 1
         }
-        if ($attempt -eq 30) { throw "Console API did not become ready. See $apiLog" }
+        if ($attempt -eq 30) { throw "Console API did not become ready. Run: docker compose -f docker-compose.dev.yml logs api" }
     }
 
     $demoPayload = @{ email = "demo@example.com"; password = "muxivo-demo-password"; display_name = "Muxivo demo" } | ConvertTo-Json

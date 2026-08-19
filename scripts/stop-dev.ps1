@@ -5,7 +5,7 @@ $ErrorActionPreference = "Stop"
 $repositoryRoot = Split-Path -Parent $PSScriptRoot
 $runtimeDirectory = Join-Path $repositoryRoot ".dev"
 
-foreach ($name in @("api", "web")) {
+foreach ($name in @("web")) {
     $pidFile = Join-Path $runtimeDirectory "$name.pid"
     if (-not (Test-Path -LiteralPath $pidFile)) { continue }
     $processId = [int](Get-Content -LiteralPath $pidFile -Raw)
