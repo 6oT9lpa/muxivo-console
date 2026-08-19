@@ -29,6 +29,9 @@ from muxivo_console.application.create_organization import (
 from muxivo_console.application.get_platform_dashboard_summary import (
     GetPlatformDashboardSummary,
 )
+from muxivo_console.application.get_platform_channel_purposes import (
+    GetPlatformChannelPurposes,
+)
 from muxivo_console.application.get_platform_health import (
     GetPlatformHealth,
     PlatformHealthUnavailableError,
@@ -76,6 +79,10 @@ from muxivo_console.contracts.v1.platform_channels import (
     PlatformChannelCatalogResponse,
     PlatformChannelResponse,
 )
+from muxivo_console.contracts.v1.platform_channel_purposes import (
+    ChannelPurposeAssignmentResponse,
+    PlatformChannelPurposesResponse,
+)
 from muxivo_console.contracts.v1.platform_connections import (
     PlatformConnectionCreateRequest,
     PlatformConnectionListResponse,
@@ -120,6 +127,7 @@ def create_app(
     platform_health_use_case: GetPlatformHealth | None = None,
     platform_dashboard_use_case: GetPlatformDashboardSummary | None = None,
     platform_channels_use_case: ListPlatformConnectionChannels | None = None,
+    platform_channel_purposes_use_case: GetPlatformChannelPurposes | None = None,
     platform_welcome_settings_use_case: GetPlatformWelcomeSettings | None = None,
     platform_welcome_settings_update_use_case: UpdatePlatformWelcomeSettings | None = None,
     discord_identity_link_start: BeginIdentityLink | None = None,
@@ -595,6 +603,53 @@ def create_app(
             items=[
                 PlatformChannelResponse.model_validate(item, from_attributes=True)
                 for item in catalog.items
+            ],
+        )
+
+    @app.get(
+        "/api/v1/organizations/{organization_id}/platform-connections/{connection_id}/channel-purposes",
+        response_model=PlatformChannelPurposesResponse,
+        tags=["platform-channel-purposes"],
+    )
+    async def get_platform_channel_purposes(
+        organization_id: UUID, connection_id: UUID, request: Request
+    ) -> PlatformChannelPurposesResponse:
+        actor_id = getattr(request.state, "actor_id", None)
+        if not isinstance(actor_id, UUID):
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied")
+        if platform_channel_purposes_use_case is None:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Platform channel purposes are unavailable",
+            )
+        try:
+            purposes = await platform_channel_purposes_use_case.execute(
+                actor_id=actor_id,
+                organization_id=organization_id,
+                connection_id=connection_id,
+                correlation_id=request.state.correlation_id,
+            )
+        except AccessDeniedError as error:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN, detail="Access denied"
+            ) from error
+        except PlatformHealthUnavailableError as error:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Platform channel purposes are unavailable",
+            ) from error
+        except PlatformControlUnavailableError as error:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Platform control service is unavailable",
+            ) from error
+        return PlatformChannelPurposesResponse(
+            organization_id=str(organization_id),
+            connection_id=str(connection_id),
+            platform=purposes.platform,
+            items=[
+                ChannelPurposeAssignmentResponse(purpose=purpose, channel_id=channel_id)
+                for purpose, channel_id in purposes.assignments.items()
             ],
         )
 
