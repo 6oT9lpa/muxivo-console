@@ -33,6 +33,7 @@ from muxivo_console.application.register_email_password import RegisterEmailPass
 from muxivo_console.application.register_platform_connection import RegisterPlatformConnection
 from muxivo_console.application.require_recent_authentication import RequireRecentAuthentication
 from muxivo_console.application.resolve_browser_session import ResolveBrowserSession
+from muxivo_console.application.revoke_browser_session import RevokeBrowserSession
 from muxivo_console.application.update_platform_ai_moderation_policy import (
     UpdatePlatformAiModerationPolicy,
 )
@@ -83,6 +84,7 @@ from muxivo_console.infrastructure.persistence.registration_writer import (
 )
 from muxivo_console.infrastructure.persistence.session_repository import (
     SqlAlchemyAuthSessionReader,
+    SqlAlchemyAuthSessionRevoker,
     SqlAlchemyAuthSessionWriter,
 )
 from muxivo_console.infrastructure.security import (
@@ -377,5 +379,10 @@ def create_production_app(settings: ConsoleSettings):
             token_hasher=session_hasher,
             sessions=SqlAlchemyAuthSessionReader(sessions),
             user_statuses=user_statuses,
+        ),
+        session_revoker=RevokeBrowserSession(
+            identifiers=identifiers,
+            clock=clock,
+            sessions=SqlAlchemyAuthSessionRevoker(sessions),
         ),
     )

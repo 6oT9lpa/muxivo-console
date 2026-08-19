@@ -83,6 +83,7 @@ from muxivo_console.application.resolve_browser_session import (
     BrowserSessionPrincipal,
     ResolveBrowserSession,
 )
+from muxivo_console.application.revoke_browser_session import RevokeBrowserSession
 from muxivo_console.application.update_platform_ai_moderation_policy import (
     UpdatePlatformAiModerationPolicy,
 )
@@ -193,6 +194,7 @@ def create_app(
     discord_login_complete: CompleteOAuthLogin | None = None,
     discord_authorization_url: Callable[..., str] | None = None,
     session_resolver: ResolveBrowserSession | None = None,
+    session_revoker: RevokeBrowserSession | None = None,
 ) -> FastAPI:
     """Create the Console BFF without coupling application code to FastAPI."""
     control_modules = control_modules_use_case or ListControlModules(
@@ -253,6 +255,36 @@ def create_app(
         if not isinstance(actor_id, UUID):
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied")
         return {"authenticated": True}
+
+    @app.delete(
+        "/api/v1/auth/session", status_code=status.HTTP_204_NO_CONTENT, tags=["authentication"]
+    )
+    async def revoke_browser_session(request: Request) -> Response:
+        actor_id = getattr(request.state, "actor_id", None)
+        session_id = getattr(request.state, "session_id", None)
+        if not isinstance(actor_id, UUID) or not isinstance(session_id, UUID):
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied")
+        if session_revoker is None:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Session revocation is unavailable",
+            )
+        try:
+            await session_revoker.execute(
+                user_id=actor_id, session_id=session_id, correlation_id=request.state.correlation_id
+            )
+        except PermissionError as error:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN, detail="Access denied"
+            ) from error
+        response = Response(status_code=status.HTTP_204_NO_CONTENT)
+        response.delete_cookie(
+            key=SESSION_COOKIE_NAME, path="/", secure=True, httponly=True, samesite="lax"
+        )
+        response.delete_cookie(
+            key=CSRF_COOKIE_NAME, path="/", secure=True, httponly=False, samesite="lax"
+        )
+        return response
 
     @app.get(
         "/api/v1/organizations/{organization_id}/audit-events",
