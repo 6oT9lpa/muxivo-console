@@ -247,6 +247,55 @@ class DiscordControlApiCatalog:
             ) from error
         return _parse_discord_channel_purposes(payload)
 
+    async def update_channel_purpose_for_connection(
+        self,
+        *,
+        organization_id: UUID,
+        actor_id: UUID,
+        external_resource_id: str,
+        purpose: ChannelPurpose,
+        channel_id: str,
+        correlation_id: UUID,
+    ) -> PlatformChannelPurposes:
+        if self.identities is None:
+            raise PlatformControlUnavailableError("Discord identity verification is unavailable.")
+        subject = await self.identities.find_provider_subject(
+            user_id=actor_id, provider=LoginIdentityProvider.DISCORD
+        )
+        if subject is None or not channel_id.isdecimal():
+            raise PlatformControlUnavailableError(
+                "A linked Discord identity and channel are required."
+            )
+        assertion = self.assertions.issue(
+            actor_id=actor_id,
+            organization_id=organization_id,
+            resource=AuthorizationResource.CONTROL_MODULES,
+            action=AuthorizationAction.READ,
+            correlation_id=correlation_id,
+            platform_subject=subject,
+            platform_resource_id=external_resource_id,
+        )
+        try:
+            async with httpx.AsyncClient(
+                base_url=self.base_url, timeout=self.timeout, transport=self.transport
+            ) as client:
+                response = await client.put(
+                    f"/control/v1/organizations/{organization_id}/connections/{external_resource_id}/channel-purposes",
+                    headers={"Authorization": f"Bearer {assertion}"},
+                    json={
+                        "guild_id": int(external_resource_id),
+                        "purpose": purpose.value,
+                        "channel_id": int(channel_id),
+                    },
+                )
+                response.raise_for_status()
+                payload = response.json()
+        except (httpx.HTTPError, ValueError, json.JSONDecodeError) as error:
+            raise PlatformControlUnavailableError(
+                "Discord Control API channel purpose update failed."
+            ) from error
+        return _parse_discord_channel_purposes(payload)
+
     async def get_welcome_settings_for_connection(
         self,
         *,

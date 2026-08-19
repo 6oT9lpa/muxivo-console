@@ -5,7 +5,7 @@ from uuid import UUID
 from muxivo_console.domain.activity import ControlModule, Platform
 from muxivo_console.domain.audit import AuditEvent
 from muxivo_console.domain.authorization import AuthorizationDecision, AuthorizationRequest
-from muxivo_console.domain.channel_purposes import PlatformChannelPurposes
+from muxivo_console.domain.channel_purposes import ChannelPurpose, PlatformChannelPurposes
 from muxivo_console.domain.channels import PlatformChannelCatalog
 from muxivo_console.domain.connections import PlatformConnection
 from muxivo_console.domain.dashboard import PlatformDashboardSummary
@@ -72,6 +72,19 @@ class PlatformChannelPurposesReader(Protocol):
         organization_id: UUID,
         actor_id: UUID,
         external_resource_id: str,
+        correlation_id: UUID,
+    ) -> PlatformChannelPurposes: ...
+
+
+class PlatformChannelPurposesWriter(Protocol):
+    async def update_channel_purpose_for_connection(
+        self,
+        *,
+        organization_id: UUID,
+        actor_id: UUID,
+        external_resource_id: str,
+        purpose: ChannelPurpose,
+        channel_id: str,
         correlation_id: UUID,
     ) -> PlatformChannelPurposes: ...
 
