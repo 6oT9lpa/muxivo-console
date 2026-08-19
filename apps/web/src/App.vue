@@ -18,6 +18,7 @@ const selectedConnectionId = ref("");
 const selectedDiscordConnectionId = ref("");
 const dashboardSummary = ref<PlatformDashboardSummary | null>(null);
 const channelCatalog = ref<PlatformChannelCatalog | null>(null);
+const botSettings = ref<PlatformBotSettings | null>(null);
 const welcomeSettings = ref<PlatformWelcomeSettings | null>(null);
 const channelPurposes = ref<PlatformChannelPurposes | null>(null);
 const aiModerationSummary = ref<PlatformAiModerationSummary | null>(null);
@@ -75,6 +76,15 @@ type PlatformChannelCatalog = {
   connection_id: string;
   platform: "discord" | "twitch" | "telegram";
   items: PlatformChannel[];
+};
+type PlatformBotSettings = {
+  organization_id: string;
+  connection_id: string;
+  platform: "discord" | "twitch" | "telegram";
+  subscription_tier: string;
+  activity_rotation_enabled: boolean;
+  activity_rotation_interval_seconds: number;
+  retention_days: Record<string, number>;
 };
 type PlatformWelcomeSettings = {
   organization_id: string;
@@ -237,6 +247,7 @@ async function loadConnections() {
     controlModules.value = [];
     dashboardSummary.value = null;
     channelCatalog.value = null;
+    botSettings.value = null;
     welcomeSettings.value = null;
     channelPurposes.value = null;
     aiModerationSummary.value = null;
@@ -301,9 +312,26 @@ async function loadPlatformChannels() {
   }
 }
 
+async function loadPlatformBotSettings() {
+  if (!organizationId.value.trim() || !selectedConnectionId.value) return;
+  busy.value = true;
+  notice.value = "";
+  try {
+    botSettings.value = await consoleApi<PlatformBotSettings>(
+      `/api/v1/organizations/${encodeURIComponent(organizationId.value.trim())}/platform-connections/${encodeURIComponent(selectedConnectionId.value)}/bot-settings`,
+    );
+  } catch (error) {
+    botSettings.value = null;
+    notice.value = messageFor(error);
+  } finally {
+    busy.value = false;
+  }
+}
+
 function selectPlatformConnection() {
   dashboardSummary.value = null;
   channelCatalog.value = null;
+  botSettings.value = null;
   platformHealth.value = null;
 }
 
@@ -585,6 +613,8 @@ function messageFor(error: unknown): string {
         <dl v-if="dashboardSummary" class="dashboard-metrics"><div><dt>Messages today</dt><dd>{{ dashboardSummary.messages_today }}</dd></div><div><dt>AI flagged today</dt><dd>{{ dashboardSummary.ai_flagged_today }}</dd></div><div><dt>Creator sources</dt><dd>{{ dashboardSummary.creator_sources }}</dd></div><div><dt>Bot latency</dt><dd>{{ dashboardSummary.bot_latency_ms === null ? "Unavailable" : `${dashboardSummary.bot_latency_ms} ms` }}</dd></div></dl>
         <div class="section-heading"><div><h4>Channels</h4><p>Generic resources supplied by the selected platform adapter.</p></div><button type="button" :disabled="busy || !selectedConnectionId" @click="loadPlatformChannels">{{ busy ? "Loading…" : "Load channels" }}</button></div>
         <ul v-if="channelCatalog?.items.length" class="health-signals"><li v-for="channel in channelCatalog.items" :key="channel.id"><span><strong>{{ channel.name }}</strong><small>{{ channel.kind }}</small></span></li></ul>
+        <div class="section-heading"><div><h4>Bot settings</h4><p>Non-secret runtime configuration. The platform rechecks native administrator authority before returning it.</p></div><button type="button" :disabled="busy || !selectedConnectionId" @click="loadPlatformBotSettings">{{ busy ? "Loading…" : "Load settings" }}</button></div>
+        <dl v-if="botSettings" class="dashboard-metrics"><div><dt>Subscription</dt><dd>{{ botSettings.subscription_tier }}</dd></div><div><dt>Activity rotation</dt><dd>{{ botSettings.activity_rotation_enabled ? "Enabled" : "Disabled" }}</dd></div><div><dt>Rotation interval</dt><dd>{{ botSettings.activity_rotation_interval_seconds }} s</dd></div><div><dt>Retention rules</dt><dd>{{ Object.keys(botSettings.retention_days).length }}</dd></div></dl>
       </section>
       <section v-if="selectedConnection" class="platform-health" aria-labelledby="platform-health-heading">
         <div class="section-heading"><div><h3 id="platform-health-heading">{{ selectedConnection.platform }} platform health</h3><p>Read-only runtime signals are requested through the Console BFF; platform credentials never enter the browser.</p></div><button type="button" :disabled="busy" @click="loadPlatformHealth">{{ busy ? "Loading…" : "Load health" }}</button></div>
