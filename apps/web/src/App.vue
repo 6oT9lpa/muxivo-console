@@ -22,6 +22,8 @@ const aiModerationSummary = ref<PlatformAiModerationSummary | null>(null);
 const aiModerationPolicy = ref<PlatformAiModerationPolicyState | null>(null);
 const aiModerationBlacklistWords = ref("");
 const aiModerationAllowedDomains = ref("");
+const auditEvents = ref<AuditEvent[]>([]);
+const auditEventsNextCursor = ref<string | null>(null);
 const selectedPurpose = ref("welcome");
 const selectedPurposeChannelId = ref("");
 
@@ -102,6 +104,11 @@ type AiModerationPolicy = {
 type PlatformAiModerationPolicyState = {
   organization_id: string; connection_id: string; policy: AiModerationPolicy; is_default_policy: boolean;
 };
+type AuditEvent = {
+  id: string; correlation_id: string; actor_id: string | null; action: string;
+  resource_type: string; resource_id: string | null; result: string; created_at: string;
+};
+type AuditEventPage = { items: AuditEvent[]; next_cursor: string | null };
 
 const usableDiscordConnections = computed(() =>
   connections.value.filter(
@@ -179,6 +186,8 @@ async function loadConnections() {
     channelPurposes.value = null;
     aiModerationSummary.value = null;
     aiModerationPolicy.value = null;
+    auditEvents.value = [];
+    auditEventsNextCursor.value = null;
     selectedDiscordConnectionId.value = usableDiscordConnections.value[0]?.id ?? "";
   } catch (error) {
     notice.value = messageFor(error);
@@ -197,6 +206,26 @@ async function loadDiscordDashboard() {
     );
   } catch (error) {
     dashboardSummary.value = null;
+    notice.value = messageFor(error);
+  } finally {
+    busy.value = false;
+  }
+}
+
+async function loadOrganizationAuditEvents(nextPage = false) {
+  if (!organizationId.value.trim()) return;
+  if (nextPage && !auditEventsNextCursor.value) return;
+  busy.value = true;
+  notice.value = "";
+  try {
+    const query = nextPage ? `?after=${encodeURIComponent(auditEventsNextCursor.value ?? "")}` : "";
+    const page = await consoleApi<AuditEventPage>(
+      `/api/v1/organizations/${encodeURIComponent(organizationId.value.trim())}/audit-events${query}`,
+    );
+    auditEvents.value = nextPage ? [...auditEvents.value, ...page.items] : page.items;
+    auditEventsNextCursor.value = page.next_cursor;
+  } catch (error) {
+    if (!nextPage) auditEvents.value = [];
     notice.value = messageFor(error);
   } finally {
     busy.value = false;
@@ -364,6 +393,8 @@ function selectDiscordConnection() {
   channelPurposes.value = null;
   aiModerationSummary.value = null;
   aiModerationPolicy.value = null;
+  auditEvents.value = [];
+  auditEventsNextCursor.value = null;
 }
 
 async function loadDiscordHealth() {
@@ -433,6 +464,12 @@ function messageFor(error: unknown): string {
       <section v-if="organizationId" class="platform-health" aria-labelledby="discord-health-heading">
         <div class="section-heading"><div><h3 id="discord-health-heading">Discord platform health</h3><p>Read-only runtime signals are requested through the Console BFF; Discord credentials never enter the browser.</p></div><button type="button" :disabled="busy" @click="loadDiscordHealth">{{ busy ? "Loading…" : "Load health" }}</button></div>
         <ul v-if="platformHealth" class="health-signals"><li v-for="signal in platformHealth.signals" :key="signal.key"><span><strong>{{ signal.display_name }}</strong><small>{{ signal.value }}</small></span><em :data-status="signal.status">{{ signal.status }}</em></li></ul>
+      </section>
+      <section v-if="organizationId" class="platform-dashboard" aria-labelledby="organization-audit-heading">
+        <div class="section-heading"><div><h3 id="organization-audit-heading">Organization audit log</h3><p>Secret-free Console audit facts. Platform tokens, message content and internal metadata are never displayed here.</p></div><button type="button" :disabled="busy" @click="loadOrganizationAuditEvents()">{{ busy ? "Loading…" : "Load audit log" }}</button></div>
+        <ul v-if="auditEvents.length" class="health-signals audit-events"><li v-for="event in auditEvents" :key="event.id"><span><strong>{{ event.action }}</strong><small>{{ new Date(event.created_at).toLocaleString() }} · {{ event.resource_type }}{{ event.resource_id ? ` · ${event.resource_id}` : "" }}</small></span><em :data-status="event.result">{{ event.result }}</em></li></ul>
+        <p v-else-if="!busy">No audit events loaded.</p>
+        <button v-if="auditEventsNextCursor" class="load-more" type="button" :disabled="busy" @click="loadOrganizationAuditEvents(true)">Load older events</button>
       </section>
       <section v-if="usableDiscordConnections.length" class="platform-dashboard" aria-labelledby="discord-dashboard-heading">
         <div class="section-heading"><div><h3 id="discord-dashboard-heading">Discord dashboard summary</h3><p>Safe aggregate counters for a Console-owned Discord connection. Audit details remain in Discord Activity.</p></div><button type="button" :disabled="busy || !selectedDiscordConnectionId" @click="loadDiscordDashboard">{{ busy ? "Loading…" : "Load summary" }}</button></div>
