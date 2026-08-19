@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref } from "vue";
+import { computed, onMounted, ref } from "vue";
 import { consoleApi, ConsoleApiError } from "./api/consoleApi";
 
 const email = ref("");
@@ -135,6 +135,30 @@ async function signIn() {
     busy.value = false;
   }
 }
+
+async function signInWithDiscord() {
+  busy.value = true;
+  notice.value = "";
+  try {
+    const authorization = await consoleApi<{ authorization_url: string }>(
+      "/api/v1/auth/discord/authorizations",
+      { method: "POST" },
+    );
+    window.location.assign(authorization.authorization_url);
+  } catch (error) {
+    notice.value = messageFor(error);
+    busy.value = false;
+  }
+}
+
+onMounted(async () => {
+  try {
+    await consoleApi<{ authenticated: boolean }>("/api/v1/auth/session");
+    authenticated.value = true;
+  } catch {
+    // A missing session is the normal first-visit state.
+  }
+});
 
 async function linkDiscord() {
   busy.value = true;
@@ -448,6 +472,7 @@ function messageFor(error: unknown): string {
     <section v-if="!authenticated" class="card">
       <h2>Sign in</h2>
       <form @submit.prevent="signIn"><label>Email<input v-model="email" type="email" autocomplete="email" required /></label><label>Password<input v-model="password" type="password" autocomplete="current-password" minlength="12" required /></label><button :disabled="busy">{{ busy ? "Signing in…" : "Sign in" }}</button></form>
+      <div class="identity-link"><h3>Or continue with Discord</h3><p>Discord signs in only to an account you have already linked.</p><button type="button" :disabled="busy" @click="signInWithDiscord">Sign in with Discord</button></div>
     </section>
     <section v-else class="card">
       <h2>Create an organization</h2>
