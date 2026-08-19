@@ -4,6 +4,16 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from muxivo_console.domain.activity import Platform
+from muxivo_console.domain.ai_moderation_policy import (
+    AiModerationAction as DomainAiModerationAction,
+)
+from muxivo_console.domain.ai_moderation_policy import (
+    AiModerationEnforcementMode,
+    AiModerationLabelRule,
+    PlatformAiModerationPolicy,
+)
+
 AiAction = Literal[
     "IGNORE", "LOG", "REVIEW", "WARN", "DELETE", "DELETE_WARN", "TIMEOUT", "KICK", "BAN"
 ]
@@ -13,7 +23,7 @@ EnforcementMode = Literal["SHADOW", "LIMITED", "ELEVATED"]
 class AiModerationLabelRuleRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    risk_threshold: int = Field(ge=0, le=100)
+    risk_threshold: float = Field(ge=0, le=100)
     min_action: AiAction
     max_action: AiAction
 
@@ -62,3 +72,42 @@ class AiModerationPolicyUpdateRequest(BaseModel):
         ):
             raise ValueError("Elevated automated actions require acknowledgement.")
         return self
+
+    def to_domain_policy(self) -> PlatformAiModerationPolicy:
+        return PlatformAiModerationPolicy(
+            platform=Platform.DISCORD,
+            blacklist_words=tuple(self.blacklist_words),
+            allowed_domains=tuple(self.allowed_domains),
+            labels={
+                label: AiModerationLabelRule(
+                    risk_threshold=rule.risk_threshold,
+                    min_action=DomainAiModerationAction(rule.min_action),
+                    max_action=DomainAiModerationAction(rule.max_action),
+                )
+                for label, rule in self.labels.items()
+            },
+            blacklist_action=DomainAiModerationAction(self.blacklist_action),
+            unapproved_domain_action=DomainAiModerationAction(self.unapproved_domain_action),
+            context_window_days=self.context_window_days,
+            repeat_offender_threshold=self.repeat_offender_threshold,
+            repeat_offender_action=DomainAiModerationAction(self.repeat_offender_action),
+            escalation_enabled=self.escalation_enabled,
+            escalation_score_threshold=self.escalation_score_threshold,
+            escalation_half_life_days=self.escalation_half_life_days,
+            excluded_user_ids=tuple(self.excluded_user_ids),
+            excluded_role_ids=tuple(self.excluded_role_ids),
+            excluded_channel_ids=tuple(self.excluded_channel_ids),
+            exclude_bots=self.exclude_bots,
+            ocr_enabled=self.ocr_enabled,
+            ocr_failure_mode=self.ocr_failure_mode,
+            ocr_max_gif_frames=self.ocr_max_gif_frames,
+            ocr_process_empty_result=self.ocr_process_empty_result,
+            test_mode=self.test_mode,
+            enforcement_mode=AiModerationEnforcementMode(self.enforcement_mode),
+            limited_min_confidence=self.limited_min_confidence,
+            limited_hard_rule_labels=tuple(self.limited_hard_rule_labels),
+            beta_enforcement_acknowledged=self.beta_enforcement_acknowledged,
+            allow_automated_timeout=self.allow_automated_timeout,
+            allow_automated_kick=self.allow_automated_kick,
+            allow_automated_ban=self.allow_automated_ban,
+        )

@@ -21,6 +21,7 @@ from muxivo_console.domain.activity import (
     Platform,
 )
 from muxivo_console.domain.ai_moderation import PlatformAiModerationSummary
+from muxivo_console.domain.ai_moderation_policy import PlatformAiModerationPolicy
 from muxivo_console.domain.authorization import AuthorizationAction, AuthorizationResource
 from muxivo_console.domain.channel_purposes import ChannelPurpose, PlatformChannelPurposes
 from muxivo_console.domain.channels import ChannelKind, PlatformChannel, PlatformChannelCatalog
@@ -328,6 +329,49 @@ class DiscordControlApiCatalog:
                 "Discord Control API channel purpose update failed."
             ) from error
         return _parse_discord_channel_purposes(payload)
+
+    async def update_ai_moderation_policy_for_connection(
+        self,
+        *,
+        organization_id: UUID,
+        actor_id: UUID,
+        external_resource_id: str,
+        policy: PlatformAiModerationPolicy,
+        correlation_id: UUID,
+    ) -> PlatformAiModerationSummary:
+        if self.identities is None:
+            raise PlatformControlUnavailableError("Discord identity verification is unavailable.")
+        platform_subject = await self.identities.find_provider_subject(
+            user_id=actor_id, provider=LoginIdentityProvider.DISCORD
+        )
+        if platform_subject is None:
+            raise PlatformControlUnavailableError("A linked Discord identity is required.")
+        try:
+            policy_payload = _discord_ai_moderation_policy_payload(policy)
+            assertion = self.assertions.issue(
+                actor_id=actor_id,
+                organization_id=organization_id,
+                resource=AuthorizationResource.CONTROL_MODULES,
+                action=AuthorizationAction.READ,
+                correlation_id=correlation_id,
+                platform_subject=platform_subject,
+                platform_resource_id=external_resource_id,
+            )
+            async with httpx.AsyncClient(
+                base_url=self.base_url, timeout=self.timeout, transport=self.transport
+            ) as client:
+                response = await client.put(
+                    f"/control/v1/organizations/{organization_id}/connections/{external_resource_id}/ai-moderation-policy",
+                    headers={"Authorization": f"Bearer {assertion}"},
+                    json={"policy": policy_payload},
+                )
+                response.raise_for_status()
+                payload = response.json()
+        except (httpx.HTTPError, ValueError, json.JSONDecodeError) as error:
+            raise PlatformControlUnavailableError(
+                "Discord Control API AI moderation policy update failed."
+            ) from error
+        return _parse_discord_ai_moderation_summary(payload)
 
     async def get_welcome_settings_for_connection(
         self,
@@ -687,6 +731,51 @@ def _welcome_settings_payload(settings: PlatformWelcomeSettings) -> dict[str, An
         "rules_channel_id": _discord_snowflake_or_none(settings.rules_channel_id),
         "roles_channel_id": _discord_snowflake_or_none(settings.roles_channel_id),
     }
+
+
+def _discord_ai_moderation_policy_payload(policy: PlatformAiModerationPolicy) -> dict[str, Any]:
+    if policy.platform is not Platform.DISCORD:
+        raise ValueError("AI moderation policy must target Discord.")
+    return {
+        "blacklist_words": list(policy.blacklist_words),
+        "allowed_domains": list(policy.allowed_domains),
+        "labels": {
+            label: {
+                "risk_threshold": rule.risk_threshold,
+                "min_action": rule.min_action.value,
+                "max_action": rule.max_action.value,
+            }
+            for label, rule in policy.labels.items()
+        },
+        "blacklist_action": policy.blacklist_action.value,
+        "unapproved_domain_action": policy.unapproved_domain_action.value,
+        "context_window_days": policy.context_window_days,
+        "repeat_offender_threshold": policy.repeat_offender_threshold,
+        "repeat_offender_action": policy.repeat_offender_action.value,
+        "escalation_enabled": policy.escalation_enabled,
+        "escalation_score_threshold": policy.escalation_score_threshold,
+        "escalation_half_life_days": policy.escalation_half_life_days,
+        "excluded_user_ids": _discord_snowflakes(policy.excluded_user_ids),
+        "excluded_role_ids": _discord_snowflakes(policy.excluded_role_ids),
+        "excluded_channel_ids": _discord_snowflakes(policy.excluded_channel_ids),
+        "exclude_bots": policy.exclude_bots,
+        "ocr_enabled": policy.ocr_enabled,
+        "ocr_failure_mode": policy.ocr_failure_mode,
+        "ocr_max_gif_frames": policy.ocr_max_gif_frames,
+        "ocr_process_empty_result": policy.ocr_process_empty_result,
+        "test_mode": policy.test_mode,
+        "enforcement_mode": policy.enforcement_mode.value,
+        "limited_min_confidence": policy.limited_min_confidence,
+        "limited_hard_rule_labels": list(policy.limited_hard_rule_labels),
+        "beta_enforcement_acknowledged": policy.beta_enforcement_acknowledged,
+        "allow_automated_timeout": policy.allow_automated_timeout,
+        "allow_automated_kick": policy.allow_automated_kick,
+        "allow_automated_ban": policy.allow_automated_ban,
+    }
+
+
+def _discord_snowflakes(values: tuple[str, ...]) -> list[int]:
+    return [_discord_snowflake_or_none(value) for value in values]
 
 
 def _discord_snowflake_or_none(value: str | None) -> int | None:

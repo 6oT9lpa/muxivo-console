@@ -61,13 +61,23 @@ from muxivo_console.application.register_platform_connection import (
     RegisterPlatformConnection,
     RegisterPlatformConnectionCommand,
 )
-from muxivo_console.application.resolve_browser_session import ResolveBrowserSession
+from muxivo_console.application.require_recent_authentication import (
+    RecentAuthenticationRequiredError,
+)
+from muxivo_console.application.resolve_browser_session import (
+    BrowserSessionPrincipal,
+    ResolveBrowserSession,
+)
+from muxivo_console.application.update_platform_ai_moderation_policy import (
+    UpdatePlatformAiModerationPolicy,
+)
 from muxivo_console.application.update_platform_channel_purpose import (
     UpdatePlatformChannelPurpose,
 )
 from muxivo_console.application.update_platform_welcome_settings import (
     UpdatePlatformWelcomeSettings,
 )
+from muxivo_console.contracts.v1.ai_moderation_policy import AiModerationPolicyUpdateRequest
 from muxivo_console.contracts.v1.authentication import (
     EmailPasswordLoginRequest,
     EmailPasswordRegistrationRequest,
@@ -109,6 +119,7 @@ from muxivo_console.contracts.v1.platform_welcome import (
 )
 from muxivo_console.domain.activity import Platform
 from muxivo_console.domain.identity import LoginIdentityProvider
+from muxivo_console.domain.sessions import SessionAssuranceLevel
 from muxivo_console.domain.welcome import PlatformWelcomeSettings
 from muxivo_console.infrastructure.development import (
     DenyByDefaultOrganizationAuthorizer,
@@ -139,6 +150,7 @@ def create_app(
     platform_channels_use_case: ListPlatformConnectionChannels | None = None,
     platform_channel_purposes_use_case: GetPlatformChannelPurposes | None = None,
     platform_ai_moderation_summary_use_case: GetPlatformAiModerationSummary | None = None,
+    platform_ai_moderation_policy_update_use_case: UpdatePlatformAiModerationPolicy | None = None,
     platform_channel_purpose_update_use_case: UpdatePlatformChannelPurpose | None = None,
     platform_welcome_settings_use_case: GetPlatformWelcomeSettings | None = None,
     platform_welcome_settings_update_use_case: UpdatePlatformWelcomeSettings | None = None,
@@ -697,6 +709,81 @@ def create_app(
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="Platform AI moderation summary is unavailable",
+            ) from error
+        except PlatformControlUnavailableError as error:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Platform control service is unavailable",
+            ) from error
+        return PlatformAiModerationSummaryResponse(
+            organization_id=str(organization_id),
+            connection_id=str(connection_id),
+            platform=summary.platform,
+            enforcement_mode=summary.enforcement_mode,
+            test_mode=summary.test_mode,
+            is_default_policy=summary.is_default_policy,
+            covered_channel_count=summary.covered_channel_count,
+            log_channel_configured=summary.log_channel_configured,
+            label_count=summary.label_count,
+            blacklist_word_count=summary.blacklist_word_count,
+            allowed_domain_count=summary.allowed_domain_count,
+            automated_timeout_enabled=summary.automated_timeout_enabled,
+            automated_kick_enabled=summary.automated_kick_enabled,
+            automated_ban_enabled=summary.automated_ban_enabled,
+        )
+
+    @app.put(
+        "/api/v1/organizations/{organization_id}/platform-connections/{connection_id}/ai-moderation-policy",
+        response_model=PlatformAiModerationSummaryResponse,
+        tags=["platform-ai-moderation"],
+    )
+    async def update_platform_ai_moderation_policy(
+        organization_id: UUID,
+        connection_id: UUID,
+        payload: AiModerationPolicyUpdateRequest,
+        request: Request,
+    ) -> PlatformAiModerationSummaryResponse:
+        actor_id = getattr(request.state, "actor_id", None)
+        session_id = getattr(request.state, "session_id", None)
+        assurance_level = getattr(request.state, "assurance_level", None)
+        authenticated_at = getattr(request.state, "authenticated_at", None)
+        if (
+            not isinstance(actor_id, UUID)
+            or not isinstance(session_id, UUID)
+            or not isinstance(assurance_level, SessionAssuranceLevel)
+        ):
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied")
+        if platform_ai_moderation_policy_update_use_case is None:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Platform AI moderation policy is unavailable",
+            )
+        try:
+            summary = await platform_ai_moderation_policy_update_use_case.execute(
+                principal=BrowserSessionPrincipal(
+                    user_id=actor_id,
+                    session_id=session_id,
+                    assurance_level=assurance_level,
+                    authenticated_at=authenticated_at,
+                ),
+                organization_id=organization_id,
+                connection_id=connection_id,
+                policy=payload.to_domain_policy(),
+                correlation_id=request.state.correlation_id,
+            )
+        except RecentAuthenticationRequiredError as error:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Recent authentication is required",
+            ) from error
+        except AccessDeniedError as error:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN, detail="Access denied"
+            ) from error
+        except PlatformHealthUnavailableError as error:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Platform AI moderation policy is unavailable",
             ) from error
         except PlatformControlUnavailableError as error:
             raise HTTPException(

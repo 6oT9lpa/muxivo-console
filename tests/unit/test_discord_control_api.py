@@ -7,6 +7,7 @@ import httpx
 import pytest
 from muxivo_console.application.list_control_modules import PlatformControlUnavailableError
 from muxivo_console.domain.activity import Platform
+from muxivo_console.domain.ai_moderation_policy import PlatformAiModerationPolicy
 from muxivo_console.domain.authorization import AuthorizationAction, AuthorizationResource
 from muxivo_console.domain.channel_purposes import ChannelPurpose
 from muxivo_console.domain.welcome import PlatformWelcomeSettings
@@ -425,6 +426,43 @@ async def test_catalog_updates_channel_purpose_with_a_resource_bound_identity() 
     )
 
     assert result.assignments == {ChannelPurpose.WELCOME: "10"}
+
+
+@pytest.mark.asyncio
+async def test_catalog_updates_ai_moderation_policy_with_bound_discord_identity() -> None:
+    actor_id, organization_id, correlation_id = uuid4(), uuid4(), uuid4()
+    guild_id = "123456789012345678"
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        assert request.method == "PUT"
+        assert request.url.path.endswith(f"/{guild_id}/ai-moderation-policy")
+        claims = decode_claims(request.headers["Authorization"].removeprefix("Bearer "))
+        assert claims["platform_subject"] == "123456789012345678"
+        assert claims["platform_resource_id"] == guild_id
+        policy = json.loads(request.content)["policy"]
+        assert policy["excluded_channel_ids"] == [10]
+        assert policy["enforcement_mode"] == "SHADOW"
+        return httpx.Response(200, json={"summary": ai_moderation_summary_payload()})
+
+    catalog = DiscordControlApiCatalog(
+        "http://discord-control.test",
+        assertion_issuer(),
+        transport=httpx.MockTransport(handler),
+        allow_insecure_http=True,
+        identities=Identities(),
+    )
+    result = await catalog.update_ai_moderation_policy_for_connection(
+        actor_id=actor_id,
+        organization_id=organization_id,
+        external_resource_id=guild_id,
+        correlation_id=correlation_id,
+        policy=PlatformAiModerationPolicy(
+            platform=Platform.DISCORD,
+            excluded_channel_ids=("10",),
+        ),
+    )
+
+    assert result.enforcement_mode == "SHADOW"
 
 
 def welcome_settings() -> PlatformWelcomeSettings:

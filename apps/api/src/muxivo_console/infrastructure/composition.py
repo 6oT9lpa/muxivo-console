@@ -23,7 +23,11 @@ from muxivo_console.application.list_platform_connections import ListPlatformCon
 from muxivo_console.application.organization_authorizer import MembershipOrganizationAuthorizer
 from muxivo_console.application.register_email_password import RegisterEmailPassword
 from muxivo_console.application.register_platform_connection import RegisterPlatformConnection
+from muxivo_console.application.require_recent_authentication import RequireRecentAuthentication
 from muxivo_console.application.resolve_browser_session import ResolveBrowserSession
+from muxivo_console.application.update_platform_ai_moderation_policy import (
+    UpdatePlatformAiModerationPolicy,
+)
 from muxivo_console.application.update_platform_channel_purpose import (
     UpdatePlatformChannelPurpose,
 )
@@ -37,6 +41,7 @@ from muxivo_console.infrastructure.discord_control_api import (
 )
 from muxivo_console.infrastructure.discord_oauth import DiscordOAuthClient
 from muxivo_console.infrastructure.naming import RandomSuffixOrganizationSlugGenerator
+from muxivo_console.infrastructure.persistence.audit_repository import SqlAlchemyAuditEventWriter
 from muxivo_console.infrastructure.persistence.connection_repository import (
     SqlAlchemyPlatformConnectionReader,
     SqlAlchemyPlatformConnectionWriter,
@@ -244,6 +249,21 @@ def create_production_app(settings: ConsoleSettings):
             identities=SqlAlchemyLoginIdentityReader(sessions),
         ),
     )
+    platform_ai_moderation_policy_update = UpdatePlatformAiModerationPolicy(
+        authorizer=MembershipOrganizationAuthorizer(
+            SqlAlchemyOrganizationMembershipReader(sessions)
+        ),
+        connections=SqlAlchemyPlatformConnectionReader(sessions),
+        policies=DiscordControlApiCatalog(
+            settings.discord_control_base_url,
+            assertions,
+            allow_insecure_http=settings.allow_insecure_discord_control_http,
+            identities=SqlAlchemyLoginIdentityReader(sessions),
+        ),
+        recent_authentication=RequireRecentAuthentication(clock=clock),
+        identifiers=identifiers,
+        audit_events=SqlAlchemyAuditEventWriter(sessions),
+    )
     discord_identity_link_start = None
     discord_identity_link_complete = None
     discord_authorization_url = None
@@ -289,6 +309,7 @@ def create_production_app(settings: ConsoleSettings):
         platform_channels_use_case=platform_channels,
         platform_channel_purposes_use_case=platform_channel_purposes,
         platform_ai_moderation_summary_use_case=platform_ai_moderation_summary,
+        platform_ai_moderation_policy_update_use_case=platform_ai_moderation_policy_update,
         platform_channel_purpose_update_use_case=platform_channel_purpose_update,
         platform_welcome_settings_use_case=platform_welcome_settings,
         platform_welcome_settings_update_use_case=platform_welcome_settings_update,
