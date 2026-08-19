@@ -35,6 +35,7 @@ from muxivo_console.domain.channels import ChannelKind, PlatformChannel, Platfor
 from muxivo_console.domain.dashboard import PlatformDashboardSummary
 from muxivo_console.domain.health import HealthSignal, HealthStatus, PlatformHealth
 from muxivo_console.domain.identity import LoginIdentityProvider
+from muxivo_console.domain.integrations import IntegrationSourceCount, PlatformIntegrations
 from muxivo_console.domain.welcome import PlatformWelcomeSettings
 
 
@@ -231,6 +232,46 @@ class DiscordControlApiCatalog:
                 "Discord Control API bot settings request failed."
             ) from error
         return _parse_discord_bot_settings(payload)
+
+    async def get_integrations_for_connection(
+        self,
+        *,
+        organization_id: UUID,
+        actor_id: UUID,
+        external_resource_id: str,
+        correlation_id: UUID,
+    ) -> PlatformIntegrations:
+        if self.identities is None:
+            raise PlatformControlUnavailableError("Discord identity verification is unavailable.")
+        subject = await self.identities.find_provider_subject(
+            user_id=actor_id, provider=LoginIdentityProvider.DISCORD
+        )
+        if subject is None:
+            raise PlatformControlUnavailableError("A linked Discord identity is required.")
+        assertion = self.assertions.issue(
+            actor_id=actor_id,
+            organization_id=organization_id,
+            resource=AuthorizationResource.CONTROL_MODULES,
+            action=AuthorizationAction.READ,
+            correlation_id=correlation_id,
+            platform_subject=subject,
+            platform_resource_id=external_resource_id,
+        )
+        try:
+            async with httpx.AsyncClient(
+                base_url=self.base_url, timeout=self.timeout, transport=self.transport
+            ) as client:
+                response = await client.get(
+                    f"/control/v1/organizations/{organization_id}/connections/{external_resource_id}/integrations",
+                    headers={"Authorization": f"Bearer {assertion}"},
+                )
+                response.raise_for_status()
+                payload = response.json()
+        except (httpx.HTTPError, ValueError, json.JSONDecodeError) as error:
+            raise PlatformControlUnavailableError(
+                "Discord Control API integrations request failed."
+            ) from error
+        return _parse_discord_integrations(payload)
 
     async def get_channel_catalog_for_connection(
         self,
@@ -713,9 +754,7 @@ def _parse_discord_bot_settings(payload: Any) -> PlatformBotSettings:
             or isinstance(interval, bool)
             or not isinstance(retention, dict)
             or not all(
-                isinstance(key, str)
-                and isinstance(value, int)
-                and not isinstance(value, bool)
+                isinstance(key, str) and isinstance(value, int) and not isinstance(value, bool)
                 for key, value in retention.items()
             )
         ):
@@ -730,6 +769,31 @@ def _parse_discord_bot_settings(payload: Any) -> PlatformBotSettings:
     except (KeyError, TypeError, ValueError) as error:
         raise PlatformControlUnavailableError(
             "Discord Control API returned invalid bot settings."
+        ) from error
+
+
+def _parse_discord_integrations(payload: Any) -> PlatformIntegrations:
+    try:
+        data = payload["integrations"]
+        creator = data["creator_platforms"]
+        sources = tuple(
+            IntegrationSourceCount(
+                str(item["platform"]), int(item["count"]), int(item["active_count"] or 0)
+            )
+            for item in creator["sources"]
+        )
+        return PlatformIntegrations(
+            Platform.DISCORD,
+            str(data["discord_bot"]["status"]),
+            str(creator["status"]),
+            int(creator["poll_interval_seconds"]),
+            sources,
+            str(data["muxivo_core"]["status"]),
+            str(data["database"]["status"]),
+        )
+    except (KeyError, TypeError, ValueError) as error:
+        raise PlatformControlUnavailableError(
+            "Discord Control API returned invalid integrations."
         ) from error
 
 

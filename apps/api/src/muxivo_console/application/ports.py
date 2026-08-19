@@ -24,6 +24,7 @@ from muxivo_console.domain.identity import (
     UserStatus,
 )
 from muxivo_console.domain.identity_linking import IdentityLinkTransaction
+from muxivo_console.domain.integrations import PlatformIntegrations
 from muxivo_console.domain.oauth_login import OAuthLoginTransaction
 from muxivo_console.domain.organizations import Organization, OrganizationMembership
 from muxivo_console.domain.sessions import AuthSession
@@ -70,6 +71,17 @@ class PlatformBotSettingsReader(Protocol):
         external_resource_id: str,
         correlation_id: UUID,
     ) -> PlatformBotSettings: ...
+
+
+class PlatformIntegrationsReader(Protocol):
+    async def get_integrations_for_connection(
+        self,
+        *,
+        organization_id: UUID,
+        actor_id: UUID,
+        external_resource_id: str,
+        correlation_id: UUID,
+    ) -> PlatformIntegrations: ...
 
 
 class PlatformChannelCatalogReader(Protocol):

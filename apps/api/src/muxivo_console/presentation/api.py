@@ -52,6 +52,7 @@ from muxivo_console.application.get_platform_health import (
     GetPlatformHealth,
     PlatformHealthUnavailableError,
 )
+from muxivo_console.application.get_platform_integrations import GetPlatformIntegrations
 from muxivo_console.application.get_platform_welcome_settings import (
     GetPlatformWelcomeSettings,
 )
@@ -135,6 +136,7 @@ from muxivo_console.contracts.v1.platform_health import (
     HealthSignalResponse,
     PlatformHealthResponse,
 )
+from muxivo_console.contracts.v1.platform_integrations import PlatformIntegrationsResponse
 from muxivo_console.contracts.v1.platform_welcome import (
     PlatformWelcomeSettingsResponse,
     PlatformWelcomeSettingsUpdateRequest,
@@ -163,12 +165,22 @@ SAFE_HTTP_METHODS = frozenset({"GET", "HEAD", "OPTIONS"})
 
 def _set_browser_session_cookies(response: Response, session: IssuedBrowserSession) -> None:
     response.set_cookie(
-        key=SESSION_COOKIE_NAME, value=session.raw_token, expires=session.expires_at,
-        path="/", secure=True, httponly=True, samesite="lax",
+        key=SESSION_COOKIE_NAME,
+        value=session.raw_token,
+        expires=session.expires_at,
+        path="/",
+        secure=True,
+        httponly=True,
+        samesite="lax",
     )
     response.set_cookie(
-        key=CSRF_COOKIE_NAME, value=session.raw_csrf_token, expires=session.expires_at,
-        path="/", secure=True, httponly=False, samesite="lax",
+        key=CSRF_COOKIE_NAME,
+        value=session.raw_csrf_token,
+        expires=session.expires_at,
+        path="/",
+        secure=True,
+        httponly=False,
+        samesite="lax",
     )
 
 
@@ -186,6 +198,7 @@ def create_app(
     platform_channel_purposes_use_case: GetPlatformChannelPurposes | None = None,
     platform_ai_moderation_summary_use_case: GetPlatformAiModerationSummary | None = None,
     platform_bot_settings_use_case: GetPlatformBotSettings | None = None,
+    platform_integrations_use_case: GetPlatformIntegrations | None = None,
     platform_ai_moderation_policy_use_case: GetPlatformAiModerationPolicy | None = None,
     platform_ai_moderation_policy_update_use_case: UpdatePlatformAiModerationPolicy | None = None,
     platform_channel_purpose_update_use_case: UpdatePlatformChannelPurpose | None = None,
@@ -394,9 +407,7 @@ def create_app(
         "/api/v1/identity-links/discord/callback",
         tags=["identity-links"],
     )
-    async def complete_discord_identity_link(
-        code: str, state: str, request: Request
-    ) -> Response:
+    async def complete_discord_identity_link(code: str, state: str, request: Request) -> Response:
         if discord_login_complete is not None:
             try:
                 issued_session = await discord_login_complete.execute(
@@ -772,6 +783,58 @@ def create_app(
             activity_rotation_enabled=settings.activity_rotation_enabled,
             activity_rotation_interval_seconds=settings.activity_rotation_interval_seconds,
             retention_days=dict(settings.retention_days),
+        )
+
+    @app.get(
+        "/api/v1/organizations/{organization_id}/platform-connections/{connection_id}/integrations",
+        response_model=PlatformIntegrationsResponse,
+        tags=["platform-integrations"],
+    )
+    async def get_platform_integrations(
+        organization_id: UUID, connection_id: UUID, request: Request
+    ) -> PlatformIntegrationsResponse:
+        actor_id = getattr(request.state, "actor_id", None)
+        if not isinstance(actor_id, UUID):
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied")
+        if platform_integrations_use_case is None:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Platform integrations are unavailable",
+            )
+        try:
+            integrations = await platform_integrations_use_case.execute(
+                actor_id=actor_id,
+                organization_id=organization_id,
+                connection_id=connection_id,
+                correlation_id=request.state.correlation_id,
+            )
+        except AccessDeniedError as error:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN, detail="Access denied"
+            ) from error
+        except PlatformHealthUnavailableError as error:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Platform integrations are unavailable",
+            ) from error
+        except PlatformControlUnavailableError as error:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Platform control service is unavailable",
+            ) from error
+        return PlatformIntegrationsResponse(
+            organization_id=str(organization_id),
+            connection_id=str(connection_id),
+            platform=integrations.platform,
+            discord_bot_status=integrations.discord_bot_status,
+            creator_platforms_status=integrations.creator_platforms_status,
+            creator_poll_interval_seconds=integrations.creator_poll_interval_seconds,
+            creator_sources=[
+                {"platform": item.platform, "total": item.total, "active": item.active}
+                for item in integrations.creator_sources
+            ],
+            muxivo_core_status=integrations.muxivo_core_status,
+            database_status=integrations.database_status,
         )
 
     @app.get(
