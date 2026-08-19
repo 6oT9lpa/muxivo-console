@@ -16,3 +16,15 @@ class PlatformWelcomeSettingsResponse(BaseModel):
     is_enabled: bool
     rules_channel_id: str | None
     roles_channel_id: str | None
+
+
+class PlatformWelcomeSettingsUpdateRequest(BaseModel):
+    title: str
+    description: str
+    thumbnail_url: str | None = None
+    footer_text: str | None = None
+    footer_icon_url: str | None = None
+    color: int
+    is_enabled: bool
+    rules_channel_id: str | None = None
+    roles_channel_id: str | None = None

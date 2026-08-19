@@ -77,6 +77,20 @@ class PlatformWelcomeSettingsReader(Protocol):
     ) -> PlatformWelcomeSettings: ...
 
 
+class PlatformWelcomeSettingsWriter(Protocol):
+    """Updates welcome configuration through a resource-bound Control API command."""
+
+    async def update_welcome_settings_for_connection(
+        self,
+        *,
+        organization_id: UUID,
+        actor_id: UUID,
+        external_resource_id: str,
+        settings: PlatformWelcomeSettings,
+        correlation_id: UUID,
+    ) -> PlatformWelcomeSettings: ...
+
+
 class OrganizationAuthorizer(Protocol):
     """Inbound policy port, evaluated before every Console use case."""
 

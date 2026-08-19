@@ -91,6 +91,7 @@ class DiscordControlApiCatalog:
     timeout: float = 5.0
     transport: httpx.AsyncBaseTransport | None = None
     allow_insecure_http: bool = False
+    identities: LoginIdentityReader | None = None
 
     def __post_init__(self) -> None:
         _validate_control_base_url(self.base_url, self.allow_insecure_http)
@@ -242,6 +243,48 @@ class DiscordControlApiCatalog:
         except (httpx.HTTPError, ValueError, json.JSONDecodeError) as error:
             raise PlatformControlUnavailableError(
                 "Discord Control API welcome settings request failed."
+            ) from error
+        return _parse_discord_welcome_settings(payload)
+
+    async def update_welcome_settings_for_connection(
+        self,
+        *,
+        organization_id: UUID,
+        actor_id: UUID,
+        external_resource_id: str,
+        settings: PlatformWelcomeSettings,
+        correlation_id: UUID,
+    ) -> PlatformWelcomeSettings:
+        if self.identities is None:
+            raise PlatformControlUnavailableError("Discord identity verification is unavailable.")
+        platform_subject = await self.identities.find_provider_subject(
+            user_id=actor_id, provider=LoginIdentityProvider.DISCORD
+        )
+        if platform_subject is None:
+            raise PlatformControlUnavailableError("A linked Discord identity is required.")
+        assertion = self.assertions.issue(
+            actor_id=actor_id,
+            organization_id=organization_id,
+            resource=AuthorizationResource.CONTROL_MODULES,
+            action=AuthorizationAction.READ,
+            correlation_id=correlation_id,
+            platform_subject=platform_subject,
+            platform_resource_id=external_resource_id,
+        )
+        try:
+            async with httpx.AsyncClient(
+                base_url=self.base_url, timeout=self.timeout, transport=self.transport
+            ) as client:
+                response = await client.put(
+                    f"/control/v1/organizations/{organization_id}/connections/{external_resource_id}/welcome-settings",
+                    headers={"Authorization": f"Bearer {assertion}"},
+                    json=_welcome_settings_payload(settings),
+                )
+                response.raise_for_status()
+                payload = response.json()
+        except (httpx.HTTPError, ValueError, json.JSONDecodeError) as error:
+            raise PlatformControlUnavailableError(
+                "Discord Control API welcome settings update failed."
             ) from error
         return _parse_discord_welcome_settings(payload)
 
@@ -470,6 +513,20 @@ def _parse_discord_welcome_settings(payload: Any) -> PlatformWelcomeSettings:
         raise PlatformControlUnavailableError(
             "Discord Control API returned invalid welcome settings."
         ) from error
+
+
+def _welcome_settings_payload(settings: PlatformWelcomeSettings) -> dict[str, Any]:
+    return {
+        "title": settings.title,
+        "description": settings.description,
+        "thumbnail_url": settings.thumbnail_url,
+        "footer_text": settings.footer_text,
+        "footer_icon_url": settings.footer_icon_url,
+        "color": settings.color,
+        "is_enabled": settings.is_enabled,
+        "rules_channel_id": settings.rules_channel_id,
+        "roles_channel_id": settings.roles_channel_id,
+    }
 
 
 def _health_signal_key(name: str) -> str:
