@@ -19,6 +19,9 @@ from muxivo_console.application.get_platform_welcome_settings import (
 )
 from muxivo_console.application.link_verified_identity import LinkVerifiedIdentity
 from muxivo_console.application.list_control_modules import ListControlModules
+from muxivo_console.application.list_organization_audit_events import (
+    ListOrganizationAuditEvents,
+)
 from muxivo_console.application.list_platform_connection_channels import (
     ListPlatformConnectionChannels,
 )
@@ -44,7 +47,10 @@ from muxivo_console.infrastructure.discord_control_api import (
 )
 from muxivo_console.infrastructure.discord_oauth import DiscordOAuthClient
 from muxivo_console.infrastructure.naming import RandomSuffixOrganizationSlugGenerator
-from muxivo_console.infrastructure.persistence.audit_repository import SqlAlchemyAuditEventWriter
+from muxivo_console.infrastructure.persistence.audit_repository import (
+    SqlAlchemyAuditEventReader,
+    SqlAlchemyAuditEventWriter,
+)
 from muxivo_console.infrastructure.persistence.connection_repository import (
     SqlAlchemyPlatformConnectionReader,
     SqlAlchemyPlatformConnectionWriter,
@@ -161,6 +167,12 @@ def create_production_app(settings: ConsoleSettings):
             SqlAlchemyOrganizationMembershipReader(sessions)
         ),
         connections=SqlAlchemyPlatformConnectionReader(sessions),
+    )
+    audit_events = ListOrganizationAuditEvents(
+        authorizer=MembershipOrganizationAuthorizer(
+            SqlAlchemyOrganizationMembershipReader(sessions)
+        ),
+        audit_events=SqlAlchemyAuditEventReader(sessions),
     )
     platform_health = GetPlatformHealth(
         authorizer=MembershipOrganizationAuthorizer(
@@ -319,6 +331,7 @@ def create_production_app(settings: ConsoleSettings):
         organization_creation_use_case=organizations,
         platform_connection_registration_use_case=platform_connections,
         platform_connections_use_case=listed_platform_connections,
+        audit_events_use_case=audit_events,
         platform_health_use_case=platform_health,
         platform_dashboard_use_case=platform_dashboard,
         platform_channels_use_case=platform_channels,

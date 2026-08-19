@@ -8,7 +8,7 @@ from muxivo_console.domain.ai_moderation_policy import (
     PlatformAiModerationPolicy,
     PlatformAiModerationPolicyState,
 )
-from muxivo_console.domain.audit import AuditEvent
+from muxivo_console.domain.audit import AuditEvent, AuditLogEntry
 from muxivo_console.domain.authorization import AuthorizationDecision, AuthorizationRequest
 from muxivo_console.domain.channel_purposes import ChannelPurpose, PlatformChannelPurposes
 from muxivo_console.domain.channels import PlatformChannelCatalog
@@ -169,6 +169,14 @@ class AuditEventWriter(Protocol):
     """Records one secret-free audit fact for an externally executed command."""
 
     async def record(self, event: AuditEvent) -> None: ...
+
+
+class AuditEventReader(Protocol):
+    """Reads keyset-paginated, organization-scoped, secret-free audit projections."""
+
+    async def list_for_organization(
+        self, *, organization_id: UUID, after_id: UUID | None, limit: int
+    ) -> Sequence[AuditLogEntry]: ...
 
 
 class OrganizationMembershipReader(Protocol):

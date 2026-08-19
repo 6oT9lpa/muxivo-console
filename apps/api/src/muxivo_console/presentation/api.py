@@ -50,6 +50,9 @@ from muxivo_console.application.list_control_modules import (
     ListControlModules,
     PlatformControlUnavailableError,
 )
+from muxivo_console.application.list_organization_audit_events import (
+    ListOrganizationAuditEvents,
+)
 from muxivo_console.application.list_platform_connection_channels import (
     ListPlatformConnectionChannels,
 )
@@ -84,6 +87,7 @@ from muxivo_console.contracts.v1.ai_moderation_policy import (
     AiModerationPolicyUpdateRequest,
     PlatformAiModerationPolicyResponse,
 )
+from muxivo_console.contracts.v1.audit_events import AuditEventListResponse, AuditEventResponse
 from muxivo_console.contracts.v1.authentication import (
     EmailPasswordLoginRequest,
     EmailPasswordRegistrationRequest,
@@ -151,6 +155,7 @@ def create_app(
     organization_creation_use_case: CreateOrganization | None = None,
     platform_connection_registration_use_case: RegisterPlatformConnection | None = None,
     platform_connections_use_case: ListPlatformConnections | None = None,
+    audit_events_use_case: ListOrganizationAuditEvents | None = None,
     platform_health_use_case: GetPlatformHealth | None = None,
     platform_dashboard_use_case: GetPlatformDashboardSummary | None = None,
     platform_channels_use_case: ListPlatformConnectionChannels | None = None,
@@ -218,6 +223,51 @@ def create_app(
     @app.get("/healthz", tags=["operations"])
     async def healthz() -> dict[str, str]:
         return {"status": "ok"}
+
+    @app.get(
+        "/api/v1/organizations/{organization_id}/audit-events",
+        response_model=AuditEventListResponse,
+        tags=["audit-events"],
+    )
+    async def list_organization_audit_events(
+        organization_id: UUID, request: Request, after: UUID | None = None, limit: int = 50
+    ) -> AuditEventListResponse:
+        actor_id = getattr(request.state, "actor_id", None)
+        if not isinstance(actor_id, UUID):
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied")
+        if audit_events_use_case is None:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Organization audit events are unavailable",
+            )
+        try:
+            page = await audit_events_use_case.execute(
+                actor_id=actor_id, organization_id=organization_id, after_id=after, limit=limit
+            )
+        except ValueError as error:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(error)
+            ) from error
+        except AccessDeniedError as error:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN, detail="Access denied"
+            ) from error
+        return AuditEventListResponse(
+            items=[
+                AuditEventResponse(
+                    id=str(entry.id),
+                    correlation_id=str(entry.correlation_id),
+                    actor_id=str(entry.actor_id) if entry.actor_id else None,
+                    action=entry.action,
+                    resource_type=entry.resource_type,
+                    resource_id=entry.resource_id,
+                    result=entry.result,
+                    created_at=entry.created_at,
+                )
+                for entry in page.items
+            ],
+            next_cursor=str(page.next_cursor) if page.next_cursor else None,
+        )
 
     @app.post(
         "/api/v1/identity-links/discord/authorizations",

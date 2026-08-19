@@ -22,6 +22,7 @@ class AuthorizationResource(StrEnum):
 
     CONTROL_MODULES = "console.control_modules"
     PLATFORM_CONNECTIONS = "console.platform_connections"
+    AUDIT_EVENTS = "console.audit_events"
 
 
 @dataclass(frozen=True, slots=True)
