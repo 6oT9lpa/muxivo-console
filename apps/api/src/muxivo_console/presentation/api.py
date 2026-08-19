@@ -26,11 +26,11 @@ from muxivo_console.application.create_organization import (
     CreateOrganizationCommand,
     OrganizationCreationRejectedError,
 )
-from muxivo_console.application.get_platform_dashboard_summary import (
-    GetPlatformDashboardSummary,
-)
 from muxivo_console.application.get_platform_channel_purposes import (
     GetPlatformChannelPurposes,
+)
+from muxivo_console.application.get_platform_dashboard_summary import (
+    GetPlatformDashboardSummary,
 )
 from muxivo_console.application.get_platform_health import (
     GetPlatformHealth,
@@ -75,13 +75,13 @@ from muxivo_console.contracts.v1.organizations import (
     OrganizationCreateRequest,
     OrganizationResponse,
 )
-from muxivo_console.contracts.v1.platform_channels import (
-    PlatformChannelCatalogResponse,
-    PlatformChannelResponse,
-)
 from muxivo_console.contracts.v1.platform_channel_purposes import (
     ChannelPurposeAssignmentResponse,
     PlatformChannelPurposesResponse,
+)
+from muxivo_console.contracts.v1.platform_channels import (
+    PlatformChannelCatalogResponse,
+    PlatformChannelResponse,
 )
 from muxivo_console.contracts.v1.platform_connections import (
     PlatformConnectionCreateRequest,
