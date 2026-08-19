@@ -14,3 +14,8 @@ class PlatformChannelPurposesResponse(BaseModel):
     connection_id: str
     platform: Platform
     items: list[ChannelPurposeAssignmentResponse]
+
+
+class ChannelPurposeUpdateRequest(BaseModel):
+    purpose: ChannelPurpose
+    channel_id: str
