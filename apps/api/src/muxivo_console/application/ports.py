@@ -5,8 +5,8 @@ from uuid import UUID
 from muxivo_console.domain.activity import ControlModule, Platform
 from muxivo_console.domain.audit import AuditEvent
 from muxivo_console.domain.authorization import AuthorizationDecision, AuthorizationRequest
-from muxivo_console.domain.channels import PlatformChannelCatalog
 from muxivo_console.domain.channel_purposes import PlatformChannelPurposes
+from muxivo_console.domain.channels import PlatformChannelCatalog
 from muxivo_console.domain.connections import PlatformConnection
 from muxivo_console.domain.dashboard import PlatformDashboardSummary
 from muxivo_console.domain.health import PlatformHealth

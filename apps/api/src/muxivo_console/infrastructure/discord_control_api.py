@@ -21,8 +21,8 @@ from muxivo_console.domain.activity import (
     Platform,
 )
 from muxivo_console.domain.authorization import AuthorizationAction, AuthorizationResource
-from muxivo_console.domain.channels import ChannelKind, PlatformChannel, PlatformChannelCatalog
 from muxivo_console.domain.channel_purposes import ChannelPurpose, PlatformChannelPurposes
+from muxivo_console.domain.channels import ChannelKind, PlatformChannel, PlatformChannelCatalog
 from muxivo_console.domain.dashboard import PlatformDashboardSummary
 from muxivo_console.domain.health import HealthSignal, HealthStatus, PlatformHealth
 from muxivo_console.domain.identity import LoginIdentityProvider
