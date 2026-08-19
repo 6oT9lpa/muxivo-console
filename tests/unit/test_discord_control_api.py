@@ -8,6 +8,7 @@ import pytest
 from muxivo_console.application.list_control_modules import PlatformControlUnavailableError
 from muxivo_console.domain.activity import Platform
 from muxivo_console.domain.authorization import AuthorizationAction, AuthorizationResource
+from muxivo_console.domain.channel_purposes import ChannelPurpose
 from muxivo_console.domain.welcome import PlatformWelcomeSettings
 from muxivo_console.infrastructure.discord_control_api import (
     DiscordControlApiCatalog,
@@ -362,6 +363,39 @@ async def test_catalog_updates_welcome_settings_with_linked_discord_identity() -
     )
 
     assert result.title == "Welcome!"
+
+
+@pytest.mark.asyncio
+async def test_catalog_updates_channel_purpose_with_a_resource_bound_identity() -> None:
+    actor_id, organization_id, correlation_id = uuid4(), uuid4(), uuid4()
+    guild_id = "123456789012345678"
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        assert request.method == "PUT"
+        assert request.url.path.endswith(f"/{guild_id}/channel-purposes")
+        claims = decode_claims(request.headers["Authorization"].removeprefix("Bearer "))
+        assert claims["platform_subject"] == "123456789012345678"
+        assert claims["platform_resource_id"] == guild_id
+        assert json.loads(request.content) == {"purpose": "welcome", "channel_id": 10}
+        return httpx.Response(200, json={"guild_id": guild_id, "items": {"welcome": "10"}})
+
+    catalog = DiscordControlApiCatalog(
+        "http://discord-control.test",
+        assertion_issuer(),
+        transport=httpx.MockTransport(handler),
+        allow_insecure_http=True,
+        identities=Identities(),
+    )
+    result = await catalog.update_channel_purpose_for_connection(
+        actor_id=actor_id,
+        organization_id=organization_id,
+        external_resource_id=guild_id,
+        correlation_id=correlation_id,
+        purpose=ChannelPurpose.WELCOME,
+        channel_id="10",
+    )
+
+    assert result.assignments == {ChannelPurpose.WELCOME: "10"}
 
 
 def welcome_settings() -> PlatformWelcomeSettings:

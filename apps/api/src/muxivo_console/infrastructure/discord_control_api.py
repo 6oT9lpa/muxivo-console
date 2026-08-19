@@ -262,7 +262,8 @@ class DiscordControlApiCatalog:
         subject = await self.identities.find_provider_subject(
             user_id=actor_id, provider=LoginIdentityProvider.DISCORD
         )
-        if subject is None or not channel_id.isdecimal():
+        parsed_channel_id = _discord_snowflake_or_none(channel_id)
+        if subject is None or parsed_channel_id is None:
             raise PlatformControlUnavailableError(
                 "A linked Discord identity and channel are required."
             )
@@ -283,9 +284,8 @@ class DiscordControlApiCatalog:
                     f"/control/v1/organizations/{organization_id}/connections/{external_resource_id}/channel-purposes",
                     headers={"Authorization": f"Bearer {assertion}"},
                     json={
-                        "guild_id": int(external_resource_id),
                         "purpose": purpose.value,
-                        "channel_id": int(channel_id),
+                        "channel_id": parsed_channel_id,
                     },
                 )
                 response.raise_for_status()

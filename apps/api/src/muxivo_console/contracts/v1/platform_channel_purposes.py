@@ -1,4 +1,4 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from muxivo_console.domain.activity import Platform
 from muxivo_console.domain.channel_purposes import ChannelPurpose
@@ -18,4 +18,4 @@ class PlatformChannelPurposesResponse(BaseModel):
 
 class ChannelPurposeUpdateRequest(BaseModel):
     purpose: ChannelPurpose
-    channel_id: str
+    channel_id: str = Field(pattern=r"^\d{1,20}$")
