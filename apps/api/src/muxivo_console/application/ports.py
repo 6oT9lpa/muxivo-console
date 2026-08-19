@@ -134,6 +134,12 @@ class OrganizationAuthorizer(Protocol):
     async def authorize(self, request: AuthorizationRequest) -> AuthorizationDecision: ...
 
 
+class AuditEventWriter(Protocol):
+    """Records one secret-free audit fact for an externally executed command."""
+
+    async def record(self, event: AuditEvent) -> None: ...
+
+
 class OrganizationMembershipReader(Protocol):
     """Outbound port for the Console-owned organization membership store."""
 
