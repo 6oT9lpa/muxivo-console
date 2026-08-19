@@ -237,6 +237,56 @@ async def test_catalog_reads_assertion_bound_secret_free_integrations() -> None:
 
 
 @pytest.mark.asyncio
+async def test_catalog_reads_assertion_bound_aggregate_server_statistics() -> None:
+    actor_id, organization_id, correlation_id = uuid4(), uuid4(), uuid4()
+    resource_id = "123456789012345678"
+    received_authorization: str | None = None
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        nonlocal received_authorization
+        received_authorization = request.headers["Authorization"]
+        assert request.url.path.endswith(f"/connections/{resource_id}/server-stats")
+        return httpx.Response(
+            200,
+            json={
+                "summary": {
+                    "period_days": 7,
+                    "total_messages": 150,
+                    "active_users": 42,
+                    "active_channels": 8,
+                    "current_member_count": 200,
+                    "total_voice_minutes": 360,
+                    "joins": 5,
+                    "leaves": 2,
+                    "moderation_events": 3,
+                    "member_details": ["must not be parsed by Console"],
+                }
+            },
+        )
+
+    catalog = DiscordControlApiCatalog(
+        "http://discord-control.test",
+        assertion_issuer(),
+        transport=httpx.MockTransport(handler),
+        allow_insecure_http=True,
+        identities=Identities(),
+    )
+    statistics = await catalog.get_server_statistics_for_connection(
+        actor_id=actor_id,
+        organization_id=organization_id,
+        external_resource_id=resource_id,
+        correlation_id=correlation_id,
+    )
+
+    assert statistics.total_messages == 150
+    assert statistics.current_member_count == 200
+    assert received_authorization is not None
+    claims = decode_claims(received_authorization.removeprefix("Bearer "))
+    assert claims["platform_subject"] == "123456789012345678"
+    assert claims["platform_resource_id"] == resource_id
+
+
+@pytest.mark.asyncio
 async def test_catalog_maps_aggregate_discord_health_without_platform_secrets() -> None:
     actor_id, organization_id, correlation_id = uuid4(), uuid4(), uuid4()
 

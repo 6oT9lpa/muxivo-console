@@ -54,6 +54,9 @@ from muxivo_console.application.get_platform_health import (
     PlatformHealthUnavailableError,
 )
 from muxivo_console.application.get_platform_integrations import GetPlatformIntegrations
+from muxivo_console.application.get_platform_server_statistics import (
+    GetPlatformServerStatistics,
+)
 from muxivo_console.application.get_platform_welcome_settings import (
     GetPlatformWelcomeSettings,
 )
@@ -138,6 +141,9 @@ from muxivo_console.contracts.v1.platform_health import (
     PlatformHealthResponse,
 )
 from muxivo_console.contracts.v1.platform_integrations import PlatformIntegrationsResponse
+from muxivo_console.contracts.v1.platform_server_statistics import (
+    PlatformServerStatisticsResponse,
+)
 from muxivo_console.contracts.v1.platform_welcome import (
     PlatformWelcomeSettingsResponse,
     PlatformWelcomeSettingsUpdateRequest,
@@ -222,6 +228,7 @@ def create_app(
     platform_ai_moderation_summary_use_case: GetPlatformAiModerationSummary | None = None,
     platform_bot_settings_use_case: GetPlatformBotSettings | None = None,
     platform_integrations_use_case: GetPlatformIntegrations | None = None,
+    platform_server_statistics_use_case: GetPlatformServerStatistics | None = None,
     platform_ai_moderation_policy_use_case: GetPlatformAiModerationPolicy | None = None,
     platform_ai_moderation_policy_update_use_case: UpdatePlatformAiModerationPolicy | None = None,
     platform_channel_purpose_update_use_case: UpdatePlatformChannelPurpose | None = None,
@@ -816,6 +823,62 @@ def create_app(
             activity_rotation_enabled=settings.activity_rotation_enabled,
             activity_rotation_interval_seconds=settings.activity_rotation_interval_seconds,
             retention_days=dict(settings.retention_days),
+        )
+
+    @app.get(
+        "/api/v1/organizations/{organization_id}/platform-connections/{connection_id}/server-statistics",
+        response_model=PlatformServerStatisticsResponse,
+        tags=["platform-server-statistics"],
+    )
+    async def get_platform_server_statistics(
+        organization_id: UUID,
+        connection_id: UUID,
+        request: Request,
+    ) -> PlatformServerStatisticsResponse:
+        actor_id = getattr(request.state, "actor_id", None)
+        if not isinstance(actor_id, UUID):
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied")
+        if platform_server_statistics_use_case is None:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Platform server statistics are unavailable",
+            )
+        try:
+            statistics = await platform_server_statistics_use_case.execute(
+                actor_id=actor_id,
+                organization_id=organization_id,
+                connection_id=connection_id,
+                correlation_id=request.state.correlation_id,
+            )
+        except AccessDeniedError as error:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Access denied",
+            ) from error
+        except PlatformHealthUnavailableError as error:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Platform server statistics are unavailable",
+            ) from error
+        except PlatformControlUnavailableError as error:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Platform control service is unavailable",
+            ) from error
+        return PlatformServerStatisticsResponse(
+            organization_id=str(organization_id),
+            connection_id=str(connection_id),
+            platform=statistics.platform,
+            period_days=statistics.period_days,
+            total_messages=statistics.total_messages,
+            active_users=statistics.active_users,
+            active_channels=statistics.active_channels,
+            current_member_count=statistics.current_member_count,
+            total_voice_minutes=statistics.total_voice_minutes,
+            joins=statistics.joins,
+            leaves=statistics.leaves,
+            net_member_growth=statistics.joins - statistics.leaves,
+            moderation_events=statistics.moderation_events,
         )
 
     @app.get(

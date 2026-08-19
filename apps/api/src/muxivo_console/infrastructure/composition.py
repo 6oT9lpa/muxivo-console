@@ -18,6 +18,9 @@ from muxivo_console.application.get_platform_channel_purposes import GetPlatform
 from muxivo_console.application.get_platform_dashboard_summary import GetPlatformDashboardSummary
 from muxivo_console.application.get_platform_health import GetPlatformHealth
 from muxivo_console.application.get_platform_integrations import GetPlatformIntegrations
+from muxivo_console.application.get_platform_server_statistics import (
+    GetPlatformServerStatistics,
+)
 from muxivo_console.application.get_platform_welcome_settings import (
     GetPlatformWelcomeSettings,
 )
@@ -246,6 +249,11 @@ def create_production_app(
         SqlAlchemyPlatformConnectionReader(sessions),
         {Platform.DISCORD: discord_control_api},
     )
+    platform_server_statistics = GetPlatformServerStatistics(
+        MembershipOrganizationAuthorizer(SqlAlchemyOrganizationMembershipReader(sessions)),
+        SqlAlchemyPlatformConnectionReader(sessions),
+        {Platform.DISCORD: discord_control_api},
+    )
     platform_ai_moderation_policy = GetPlatformAiModerationPolicy(
         authorizer=MembershipOrganizationAuthorizer(
             SqlAlchemyOrganizationMembershipReader(sessions)
@@ -375,6 +383,7 @@ def create_production_app(
         platform_ai_moderation_summary_use_case=platform_ai_moderation_summary,
         platform_bot_settings_use_case=platform_bot_settings,
         platform_integrations_use_case=platform_integrations,
+        platform_server_statistics_use_case=platform_server_statistics,
         platform_ai_moderation_policy_use_case=platform_ai_moderation_policy,
         platform_ai_moderation_policy_update_use_case=platform_ai_moderation_policy_update,
         platform_channel_purpose_update_use_case=platform_channel_purpose_update,

@@ -27,6 +27,9 @@ from muxivo_console.domain.identity_linking import IdentityLinkTransaction
 from muxivo_console.domain.integrations import PlatformIntegrations
 from muxivo_console.domain.oauth_login import OAuthLoginTransaction
 from muxivo_console.domain.organizations import Organization, OrganizationMembership
+from muxivo_console.domain.server_statistics import (
+    PlatformServerStatistics,
+)
 from muxivo_console.domain.sessions import AuthSession
 from muxivo_console.domain.welcome import PlatformWelcomeSettings
 
@@ -82,6 +85,19 @@ class PlatformIntegrationsReader(Protocol):
         external_resource_id: str,
         correlation_id: UUID,
     ) -> PlatformIntegrations: ...
+
+
+class PlatformServerStatisticsReader(Protocol):
+    """Reads aggregate resource statistics after platform-native reauthorization."""
+
+    async def get_server_statistics_for_connection(
+        self,
+        *,
+        organization_id: UUID,
+        actor_id: UUID,
+        external_resource_id: str,
+        correlation_id: UUID,
+    ) -> PlatformServerStatistics: ...
 
 
 class PlatformChannelCatalogReader(Protocol):

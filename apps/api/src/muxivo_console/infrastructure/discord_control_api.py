@@ -36,6 +36,7 @@ from muxivo_console.domain.dashboard import PlatformDashboardSummary
 from muxivo_console.domain.health import HealthSignal, HealthStatus, PlatformHealth
 from muxivo_console.domain.identity import LoginIdentityProvider
 from muxivo_console.domain.integrations import IntegrationSourceCount, PlatformIntegrations
+from muxivo_console.domain.server_statistics import PlatformServerStatistics
 from muxivo_console.domain.welcome import PlatformWelcomeSettings
 
 
@@ -272,6 +273,50 @@ class DiscordControlApiCatalog:
                 "Discord Control API integrations request failed."
             ) from error
         return _parse_discord_integrations(payload)
+
+    async def get_server_statistics_for_connection(
+        self,
+        *,
+        organization_id: UUID,
+        actor_id: UUID,
+        external_resource_id: str,
+        correlation_id: UUID,
+    ) -> PlatformServerStatistics:
+        if self.identities is None:
+            raise PlatformControlUnavailableError("Discord identity verification is unavailable.")
+        subject = await self.identities.find_provider_subject(
+            user_id=actor_id,
+            provider=LoginIdentityProvider.DISCORD,
+        )
+        if subject is None:
+            raise PlatformControlUnavailableError("A linked Discord identity is required.")
+        assertion = self.assertions.issue(
+            actor_id=actor_id,
+            organization_id=organization_id,
+            resource=AuthorizationResource.CONTROL_MODULES,
+            action=AuthorizationAction.READ,
+            correlation_id=correlation_id,
+            platform_subject=subject,
+            platform_resource_id=external_resource_id,
+        )
+        try:
+            async with httpx.AsyncClient(
+                base_url=self.base_url,
+                timeout=self.timeout,
+                transport=self.transport,
+            ) as client:
+                response = await client.get(
+                    f"/control/v1/organizations/{organization_id}/connections/"
+                    f"{external_resource_id}/server-stats",
+                    headers={"Authorization": f"Bearer {assertion}"},
+                )
+                response.raise_for_status()
+                payload = response.json()
+        except (httpx.HTTPError, ValueError, json.JSONDecodeError) as error:
+            raise PlatformControlUnavailableError(
+                "Discord Control API server statistics request failed."
+            ) from error
+        return _parse_discord_server_statistics(payload)
 
     async def get_channel_catalog_for_connection(
         self,
@@ -733,6 +778,37 @@ def _parse_discord_dashboard(payload: Any) -> PlatformDashboardSummary:
     except (KeyError, TypeError, ValueError) as error:
         raise PlatformControlUnavailableError(
             "Discord Control API returned an invalid dashboard summary."
+        ) from error
+
+
+def _parse_discord_server_statistics(payload: Any) -> PlatformServerStatistics:
+    if not isinstance(payload, dict) or not isinstance(payload.get("summary"), dict):
+        raise PlatformControlUnavailableError(
+            "Discord Control API returned an invalid server statistics payload."
+        )
+    summary = payload["summary"]
+    fields = (
+        "period_days",
+        "total_messages",
+        "active_users",
+        "active_channels",
+        "current_member_count",
+        "total_voice_minutes",
+        "joins",
+        "leaves",
+        "moderation_events",
+    )
+    try:
+        values = {field: summary[field] for field in fields}
+        if not all(
+            isinstance(value, int) and not isinstance(value, bool)
+            for value in values.values()
+        ):
+            raise ValueError("Server statistic must be an integer.")
+        return PlatformServerStatistics(platform=Platform.DISCORD, **values)
+    except (KeyError, TypeError, ValueError) as error:
+        raise PlatformControlUnavailableError(
+            "Discord Control API returned invalid aggregate server statistics."
         ) from error
 
 

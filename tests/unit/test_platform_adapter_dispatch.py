@@ -8,6 +8,9 @@ from muxivo_console.application.get_platform_health import (
     GetPlatformHealth,
     PlatformHealthUnavailableError,
 )
+from muxivo_console.application.get_platform_server_statistics import (
+    GetPlatformServerStatistics,
+)
 from muxivo_console.application.list_platform_connection_channels import (
     ListPlatformConnectionChannels,
 )
@@ -17,6 +20,7 @@ from muxivo_console.domain.channels import ChannelKind, PlatformChannel, Platfor
 from muxivo_console.domain.connections import ConnectionStatus, PlatformConnection
 from muxivo_console.domain.dashboard import PlatformDashboardSummary
 from muxivo_console.domain.health import HealthSignal, HealthStatus, PlatformHealth
+from muxivo_console.domain.server_statistics import PlatformServerStatistics
 
 
 class Authorizer:
@@ -56,6 +60,10 @@ class TwitchAdapter:
             (HealthSignal("twitch.chat", "Chat", "Connected", HealthStatus.OPERATIONAL, 40),),
         )
 
+    async def get_server_statistics_for_connection(self, **_: object) -> PlatformServerStatistics:
+        self.calls.append("server-statistics")
+        return PlatformServerStatistics(Platform.TWITCH, 7, 12, 4, 1, 20, 0, 1, 0, 0)
+
 
 def connection() -> PlatformConnection:
     return PlatformConnection(
@@ -93,6 +101,22 @@ async def test_channels_use_the_adapter_registered_for_the_connection_platform()
 
     assert result.platform is Platform.TWITCH
     assert adapter.calls == ["channels"]
+
+
+@pytest.mark.asyncio
+async def test_server_statistics_uses_the_adapter_registered_for_the_connection_platform() -> None:
+    adapter, current = TwitchAdapter(), connection()
+    result = await GetPlatformServerStatistics(
+        Authorizer(), Connections(current), {Platform.TWITCH: adapter}
+    ).execute(
+        actor_id=uuid4(),
+        organization_id=current.organization_id,
+        connection_id=current.id,
+        correlation_id=uuid4(),
+    )
+
+    assert result.platform is Platform.TWITCH
+    assert adapter.calls == ["server-statistics"]
 
 
 @pytest.mark.asyncio
