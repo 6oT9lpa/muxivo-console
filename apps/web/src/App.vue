@@ -6,6 +6,8 @@ const email = ref("");
 const password = ref("");
 const organizationName = ref("");
 const authenticated = ref(false);
+const landingTab = ref<"overview" | "about" | "platforms">("overview");
+const loginOpen = ref(false);
 const busy = ref(false);
 const notice = ref("");
 const organizationId = ref("");
@@ -184,6 +186,7 @@ async function signIn() {
       body: JSON.stringify({ email: email.value, password: password.value }),
     });
     authenticated.value = true;
+    loginOpen.value = false;
     password.value = "";
     notice.value = "Signed in to Muxivo Console.";
   } catch (error) {
@@ -665,13 +668,20 @@ function messageFor(error: unknown): string {
 </script>
 
 <template>
-  <main class="shell">
-    <header><span class="eyebrow">MUXIVO</span><h1>Console</h1><p>One browser control plane for every Muxivo bot platform.</p></header>
-    <section v-if="!authenticated" class="card">
-      <h2>Sign in</h2>
-      <form @submit.prevent="signIn"><label>Email<input v-model="email" type="email" autocomplete="email" required /></label><label>Password<input v-model="password" type="password" autocomplete="current-password" minlength="12" required /></label><button :disabled="busy">{{ busy ? "Signing in…" : "Sign in" }}</button></form>
-      <div class="identity-link"><h3>Or continue with Discord</h3><p>Discord signs in only to an account you have already linked.</p><button type="button" :disabled="busy" @click="signInWithDiscord">Sign in with Discord</button></div>
-    </section>
+  <main :class="['shell', { 'public-shell': !authenticated }]">
+    <template v-if="!authenticated">
+      <nav class="public-nav" aria-label="Main navigation">
+        <a class="brand" href="#top" @click.prevent="landingTab = 'overview'"><span class="brand-mark">M</span><span><strong>MUXIVO</strong><small>bot ecosystem</small></span></a>
+        <div class="public-tabs" role="tablist"><button :class="{ active: landingTab === 'overview' }" role="tab" @click="landingTab = 'overview'">We are Muxivo</button><button :class="{ active: landingTab === 'about' }" role="tab" @click="landingTab = 'about'">Get to know us</button><button :class="{ active: landingTab === 'platforms' }" role="tab" @click="landingTab = 'platforms'">Platforms</button></div>
+        <button class="auth-button" type="button" @click="loginOpen = true">Sign in</button>
+      </nav>
+      <section id="top" class="hero" aria-live="polite">
+        <template v-if="landingTab === 'overview'"><span class="eyebrow">MUXIVO BOT ECOSYSTEM</span><div class="hero-copy"><h1>BE A PART OF<br />SOMETHING<br />MARVELLOUS</h1><p>Muxivo brings modular Discord control, creator tools and community automation into one beautiful, browser-first control surface.</p></div><div class="feature-grid"><article><span>01</span><h2>Moderation with AI signals</h2><p>Clear moderation controls that remain owned by your community.</p></article><article><span>02</span><h2>Creator & developer tools</h2><p>Alerts, publishing and operations designed for active servers.</p></article><article><span>03</span><h2>One control surface</h2><p>Console unifies bot operations without exposing platform credentials.</p></article></div></template>
+        <template v-else-if="landingTab === 'about'"><span class="eyebrow">GET TO KNOW US</span><div class="hero-copy about-copy"><h1>ONE HOME<br />FOR EVERY<br />COMMUNITY BOT</h1><p>Start with Discord today. Muxivo Console is designed as an extensible foundation for the platforms your community will use next.</p></div></template>
+        <template v-else><span class="eyebrow">PLATFORM ROADMAP</span><div class="hero-copy about-copy"><h1>MORE BOTS.<br />ONE CONSOLE.</h1><p>Discord is available first. Twitch and Telegram are planned integrations and will appear here when their browser-ready contracts are complete.</p></div><div class="platform-grid"><article class="platform-ready"><strong>Discord</strong><span>Available now</span></article><article><strong>Twitch bot</strong><span>Coming soon</span><button disabled>Not available yet</button></article><article><strong>Telegram bot</strong><span>Coming soon</span><button disabled>Not available yet</button></article></div></template>
+      </section>
+      <section v-if="loginOpen" class="login-overlay" aria-label="Sign in to Muxivo Console"><div class="login-panel"><button class="close-login" type="button" aria-label="Close sign in" @click="loginOpen = false">×</button><span class="eyebrow">MUXIVO CONSOLE</span><h2>Welcome back.</h2><p>Sign in to manage the bot connections you own.</p><form @submit.prevent="signIn"><label>Email<input v-model="email" type="email" autocomplete="email" required /></label><label>Password<input v-model="password" type="password" autocomplete="current-password" minlength="12" required /></label><button :disabled="busy">{{ busy ? "Signing in…" : "Sign in to Console" }}</button></form><div class="identity-link"><h3>Continue with Discord</h3><p>Use an account that has already been linked to Discord.</p><button type="button" :disabled="busy" @click="signInWithDiscord">Sign in with Discord</button></div></div></section>
+    </template>
     <section v-else class="card">
       <div class="section-heading"><h2>Workspace</h2><button type="button" :disabled="busy" @click="signOut">Sign out</button></div>
       <h2>Create an organization</h2>
