@@ -31,6 +31,7 @@ class SqlAlchemyAuthSessionWriter:
                                 expires_at=session.expires_at,
                                 revoked_at=session.revoked_at,
                                 assurance_level=session.assurance_level.value,
+                                created_at=session.authenticated_at,
                             ),
                             AuditEventRecord(
                                 id=audit_event.id,
@@ -72,6 +73,7 @@ class SqlAlchemyAuthSessionReader:
                 expires_at=record.expires_at,
                 assurance_level=SessionAssuranceLevel(record.assurance_level),
                 revoked_at=record.revoked_at,
+                authenticated_at=record.created_at,
             )
         except ValueError:
             return None

@@ -1,6 +1,7 @@
 """Resolve an opaque browser token to a fail-closed Console principal."""
 
 from dataclasses import dataclass
+from datetime import datetime
 from uuid import UUID
 
 from muxivo_console.application.ports import (
@@ -18,6 +19,7 @@ class BrowserSessionPrincipal:
     user_id: UUID
     session_id: UUID
     assurance_level: SessionAssuranceLevel
+    authenticated_at: datetime | None = None
 
 
 @dataclass(slots=True)
@@ -45,4 +47,5 @@ class ResolveBrowserSession:
             user_id=session.user_id,
             session_id=session.id,
             assurance_level=session.assurance_level,
+            authenticated_at=session.authenticated_at,
         )

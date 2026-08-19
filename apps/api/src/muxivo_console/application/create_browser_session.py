@@ -61,6 +61,7 @@ class CreateBrowserSession:
             token_hash=self.token_hasher.hash(raw_token),
             expires_at=now + self.lifetime,
             assurance_level=command.assurance_level,
+            authenticated_at=now,
         )
         created = await self.sessions.create(
             session=session,

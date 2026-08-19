@@ -19,6 +19,7 @@ class AuthSession:
     expires_at: datetime
     assurance_level: SessionAssuranceLevel
     revoked_at: datetime | None = None
+    authenticated_at: datetime | None = None
 
     def __post_init__(self) -> None:
         if len(self.token_hash) != 64:
@@ -27,6 +28,8 @@ class AuthSession:
             raise ValueError("Session expiry must be timezone-aware.")
         if self.revoked_at is not None and self.revoked_at.tzinfo is None:
             raise ValueError("Session revocation time must be timezone-aware.")
+        if self.authenticated_at is not None and self.authenticated_at.tzinfo is None:
+            raise ValueError("Session authentication time must be timezone-aware.")
 
     def is_active_at(self, instant: datetime) -> bool:
         if instant.tzinfo is None:
