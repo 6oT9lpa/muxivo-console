@@ -10,6 +10,7 @@ from muxivo_console.domain.ai_moderation_policy import (
 )
 from muxivo_console.domain.audit import AuditEvent, AuditLogEntry
 from muxivo_console.domain.authorization import AuthorizationDecision, AuthorizationRequest
+from muxivo_console.domain.bot_settings import PlatformBotSettings
 from muxivo_console.domain.channel_purposes import ChannelPurpose, PlatformChannelPurposes
 from muxivo_console.domain.channels import PlatformChannelCatalog
 from muxivo_console.domain.connections import PlatformConnection
@@ -56,6 +57,19 @@ class PlatformDashboardReader(Protocol):
         external_resource_id: str,
         correlation_id: UUID,
     ) -> PlatformDashboardSummary: ...
+
+
+class PlatformBotSettingsReader(Protocol):
+    """Reads a non-secret settings projection after platform-native reauthorization."""
+
+    async def get_bot_settings_for_connection(
+        self,
+        *,
+        organization_id: UUID,
+        actor_id: UUID,
+        external_resource_id: str,
+        correlation_id: UUID,
+    ) -> PlatformBotSettings: ...
 
 
 class PlatformChannelCatalogReader(Protocol):

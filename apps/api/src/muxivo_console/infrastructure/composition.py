@@ -13,6 +13,7 @@ from muxivo_console.application.get_platform_ai_moderation_policy import (
 from muxivo_console.application.get_platform_ai_moderation_summary import (
     GetPlatformAiModerationSummary,
 )
+from muxivo_console.application.get_platform_bot_settings import GetPlatformBotSettings
 from muxivo_console.application.get_platform_channel_purposes import GetPlatformChannelPurposes
 from muxivo_console.application.get_platform_dashboard_summary import GetPlatformDashboardSummary
 from muxivo_console.application.get_platform_health import GetPlatformHealth
@@ -228,6 +229,13 @@ def create_production_app(settings: ConsoleSettings):
             allow_insecure_http=settings.allow_insecure_discord_control_http,
         ),
     )
+    platform_bot_settings = GetPlatformBotSettings(
+        authorizer=MembershipOrganizationAuthorizer(
+            SqlAlchemyOrganizationMembershipReader(sessions)
+        ),
+        connections=SqlAlchemyPlatformConnectionReader(sessions),
+        settings_readers={Platform.DISCORD: discord_control_api},
+    )
     platform_ai_moderation_policy = GetPlatformAiModerationPolicy(
         authorizer=MembershipOrganizationAuthorizer(
             SqlAlchemyOrganizationMembershipReader(sessions)
@@ -355,6 +363,7 @@ def create_production_app(settings: ConsoleSettings):
         platform_channels_use_case=platform_channels,
         platform_channel_purposes_use_case=platform_channel_purposes,
         platform_ai_moderation_summary_use_case=platform_ai_moderation_summary,
+        platform_bot_settings_use_case=platform_bot_settings,
         platform_ai_moderation_policy_use_case=platform_ai_moderation_policy,
         platform_ai_moderation_policy_update_use_case=platform_ai_moderation_policy_update,
         platform_channel_purpose_update_use_case=platform_channel_purpose_update,

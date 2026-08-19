@@ -41,6 +41,7 @@ from muxivo_console.application.get_platform_ai_moderation_policy import (
 from muxivo_console.application.get_platform_ai_moderation_summary import (
     GetPlatformAiModerationSummary,
 )
+from muxivo_console.application.get_platform_bot_settings import GetPlatformBotSettings
 from muxivo_console.application.get_platform_channel_purposes import (
     GetPlatformChannelPurposes,
 )
@@ -114,6 +115,7 @@ from muxivo_console.contracts.v1.organizations import (
 from muxivo_console.contracts.v1.platform_ai_moderation import (
     PlatformAiModerationSummaryResponse,
 )
+from muxivo_console.contracts.v1.platform_bot_settings import PlatformBotSettingsResponse
 from muxivo_console.contracts.v1.platform_channel_purposes import (
     ChannelPurposeAssignmentResponse,
     ChannelPurposeUpdateRequest,
@@ -183,6 +185,7 @@ def create_app(
     platform_channels_use_case: ListPlatformConnectionChannels | None = None,
     platform_channel_purposes_use_case: GetPlatformChannelPurposes | None = None,
     platform_ai_moderation_summary_use_case: GetPlatformAiModerationSummary | None = None,
+    platform_bot_settings_use_case: GetPlatformBotSettings | None = None,
     platform_ai_moderation_policy_use_case: GetPlatformAiModerationPolicy | None = None,
     platform_ai_moderation_policy_update_use_case: UpdatePlatformAiModerationPolicy | None = None,
     platform_channel_purpose_update_use_case: UpdatePlatformChannelPurpose | None = None,
@@ -722,6 +725,53 @@ def create_app(
             ai_flagged_today=summary.ai_flagged_today,
             creator_sources=summary.creator_sources,
             bot_latency_ms=summary.bot_latency_ms,
+        )
+
+    @app.get(
+        "/api/v1/organizations/{organization_id}/platform-connections/{connection_id}/bot-settings",
+        response_model=PlatformBotSettingsResponse,
+        tags=["platform-bot-settings"],
+    )
+    async def get_platform_bot_settings(
+        organization_id: UUID, connection_id: UUID, request: Request
+    ) -> PlatformBotSettingsResponse:
+        actor_id = getattr(request.state, "actor_id", None)
+        if not isinstance(actor_id, UUID):
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied")
+        if platform_bot_settings_use_case is None:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Platform bot settings are unavailable",
+            )
+        try:
+            settings = await platform_bot_settings_use_case.execute(
+                actor_id=actor_id,
+                organization_id=organization_id,
+                connection_id=connection_id,
+                correlation_id=request.state.correlation_id,
+            )
+        except AccessDeniedError as error:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN, detail="Access denied"
+            ) from error
+        except PlatformHealthUnavailableError as error:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Platform bot settings are unavailable",
+            ) from error
+        except PlatformControlUnavailableError as error:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Platform control service is unavailable",
+            ) from error
+        return PlatformBotSettingsResponse(
+            organization_id=str(organization_id),
+            connection_id=str(connection_id),
+            platform=settings.platform,
+            subscription_tier=settings.subscription_tier,
+            activity_rotation_enabled=settings.activity_rotation_enabled,
+            activity_rotation_interval_seconds=settings.activity_rotation_interval_seconds,
+            retention_days=dict(settings.retention_days),
         )
 
     @app.get(

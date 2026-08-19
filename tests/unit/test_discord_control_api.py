@@ -146,6 +146,50 @@ async def test_catalog_rejects_bad_platform_payload_without_leaking_upstream_det
 
 
 @pytest.mark.asyncio
+async def test_catalog_reads_assertion_bound_non_secret_bot_settings() -> None:
+    actor_id, organization_id, correlation_id = uuid4(), uuid4(), uuid4()
+    resource_id = "123456789012345678"
+    received_authorization: str | None = None
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        nonlocal received_authorization
+        received_authorization = request.headers["Authorization"]
+        assert request.url.path.endswith(f"/connections/{resource_id}/bot-settings")
+        return httpx.Response(
+            200,
+            json={
+                "settings": {
+                    "subscription_tier": "plus",
+                    "activity_rotation_enabled": True,
+                    "activity_rotation_interval_seconds": 60,
+                    "retention": {"message_log_retention_days": 30},
+                }
+            },
+        )
+
+    catalog = DiscordControlApiCatalog(
+        "http://discord-control.test",
+        assertion_issuer(),
+        transport=httpx.MockTransport(handler),
+        allow_insecure_http=True,
+        identities=Identities(),
+    )
+    settings = await catalog.get_bot_settings_for_connection(
+        actor_id=actor_id,
+        organization_id=organization_id,
+        external_resource_id=resource_id,
+        correlation_id=correlation_id,
+    )
+
+    assert settings.subscription_tier == "plus"
+    assert settings.retention_days == (("message_log_retention_days", 30),)
+    assert received_authorization is not None
+    claims = decode_claims(received_authorization.removeprefix("Bearer "))
+    assert claims["platform_subject"] == "123456789012345678"
+    assert claims["platform_resource_id"] == resource_id
+
+
+@pytest.mark.asyncio
 async def test_catalog_maps_aggregate_discord_health_without_platform_secrets() -> None:
     actor_id, organization_id, correlation_id = uuid4(), uuid4(), uuid4()
 
