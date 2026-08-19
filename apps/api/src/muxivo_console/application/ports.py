@@ -23,6 +23,7 @@ from muxivo_console.domain.identity import (
     UserStatus,
 )
 from muxivo_console.domain.identity_linking import IdentityLinkTransaction
+from muxivo_console.domain.oauth_login import OAuthLoginTransaction
 from muxivo_console.domain.organizations import Organization, OrganizationMembership
 from muxivo_console.domain.sessions import AuthSession
 from muxivo_console.domain.welcome import PlatformWelcomeSettings
@@ -241,6 +242,14 @@ class LoginIdentityReader(Protocol):
     ) -> str | None: ...
 
 
+class ProviderIdentityUserReader(Protocol):
+    """Resolves a provider subject only when it is already linked to a Console user."""
+
+    async def find_user_id(
+        self, *, provider: "LoginIdentityProvider", provider_subject: str
+    ) -> UUID | None: ...
+
+
 class OpaqueValueProtector(Protocol):
     """Encrypts opaque browser-flow secrets before persistence."""
 
@@ -261,6 +270,16 @@ class IdentityLinkTransactionConsumer(Protocol):
     """Atomically claims an unexpired OAuth transaction so state cannot be replayed."""
 
     async def consume(self, *, state_hash: str, consumed_at) -> IdentityLinkTransaction | None: ...
+
+
+class OAuthLoginTransactionWriter(Protocol):
+    async def create(
+        self, *, transaction: OAuthLoginTransaction, audit_event: AuditEvent
+    ) -> bool: ...
+
+
+class OAuthLoginTransactionConsumer(Protocol):
+    async def consume(self, *, state_hash: str, consumed_at) -> OAuthLoginTransaction | None: ...
 
 
 class OAuthIdentityProvider(Protocol):

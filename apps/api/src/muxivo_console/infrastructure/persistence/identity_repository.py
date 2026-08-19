@@ -65,3 +65,14 @@ class SqlAlchemyLoginIdentityReader:
             result = await database_session.execute(statement)
             value = result.scalar_one_or_none()
         return value if isinstance(value, str) and value else None
+
+    async def find_user_id(
+        self, *, provider: LoginIdentityProvider, provider_subject: str
+    ) -> UUID | None:
+        statement = select(LoginIdentityRecord.user_id).where(
+            LoginIdentityRecord.provider == provider.value,
+            LoginIdentityRecord.provider_subject == provider_subject,
+        )
+        async with self._session_factory() as database_session:
+            value = (await database_session.execute(statement)).scalar_one_or_none()
+        return value if isinstance(value, UUID) else None
