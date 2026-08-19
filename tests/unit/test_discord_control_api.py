@@ -283,6 +283,56 @@ async def test_catalog_binds_channel_request_to_one_discord_resource() -> None:
     ]
 
 
+@pytest.mark.asyncio
+async def test_catalog_binds_welcome_settings_request_to_one_discord_resource() -> None:
+    actor_id, organization_id, correlation_id = uuid4(), uuid4(), uuid4()
+    guild_id = "123456789012345678"
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        expected_path = (
+            f"/control/v1/organizations/{organization_id}/connections/"
+            f"{guild_id}/welcome-settings"
+        )
+        assert request.url.path == expected_path
+        claims = decode_claims(request.headers["Authorization"].removeprefix("Bearer "))
+        assert claims["platform_resource_id"] == guild_id
+        return httpx.Response(
+            200,
+            json={
+                "guild_id": guild_id,
+                "settings": {
+                    "title": "Welcome!",
+                    "description": "Hi, {user}!",
+                    "thumbnail_url": None,
+                    "footer_text": "Be kind",
+                    "footer_icon_url": None,
+                    "color": 5769984,
+                    "is_enabled": True,
+                    "rules_channel_id": "10",
+                    "roles_channel_id": None,
+                },
+            },
+        )
+
+    catalog = DiscordControlApiCatalog(
+        "http://discord-control.test",
+        assertion_issuer(),
+        transport=httpx.MockTransport(handler),
+        allow_insecure_http=True,
+    )
+
+    settings = await catalog.get_welcome_settings_for_connection(
+        actor_id=actor_id,
+        organization_id=organization_id,
+        external_resource_id=guild_id,
+        correlation_id=correlation_id,
+    )
+
+    assert settings.platform is Platform.DISCORD
+    assert settings.title == "Welcome!"
+    assert settings.rules_channel_id == "10"
+
+
 def test_catalog_requires_https_outside_explicit_local_development() -> None:
     with pytest.raises(ValueError, match="absolute service URL"):
         DiscordControlApiCatalog("http://discord-control.test", assertion_issuer())

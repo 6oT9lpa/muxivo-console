@@ -25,6 +25,7 @@ from muxivo_console.domain.channels import ChannelKind, PlatformChannel, Platfor
 from muxivo_console.domain.dashboard import PlatformDashboardSummary
 from muxivo_console.domain.health import HealthSignal, HealthStatus, PlatformHealth
 from muxivo_console.domain.identity import LoginIdentityProvider
+from muxivo_console.domain.welcome import PlatformWelcomeSettings
 
 
 @dataclass(frozen=True, slots=True)
@@ -212,6 +213,38 @@ class DiscordControlApiCatalog:
             ) from error
         return _parse_discord_channel_catalog(payload)
 
+    async def get_welcome_settings_for_connection(
+        self,
+        *,
+        organization_id: UUID,
+        actor_id: UUID,
+        external_resource_id: str,
+        correlation_id: UUID,
+    ) -> PlatformWelcomeSettings:
+        assertion = self.assertions.issue(
+            actor_id=actor_id,
+            organization_id=organization_id,
+            resource=AuthorizationResource.CONTROL_MODULES,
+            action=AuthorizationAction.READ,
+            correlation_id=correlation_id,
+            platform_resource_id=external_resource_id,
+        )
+        try:
+            async with httpx.AsyncClient(
+                base_url=self.base_url, timeout=self.timeout, transport=self.transport
+            ) as client:
+                response = await client.get(
+                    f"/control/v1/organizations/{organization_id}/connections/{external_resource_id}/welcome-settings",
+                    headers={"Authorization": f"Bearer {assertion}"},
+                )
+                response.raise_for_status()
+                payload = response.json()
+        except (httpx.HTTPError, ValueError, json.JSONDecodeError) as error:
+            raise PlatformControlUnavailableError(
+                "Discord Control API welcome settings request failed."
+            ) from error
+        return _parse_discord_welcome_settings(payload)
+
 
 @dataclass(frozen=True, slots=True)
 class DiscordPlatformConnectionVerifier:
@@ -390,6 +423,52 @@ def _parse_discord_channel_catalog(payload: Any) -> PlatformChannelCatalog:
     except (KeyError, TypeError, ValueError) as error:
         raise PlatformControlUnavailableError(
             "Discord Control API returned an invalid channel catalog."
+        ) from error
+
+
+def _parse_discord_welcome_settings(payload: Any) -> PlatformWelcomeSettings:
+    if not isinstance(payload, dict) or not isinstance(payload.get("settings"), dict):
+        raise PlatformControlUnavailableError(
+            "Discord Control API returned an invalid welcome settings payload."
+        )
+    settings = payload["settings"]
+    try:
+        title, description = settings["title"], settings["description"]
+        color, is_enabled = settings["color"], settings["is_enabled"]
+        optional_strings = tuple(
+            settings.get(field)
+            for field in (
+                "thumbnail_url",
+                "footer_text",
+                "footer_icon_url",
+                "rules_channel_id",
+                "roles_channel_id",
+            )
+        )
+        if (
+            not isinstance(title, str)
+            or not isinstance(description, str)
+            or not isinstance(color, int)
+            or isinstance(color, bool)
+            or not isinstance(is_enabled, bool)
+            or not all(value is None or isinstance(value, str) for value in optional_strings)
+        ):
+            raise ValueError("Welcome settings contain invalid fields.")
+        return PlatformWelcomeSettings(
+            platform=Platform.DISCORD,
+            title=title,
+            description=description,
+            thumbnail_url=optional_strings[0],
+            footer_text=optional_strings[1],
+            footer_icon_url=optional_strings[2],
+            color=color,
+            is_enabled=is_enabled,
+            rules_channel_id=optional_strings[3],
+            roles_channel_id=optional_strings[4],
+        )
+    except (KeyError, TypeError, ValueError) as error:
+        raise PlatformControlUnavailableError(
+            "Discord Control API returned invalid welcome settings."
         ) from error
 
 

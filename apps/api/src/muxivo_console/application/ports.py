@@ -19,6 +19,7 @@ from muxivo_console.domain.identity import (
 from muxivo_console.domain.identity_linking import IdentityLinkTransaction
 from muxivo_console.domain.organizations import Organization, OrganizationMembership
 from muxivo_console.domain.sessions import AuthSession
+from muxivo_console.domain.welcome import PlatformWelcomeSettings
 
 
 class ModuleCatalog(Protocol):
@@ -61,6 +62,19 @@ class PlatformChannelCatalogReader(Protocol):
         external_resource_id: str,
         correlation_id: UUID,
     ) -> PlatformChannelCatalog: ...
+
+
+class PlatformWelcomeSettingsReader(Protocol):
+    """Reads welcome configuration from one resource-bound platform connection."""
+
+    async def get_welcome_settings_for_connection(
+        self,
+        *,
+        organization_id: UUID,
+        actor_id: UUID,
+        external_resource_id: str,
+        correlation_id: UUID,
+    ) -> PlatformWelcomeSettings: ...
 
 
 class OrganizationAuthorizer(Protocol):

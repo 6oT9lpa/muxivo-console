@@ -7,6 +7,9 @@ from muxivo_console.application.create_browser_session import CreateBrowserSessi
 from muxivo_console.application.create_organization import CreateOrganization
 from muxivo_console.application.get_platform_dashboard_summary import GetPlatformDashboardSummary
 from muxivo_console.application.get_platform_health import GetPlatformHealth
+from muxivo_console.application.get_platform_welcome_settings import (
+    GetPlatformWelcomeSettings,
+)
 from muxivo_console.application.link_verified_identity import LinkVerifiedIdentity
 from muxivo_console.application.list_control_modules import ListControlModules
 from muxivo_console.application.list_platform_connection_channels import (
@@ -174,6 +177,17 @@ def create_production_app(settings: ConsoleSettings):
             allow_insecure_http=settings.allow_insecure_discord_control_http,
         ),
     )
+    platform_welcome_settings = GetPlatformWelcomeSettings(
+        authorizer=MembershipOrganizationAuthorizer(
+            SqlAlchemyOrganizationMembershipReader(sessions)
+        ),
+        connections=SqlAlchemyPlatformConnectionReader(sessions),
+        welcome_settings=DiscordControlApiCatalog(
+            settings.discord_control_base_url,
+            assertions,
+            allow_insecure_http=settings.allow_insecure_discord_control_http,
+        ),
+    )
     discord_identity_link_start = None
     discord_identity_link_complete = None
     discord_authorization_url = None
@@ -217,6 +231,7 @@ def create_production_app(settings: ConsoleSettings):
         platform_health_use_case=platform_health,
         platform_dashboard_use_case=platform_dashboard,
         platform_channels_use_case=platform_channels,
+        platform_welcome_settings_use_case=platform_welcome_settings,
         discord_identity_link_start=discord_identity_link_start,
         discord_identity_link_complete=discord_identity_link_complete,
         discord_authorization_url=discord_authorization_url,

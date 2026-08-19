@@ -33,6 +33,9 @@ from muxivo_console.application.get_platform_health import (
     GetPlatformHealth,
     PlatformHealthUnavailableError,
 )
+from muxivo_console.application.get_platform_welcome_settings import (
+    GetPlatformWelcomeSettings,
+)
 from muxivo_console.application.list_control_modules import (
     AccessDeniedError,
     ListControlModules,
@@ -80,6 +83,7 @@ from muxivo_console.contracts.v1.platform_health import (
     HealthSignalResponse,
     PlatformHealthResponse,
 )
+from muxivo_console.contracts.v1.platform_welcome import PlatformWelcomeSettingsResponse
 from muxivo_console.domain.activity import Platform
 from muxivo_console.domain.identity import LoginIdentityProvider
 from muxivo_console.infrastructure.development import (
@@ -109,6 +113,7 @@ def create_app(
     platform_health_use_case: GetPlatformHealth | None = None,
     platform_dashboard_use_case: GetPlatformDashboardSummary | None = None,
     platform_channels_use_case: ListPlatformConnectionChannels | None = None,
+    platform_welcome_settings_use_case: GetPlatformWelcomeSettings | None = None,
     discord_identity_link_start: BeginIdentityLink | None = None,
     discord_identity_link_complete: CompleteIdentityLink | None = None,
     discord_authorization_url: Callable[..., str] | None = None,
@@ -583,6 +588,58 @@ def create_app(
                 PlatformChannelResponse.model_validate(item, from_attributes=True)
                 for item in catalog.items
             ],
+        )
+
+    @app.get(
+        "/api/v1/organizations/{organization_id}/platform-connections/{connection_id}/welcome-settings",
+        response_model=PlatformWelcomeSettingsResponse,
+        tags=["platform-welcome"],
+    )
+    async def get_platform_welcome_settings(
+        organization_id: UUID, connection_id: UUID, request: Request
+    ) -> PlatformWelcomeSettingsResponse:
+        actor_id = getattr(request.state, "actor_id", None)
+        if not isinstance(actor_id, UUID):
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied")
+        if platform_welcome_settings_use_case is None:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Platform welcome settings are unavailable",
+            )
+        try:
+            settings = await platform_welcome_settings_use_case.execute(
+                actor_id=actor_id,
+                organization_id=organization_id,
+                connection_id=connection_id,
+                correlation_id=request.state.correlation_id,
+            )
+        except AccessDeniedError as error:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN, detail="Access denied"
+            ) from error
+        except PlatformHealthUnavailableError as error:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Platform welcome settings are unavailable",
+            ) from error
+        except PlatformControlUnavailableError as error:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Platform control service is unavailable",
+            ) from error
+        return PlatformWelcomeSettingsResponse(
+            organization_id=str(organization_id),
+            connection_id=str(connection_id),
+            platform=settings.platform,
+            title=settings.title,
+            description=settings.description,
+            thumbnail_url=settings.thumbnail_url,
+            footer_text=settings.footer_text,
+            footer_icon_url=settings.footer_icon_url,
+            color=settings.color,
+            is_enabled=settings.is_enabled,
+            rules_channel_id=settings.rules_channel_id,
+            roles_channel_id=settings.roles_channel_id,
         )
 
     return app
