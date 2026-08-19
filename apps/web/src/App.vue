@@ -18,6 +18,7 @@ const dashboardSummary = ref<PlatformDashboardSummary | null>(null);
 const channelCatalog = ref<PlatformChannelCatalog | null>(null);
 const welcomeSettings = ref<PlatformWelcomeSettings | null>(null);
 const channelPurposes = ref<PlatformChannelPurposes | null>(null);
+const aiModerationSummary = ref<PlatformAiModerationSummary | null>(null);
 const selectedPurpose = ref("welcome");
 const selectedPurposeChannelId = ref("");
 
@@ -76,6 +77,12 @@ type PlatformWelcomeSettings = {
   roles_channel_id: string | null;
 };
 type PlatformChannelPurposes = { items: { purpose: string; channel_id: string }[] };
+type PlatformAiModerationSummary = {
+  enforcement_mode: string; test_mode: boolean; is_default_policy: boolean;
+  covered_channel_count: number; log_channel_configured: boolean; label_count: number;
+  blacklist_word_count: number; allowed_domain_count: number;
+  automated_timeout_enabled: boolean; automated_kick_enabled: boolean; automated_ban_enabled: boolean;
+};
 
 const usableDiscordConnections = computed(() =>
   connections.value.filter(
@@ -151,6 +158,7 @@ async function loadConnections() {
     channelCatalog.value = null;
     welcomeSettings.value = null;
     channelPurposes.value = null;
+    aiModerationSummary.value = null;
     selectedDiscordConnectionId.value = usableDiscordConnections.value[0]?.id ?? "";
   } catch (error) {
     notice.value = messageFor(error);
@@ -201,6 +209,22 @@ async function loadDiscordChannelPurposes() {
     );
   } catch (error) {
     channelPurposes.value = null;
+    notice.value = messageFor(error);
+  } finally {
+    busy.value = false;
+  }
+}
+
+async function loadDiscordAiModerationSummary() {
+  if (!organizationId.value.trim() || !selectedDiscordConnectionId.value) return;
+  busy.value = true;
+  notice.value = "";
+  try {
+    aiModerationSummary.value = await consoleApi<PlatformAiModerationSummary>(
+      `/api/v1/organizations/${encodeURIComponent(organizationId.value.trim())}/platform-connections/${encodeURIComponent(selectedDiscordConnectionId.value)}/ai-moderation-summary`,
+    );
+  } catch (error) {
+    aiModerationSummary.value = null;
     notice.value = messageFor(error);
   } finally {
     busy.value = false;
@@ -272,6 +296,7 @@ function selectDiscordConnection() {
   channelCatalog.value = null;
   welcomeSettings.value = null;
   channelPurposes.value = null;
+  aiModerationSummary.value = null;
 }
 
 async function loadDiscordHealth() {
@@ -356,6 +381,10 @@ function messageFor(error: unknown): string {
         <div class="section-heading"><div><h3 id="discord-channel-purposes-heading">Discord channel purposes</h3><p>Current Activity assignments. Purpose changes will be enabled after the dedicated write contract is complete.</p></div><button type="button" :disabled="busy || !selectedDiscordConnectionId" @click="loadDiscordChannelPurposes">{{ busy ? "Loading…" : "Load assignments" }}</button></div>
         <ul v-if="channelPurposes?.items.length" class="health-signals"><li v-for="assignment in channelPurposes.items" :key="assignment.purpose"><span><strong>{{ assignment.purpose }}</strong><small>{{ assignment.channel_id }}</small></span></li></ul>
         <form v-if="channelCatalog?.items.length" @submit.prevent="saveDiscordChannelPurpose"><label>Purpose<select v-model="selectedPurpose"><option value="welcome">Welcome</option><option value="member_log">Member log</option><option value="mod_log">Moderation log</option><option value="message_log">Message log</option><option value="channel_log">Channel log</option><option value="stream_announce">Stream announcements</option><option value="dev_blog">Dev blog</option><option value="ai_moderation_log">AI moderation log</option></select></label><label>Text channel<select v-model="selectedPurposeChannelId" required><option disabled value="">Select channel</option><option v-for="channel in channelCatalog.items.filter((item) => item.kind === 'text')" :key="channel.id" :value="channel.id">{{ channel.name }}</option></select></label><button :disabled="busy">{{ busy ? "Saving…" : "Save assignment" }}</button></form>
+      </section>
+      <section v-if="usableDiscordConnections.length" class="platform-dashboard" aria-labelledby="discord-ai-moderation-heading">
+        <div class="section-heading"><div><h3 id="discord-ai-moderation-heading">Discord AI moderation</h3><p>Read-only policy state. Review queue, message content, simulations and enforcement changes remain in Discord Activity.</p></div><button type="button" :disabled="busy || !selectedDiscordConnectionId" @click="loadDiscordAiModerationSummary">{{ busy ? "Loading…" : "Load policy summary" }}</button></div>
+        <dl v-if="aiModerationSummary" class="dashboard-metrics"><div><dt>Mode</dt><dd>{{ aiModerationSummary.enforcement_mode }}</dd></div><div><dt>Test mode</dt><dd>{{ aiModerationSummary.test_mode ? "Enabled" : "Disabled" }}</dd></div><div><dt>Covered channels</dt><dd>{{ aiModerationSummary.covered_channel_count }}</dd></div><div><dt>Labels</dt><dd>{{ aiModerationSummary.label_count }}</dd></div><div><dt>Log channel</dt><dd>{{ aiModerationSummary.log_channel_configured ? "Configured" : "Not configured" }}</dd></div><div><dt>Automatic actions</dt><dd>{{ aiModerationSummary.automated_timeout_enabled || aiModerationSummary.automated_kick_enabled || aiModerationSummary.automated_ban_enabled ? "Enabled" : "Disabled" }}</dd></div></dl>
       </section>
       <section v-if="usableDiscordConnections.length" class="platform-dashboard" aria-labelledby="discord-welcome-heading">
         <div class="section-heading"><div><h3 id="discord-welcome-heading">Discord welcome settings</h3><p>Read-only view of the existing Discord Activity welcome configuration. Editing and test sends remain in Activity for now.</p></div><button type="button" :disabled="busy || !selectedDiscordConnectionId" @click="loadDiscordWelcomeSettings">{{ busy ? "Loading…" : "Load welcome settings" }}</button></div>
