@@ -19,6 +19,9 @@ const channelCatalog = ref<PlatformChannelCatalog | null>(null);
 const welcomeSettings = ref<PlatformWelcomeSettings | null>(null);
 const channelPurposes = ref<PlatformChannelPurposes | null>(null);
 const aiModerationSummary = ref<PlatformAiModerationSummary | null>(null);
+const aiModerationPolicy = ref<PlatformAiModerationPolicyState | null>(null);
+const aiModerationBlacklistWords = ref("");
+const aiModerationAllowedDomains = ref("");
 const selectedPurpose = ref("welcome");
 const selectedPurposeChannelId = ref("");
 
@@ -82,6 +85,22 @@ type PlatformAiModerationSummary = {
   covered_channel_count: number; log_channel_configured: boolean; label_count: number;
   blacklist_word_count: number; allowed_domain_count: number;
   automated_timeout_enabled: boolean; automated_kick_enabled: boolean; automated_ban_enabled: boolean;
+};
+type AiModerationAction = "IGNORE" | "LOG" | "REVIEW" | "WARN" | "DELETE" | "DELETE_WARN" | "TIMEOUT" | "KICK" | "BAN";
+type AiModerationLabelRule = { risk_threshold: number; min_action: AiModerationAction; max_action: AiModerationAction };
+type AiModerationPolicy = {
+  blacklist_words: string[]; allowed_domains: string[]; labels: Record<string, AiModerationLabelRule>;
+  blacklist_action: AiModerationAction; unapproved_domain_action: AiModerationAction;
+  context_window_days: number; repeat_offender_threshold: number; repeat_offender_action: AiModerationAction;
+  escalation_enabled: boolean; escalation_score_threshold: number; escalation_half_life_days: number;
+  excluded_user_ids: string[]; excluded_role_ids: string[]; excluded_channel_ids: string[]; exclude_bots: boolean;
+  ocr_enabled: boolean; ocr_failure_mode: "SKIP" | "REVIEW"; ocr_max_gif_frames: number; ocr_process_empty_result: boolean;
+  test_mode: boolean; enforcement_mode: "SHADOW" | "LIMITED" | "ELEVATED"; limited_min_confidence: number;
+  limited_hard_rule_labels: string[]; beta_enforcement_acknowledged: boolean;
+  allow_automated_timeout: boolean; allow_automated_kick: boolean; allow_automated_ban: boolean;
+};
+type PlatformAiModerationPolicyState = {
+  organization_id: string; connection_id: string; policy: AiModerationPolicy; is_default_policy: boolean;
 };
 
 const usableDiscordConnections = computed(() =>
@@ -159,6 +178,7 @@ async function loadConnections() {
     welcomeSettings.value = null;
     channelPurposes.value = null;
     aiModerationSummary.value = null;
+    aiModerationPolicy.value = null;
     selectedDiscordConnectionId.value = usableDiscordConnections.value[0]?.id ?? "";
   } catch (error) {
     notice.value = messageFor(error);
@@ -231,6 +251,52 @@ async function loadDiscordAiModerationSummary() {
   }
 }
 
+async function loadDiscordAiModerationPolicy() {
+  if (!organizationId.value.trim() || !selectedDiscordConnectionId.value) return;
+  busy.value = true;
+  notice.value = "";
+  try {
+    const state = await consoleApi<PlatformAiModerationPolicyState>(
+      `/api/v1/organizations/${encodeURIComponent(organizationId.value.trim())}/platform-connections/${encodeURIComponent(selectedDiscordConnectionId.value)}/ai-moderation-policy`,
+    );
+    aiModerationPolicy.value = state;
+    aiModerationBlacklistWords.value = state.policy.blacklist_words.join("\n");
+    aiModerationAllowedDomains.value = state.policy.allowed_domains.join("\n");
+  } catch (error) {
+    aiModerationPolicy.value = null;
+    notice.value = messageFor(error);
+  } finally {
+    busy.value = false;
+  }
+}
+
+async function saveDiscordAiModerationPolicy() {
+  if (!organizationId.value.trim() || !selectedDiscordConnectionId.value || !aiModerationPolicy.value) return;
+  busy.value = true;
+  notice.value = "";
+  try {
+    const policy = {
+      ...aiModerationPolicy.value.policy,
+      blacklist_words: splitPolicyValues(aiModerationBlacklistWords.value),
+      allowed_domains: splitPolicyValues(aiModerationAllowedDomains.value),
+    };
+    aiModerationSummary.value = await consoleApi<PlatformAiModerationSummary>(
+      `/api/v1/organizations/${encodeURIComponent(organizationId.value.trim())}/platform-connections/${encodeURIComponent(selectedDiscordConnectionId.value)}/ai-moderation-policy`,
+      { method: "PUT", body: JSON.stringify(policy) },
+    );
+    aiModerationPolicy.value = { ...aiModerationPolicy.value, policy, is_default_policy: false };
+    notice.value = "Discord AI moderation policy saved.";
+  } catch (error) {
+    notice.value = messageFor(error);
+  } finally {
+    busy.value = false;
+  }
+}
+
+function splitPolicyValues(value: string): string[] {
+  return [...new Set(value.split(/[\n,]/).map((item) => item.trim()).filter(Boolean))];
+}
+
 async function saveDiscordChannelPurpose() {
   if (!organizationId.value.trim() || !selectedDiscordConnectionId.value || !selectedPurposeChannelId.value) return;
   busy.value = true;
@@ -297,6 +363,7 @@ function selectDiscordConnection() {
   welcomeSettings.value = null;
   channelPurposes.value = null;
   aiModerationSummary.value = null;
+  aiModerationPolicy.value = null;
 }
 
 async function loadDiscordHealth() {
@@ -383,8 +450,22 @@ function messageFor(error: unknown): string {
         <form v-if="channelCatalog?.items.length" @submit.prevent="saveDiscordChannelPurpose"><label>Purpose<select v-model="selectedPurpose"><option value="welcome">Welcome</option><option value="member_log">Member log</option><option value="mod_log">Moderation log</option><option value="message_log">Message log</option><option value="channel_log">Channel log</option><option value="stream_announce">Stream announcements</option><option value="dev_blog">Dev blog</option><option value="ai_moderation_log">AI moderation log</option></select></label><label>Text channel<select v-model="selectedPurposeChannelId" required><option disabled value="">Select channel</option><option v-for="channel in channelCatalog.items.filter((item) => item.kind === 'text')" :key="channel.id" :value="channel.id">{{ channel.name }}</option></select></label><button :disabled="busy">{{ busy ? "Saving…" : "Save assignment" }}</button></form>
       </section>
       <section v-if="usableDiscordConnections.length" class="platform-dashboard" aria-labelledby="discord-ai-moderation-heading">
-        <div class="section-heading"><div><h3 id="discord-ai-moderation-heading">Discord AI moderation</h3><p>Read-only policy state. Review queue, message content, simulations and enforcement changes remain in Discord Activity.</p></div><button type="button" :disabled="busy || !selectedDiscordConnectionId" @click="loadDiscordAiModerationSummary">{{ busy ? "Loading…" : "Load policy summary" }}</button></div>
+        <div class="section-heading"><div><h3 id="discord-ai-moderation-heading">Discord AI moderation</h3><p>Policy is read and saved through Console. Review queue, message content and simulations remain in Discord Activity.</p></div><button type="button" :disabled="busy || !selectedDiscordConnectionId" @click="loadDiscordAiModerationSummary">{{ busy ? "Loading…" : "Load policy summary" }}</button></div>
         <dl v-if="aiModerationSummary" class="dashboard-metrics"><div><dt>Mode</dt><dd>{{ aiModerationSummary.enforcement_mode }}</dd></div><div><dt>Test mode</dt><dd>{{ aiModerationSummary.test_mode ? "Enabled" : "Disabled" }}</dd></div><div><dt>Covered channels</dt><dd>{{ aiModerationSummary.covered_channel_count }}</dd></div><div><dt>Labels</dt><dd>{{ aiModerationSummary.label_count }}</dd></div><div><dt>Log channel</dt><dd>{{ aiModerationSummary.log_channel_configured ? "Configured" : "Not configured" }}</dd></div><div><dt>Automatic actions</dt><dd>{{ aiModerationSummary.automated_timeout_enabled || aiModerationSummary.automated_kick_enabled || aiModerationSummary.automated_ban_enabled ? "Enabled" : "Disabled" }}</dd></div></dl>
+        <div class="section-heading policy-heading"><div><h4>Policy editor</h4><p>Loading and saving requires current Discord administrator authority. All untouched rules are preserved.</p></div><button type="button" :disabled="busy || !selectedDiscordConnectionId" @click="loadDiscordAiModerationPolicy">{{ busy ? "Loading…" : "Load editable policy" }}</button></div>
+        <form v-if="aiModerationPolicy" class="welcome-settings policy-settings" @submit.prevent="saveDiscordAiModerationPolicy">
+          <p v-if="aiModerationPolicy.is_default_policy">This server currently uses the Discord Activity default policy. Saving creates its own explicit policy.</p>
+          <label>Enforcement mode<select v-model="aiModerationPolicy.policy.enforcement_mode"><option value="SHADOW">Shadow — recommendations only</option><option value="LIMITED">Limited — confidence-capped enforcement</option><option value="ELEVATED">Elevated — explicit automated actions</option></select></label>
+          <label><input v-model="aiModerationPolicy.policy.test_mode" type="checkbox" /> Test mode</label>
+          <label>Limited minimum confidence<input v-model.number="aiModerationPolicy.policy.limited_min_confidence" type="number" min="0" max="1" step="0.01" required /></label>
+          <label>Blacklist words<textarea v-model="aiModerationBlacklistWords" maxlength="50000" placeholder="One word or phrase per line"></textarea></label>
+          <label>Allowed domains<textarea v-model="aiModerationAllowedDomains" maxlength="50000" placeholder="One domain per line"></textarea></label>
+          <label><input v-model="aiModerationPolicy.policy.ocr_enabled" type="checkbox" /> Enable OCR analysis</label>
+          <label>OCR failure mode<select v-model="aiModerationPolicy.policy.ocr_failure_mode"><option value="SKIP">Skip image</option><option value="REVIEW">Send to review</option></select></label>
+          <fieldset><legend>Elevated automatic actions</legend><label><input v-model="aiModerationPolicy.policy.allow_automated_timeout" type="checkbox" /> Allow timeouts</label><label><input v-model="aiModerationPolicy.policy.allow_automated_kick" type="checkbox" /> Allow kicks</label><label><input v-model="aiModerationPolicy.policy.allow_automated_ban" type="checkbox" /> Allow bans</label><label><input v-model="aiModerationPolicy.policy.beta_enforcement_acknowledged" type="checkbox" /> I acknowledge elevated automatic-action risk</label></fieldset>
+          <p>Saving rechecks Discord administrator authority, requires recent browser authentication and records an audit event. Label rules, exclusions and advanced thresholds remain intact unless changed in Discord Activity.</p>
+          <button :disabled="busy">{{ busy ? "Saving…" : "Save AI moderation policy" }}</button>
+        </form>
       </section>
       <section v-if="usableDiscordConnections.length" class="platform-dashboard" aria-labelledby="discord-welcome-heading">
         <div class="section-heading"><div><h3 id="discord-welcome-heading">Discord welcome settings</h3><p>Read-only view of the existing Discord Activity welcome configuration. Editing and test sends remain in Activity for now.</p></div><button type="button" :disabled="busy || !selectedDiscordConnectionId" @click="loadDiscordWelcomeSettings">{{ busy ? "Loading…" : "Load welcome settings" }}</button></div>
