@@ -151,6 +151,22 @@ async function signInWithDiscord() {
   }
 }
 
+async function signOut() {
+  busy.value = true;
+  notice.value = "";
+  try {
+    await consoleApi<void>("/api/v1/auth/session", { method: "DELETE" });
+    authenticated.value = false;
+    connections.value = [];
+    organizationId.value = "";
+    notice.value = "Signed out of Muxivo Console.";
+  } catch (error) {
+    notice.value = messageFor(error);
+  } finally {
+    busy.value = false;
+  }
+}
+
 onMounted(async () => {
   try {
     await consoleApi<{ authenticated: boolean }>("/api/v1/auth/session");
@@ -475,6 +491,7 @@ function messageFor(error: unknown): string {
       <div class="identity-link"><h3>Or continue with Discord</h3><p>Discord signs in only to an account you have already linked.</p><button type="button" :disabled="busy" @click="signInWithDiscord">Sign in with Discord</button></div>
     </section>
     <section v-else class="card">
+      <div class="section-heading"><h2>Workspace</h2><button type="button" :disabled="busy" @click="signOut">Sign out</button></div>
       <h2>Create an organization</h2>
       <p>Organizations own Console memberships and platform connections; bot credentials stay with their platform services.</p>
       <form @submit.prevent="createOrganization"><label>Name<input v-model="organizationName" maxlength="128" required /></label><button :disabled="busy">{{ busy ? "Creating…" : "Create organization" }}</button></form>
