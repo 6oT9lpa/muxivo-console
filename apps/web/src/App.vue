@@ -17,6 +17,7 @@ const selectedDiscordConnectionId = ref("");
 const dashboardSummary = ref<PlatformDashboardSummary | null>(null);
 const channelCatalog = ref<PlatformChannelCatalog | null>(null);
 const welcomeSettings = ref<PlatformWelcomeSettings | null>(null);
+const channelPurposes = ref<PlatformChannelPurposes | null>(null);
 
 type Organization = { id: string; name: string; slug: string };
 type PlatformConnection = {
@@ -72,6 +73,7 @@ type PlatformWelcomeSettings = {
   rules_channel_id: string | null;
   roles_channel_id: string | null;
 };
+type PlatformChannelPurposes = { items: { purpose: string; channel_id: string }[] };
 
 const usableDiscordConnections = computed(() =>
   connections.value.filter(
@@ -146,6 +148,7 @@ async function loadConnections() {
     dashboardSummary.value = null;
     channelCatalog.value = null;
     welcomeSettings.value = null;
+    channelPurposes.value = null;
     selectedDiscordConnectionId.value = usableDiscordConnections.value[0]?.id ?? "";
   } catch (error) {
     notice.value = messageFor(error);
@@ -180,6 +183,22 @@ async function loadDiscordChannels() {
     );
   } catch (error) {
     channelCatalog.value = null;
+    notice.value = messageFor(error);
+  } finally {
+    busy.value = false;
+  }
+}
+
+async function loadDiscordChannelPurposes() {
+  if (!organizationId.value.trim() || !selectedDiscordConnectionId.value) return;
+  busy.value = true;
+  notice.value = "";
+  try {
+    channelPurposes.value = await consoleApi<PlatformChannelPurposes>(
+      `/api/v1/organizations/${encodeURIComponent(organizationId.value.trim())}/platform-connections/${encodeURIComponent(selectedDiscordConnectionId.value)}/channel-purposes`,
+    );
+  } catch (error) {
+    channelPurposes.value = null;
     notice.value = messageFor(error);
   } finally {
     busy.value = false;
@@ -237,6 +256,7 @@ function selectDiscordConnection() {
   dashboardSummary.value = null;
   channelCatalog.value = null;
   welcomeSettings.value = null;
+  channelPurposes.value = null;
 }
 
 async function loadDiscordHealth() {
@@ -316,6 +336,10 @@ function messageFor(error: unknown): string {
         <div class="section-heading"><div><h3 id="discord-channels-heading">Discord channels</h3><p>Generic channel resources for the selected connection. Configuration changes are not available yet.</p></div><button type="button" :disabled="busy || !selectedDiscordConnectionId" @click="loadDiscordChannels">{{ busy ? "Loading…" : "Load channels" }}</button></div>
         <ul v-if="channelCatalog?.items.length" class="health-signals"><li v-for="channel in channelCatalog.items" :key="channel.id"><span><strong>{{ channel.name }}</strong><small>{{ channel.kind }}</small></span></li></ul>
         <p v-else-if="channelCatalog && !channelCatalog.items.length">No browser-ready channels are available for this connection.</p>
+      </section>
+      <section v-if="usableDiscordConnections.length" class="platform-dashboard" aria-labelledby="discord-channel-purposes-heading">
+        <div class="section-heading"><div><h3 id="discord-channel-purposes-heading">Discord channel purposes</h3><p>Current Activity assignments. Purpose changes will be enabled after the dedicated write contract is complete.</p></div><button type="button" :disabled="busy || !selectedDiscordConnectionId" @click="loadDiscordChannelPurposes">{{ busy ? "Loading…" : "Load assignments" }}</button></div>
+        <ul v-if="channelPurposes?.items.length" class="health-signals"><li v-for="assignment in channelPurposes.items" :key="assignment.purpose"><span><strong>{{ assignment.purpose }}</strong><small>{{ assignment.channel_id }}</small></span></li></ul>
       </section>
       <section v-if="usableDiscordConnections.length" class="platform-dashboard" aria-labelledby="discord-welcome-heading">
         <div class="section-heading"><div><h3 id="discord-welcome-heading">Discord welcome settings</h3><p>Read-only view of the existing Discord Activity welcome configuration. Editing and test sends remain in Activity for now.</p></div><button type="button" :disabled="busy || !selectedDiscordConnectionId" @click="loadDiscordWelcomeSettings">{{ busy ? "Loading…" : "Load welcome settings" }}</button></div>
