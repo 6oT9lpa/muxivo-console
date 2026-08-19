@@ -20,6 +20,7 @@ from muxivo_console.domain.activity import (
     ModuleStatus,
     Platform,
 )
+from muxivo_console.domain.ai_moderation import PlatformAiModerationSummary
 from muxivo_console.domain.authorization import AuthorizationAction, AuthorizationResource
 from muxivo_console.domain.channel_purposes import ChannelPurpose, PlatformChannelPurposes
 from muxivo_console.domain.channels import ChannelKind, PlatformChannel, PlatformChannelCatalog
@@ -246,6 +247,38 @@ class DiscordControlApiCatalog:
                 "Discord Control API channel purposes request failed."
             ) from error
         return _parse_discord_channel_purposes(payload)
+
+    async def get_ai_moderation_summary_for_connection(
+        self,
+        *,
+        organization_id: UUID,
+        actor_id: UUID,
+        external_resource_id: str,
+        correlation_id: UUID,
+    ) -> PlatformAiModerationSummary:
+        assertion = self.assertions.issue(
+            actor_id=actor_id,
+            organization_id=organization_id,
+            resource=AuthorizationResource.CONTROL_MODULES,
+            action=AuthorizationAction.READ,
+            correlation_id=correlation_id,
+            platform_resource_id=external_resource_id,
+        )
+        try:
+            async with httpx.AsyncClient(
+                base_url=self.base_url, timeout=self.timeout, transport=self.transport
+            ) as client:
+                response = await client.get(
+                    f"/control/v1/organizations/{organization_id}/connections/{external_resource_id}/ai-moderation-summary",
+                    headers={"Authorization": f"Bearer {assertion}"},
+                )
+                response.raise_for_status()
+                payload = response.json()
+        except (httpx.HTTPError, ValueError, json.JSONDecodeError) as error:
+            raise PlatformControlUnavailableError(
+                "Discord Control API AI moderation summary request failed."
+            ) from error
+        return _parse_discord_ai_moderation_summary(payload)
 
     async def update_channel_purpose_for_connection(
         self,
@@ -566,6 +599,33 @@ def _parse_discord_channel_purposes(payload: Any) -> PlatformChannelPurposes:
     except (TypeError, ValueError) as error:
         raise PlatformControlUnavailableError(
             "Discord Control API returned invalid channel purposes."
+        ) from error
+
+
+def _parse_discord_ai_moderation_summary(payload: Any) -> PlatformAiModerationSummary:
+    if not isinstance(payload, dict) or not isinstance(payload.get("summary"), dict):
+        raise PlatformControlUnavailableError(
+            "Discord Control API returned an invalid AI moderation summary."
+        )
+    summary = payload["summary"]
+    try:
+        return PlatformAiModerationSummary(
+            platform=Platform.DISCORD,
+            enforcement_mode=str(summary["enforcement_mode"]),
+            test_mode=bool(summary["test_mode"]),
+            is_default_policy=bool(summary["is_default_policy"]),
+            covered_channel_count=int(summary["covered_channel_count"]),
+            log_channel_configured=bool(summary["log_channel_configured"]),
+            label_count=int(summary["label_count"]),
+            blacklist_word_count=int(summary["blacklist_word_count"]),
+            allowed_domain_count=int(summary["allowed_domain_count"]),
+            automated_timeout_enabled=bool(summary["automated_timeout_enabled"]),
+            automated_kick_enabled=bool(summary["automated_kick_enabled"]),
+            automated_ban_enabled=bool(summary["automated_ban_enabled"]),
+        )
+    except (KeyError, TypeError, ValueError) as error:
+        raise PlatformControlUnavailableError(
+            "Discord Control API returned invalid AI moderation summary values."
         ) from error
 
 

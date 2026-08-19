@@ -286,6 +286,35 @@ async def test_catalog_binds_channel_request_to_one_discord_resource() -> None:
 
 
 @pytest.mark.asyncio
+async def test_catalog_reads_ai_moderation_summary_for_one_discord_resource() -> None:
+    actor_id, organization_id, correlation_id = uuid4(), uuid4(), uuid4()
+    guild_id = "123456789012345678"
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        assert request.url.path.endswith(f"/{guild_id}/ai-moderation-summary")
+        claims = decode_claims(request.headers["Authorization"].removeprefix("Bearer "))
+        assert claims["platform_resource_id"] == guild_id
+        return httpx.Response(200, json={"summary": ai_moderation_summary_payload()})
+
+    catalog = DiscordControlApiCatalog(
+        "http://discord-control.test",
+        assertion_issuer(),
+        transport=httpx.MockTransport(handler),
+        allow_insecure_http=True,
+    )
+    summary = await catalog.get_ai_moderation_summary_for_connection(
+        actor_id=actor_id,
+        organization_id=organization_id,
+        external_resource_id=guild_id,
+        correlation_id=correlation_id,
+    )
+
+    assert summary.enforcement_mode == "SHADOW"
+    assert summary.covered_channel_count == 2
+    assert summary.automated_ban_enabled is False
+
+
+@pytest.mark.asyncio
 async def test_catalog_binds_welcome_settings_request_to_one_discord_resource() -> None:
     actor_id, organization_id, correlation_id = uuid4(), uuid4(), uuid4()
     guild_id = "123456789012345678"
@@ -402,6 +431,22 @@ def welcome_settings() -> PlatformWelcomeSettings:
     return PlatformWelcomeSettings(
         Platform.DISCORD, "Welcome!", "Hi, {user}!", None, None, None, 5769984, True, "10", None
     )
+
+
+def ai_moderation_summary_payload() -> dict[str, object]:
+    return {
+        "enforcement_mode": "SHADOW",
+        "test_mode": False,
+        "is_default_policy": True,
+        "covered_channel_count": 2,
+        "log_channel_configured": True,
+        "label_count": 8,
+        "blacklist_word_count": 0,
+        "allowed_domain_count": 0,
+        "automated_timeout_enabled": False,
+        "automated_kick_enabled": False,
+        "automated_ban_enabled": False,
+    }
 
 
 def welcome_payload() -> dict[str, object]:

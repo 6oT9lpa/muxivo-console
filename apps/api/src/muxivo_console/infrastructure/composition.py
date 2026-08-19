@@ -5,6 +5,9 @@ from muxivo_console.application.begin_identity_link import BeginIdentityLink
 from muxivo_console.application.complete_identity_link import CompleteIdentityLink
 from muxivo_console.application.create_browser_session import CreateBrowserSession
 from muxivo_console.application.create_organization import CreateOrganization
+from muxivo_console.application.get_platform_ai_moderation_summary import (
+    GetPlatformAiModerationSummary,
+)
 from muxivo_console.application.get_platform_channel_purposes import GetPlatformChannelPurposes
 from muxivo_console.application.get_platform_dashboard_summary import GetPlatformDashboardSummary
 from muxivo_console.application.get_platform_health import GetPlatformHealth
@@ -195,6 +198,17 @@ def create_production_app(settings: ConsoleSettings):
             allow_insecure_http=settings.allow_insecure_discord_control_http,
         ),
     )
+    platform_ai_moderation_summary = GetPlatformAiModerationSummary(
+        authorizer=MembershipOrganizationAuthorizer(
+            SqlAlchemyOrganizationMembershipReader(sessions)
+        ),
+        connections=SqlAlchemyPlatformConnectionReader(sessions),
+        ai_moderation=DiscordControlApiCatalog(
+            settings.discord_control_base_url,
+            assertions,
+            allow_insecure_http=settings.allow_insecure_discord_control_http,
+        ),
+    )
     platform_channel_purpose_update = UpdatePlatformChannelPurpose(
         authorizer=MembershipOrganizationAuthorizer(
             SqlAlchemyOrganizationMembershipReader(sessions)
@@ -274,6 +288,7 @@ def create_production_app(settings: ConsoleSettings):
         platform_dashboard_use_case=platform_dashboard,
         platform_channels_use_case=platform_channels,
         platform_channel_purposes_use_case=platform_channel_purposes,
+        platform_ai_moderation_summary_use_case=platform_ai_moderation_summary,
         platform_channel_purpose_update_use_case=platform_channel_purpose_update,
         platform_welcome_settings_use_case=platform_welcome_settings,
         platform_welcome_settings_update_use_case=platform_welcome_settings_update,
