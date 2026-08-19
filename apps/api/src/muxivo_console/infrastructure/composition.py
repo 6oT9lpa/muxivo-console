@@ -21,6 +21,9 @@ from muxivo_console.application.organization_authorizer import MembershipOrganiz
 from muxivo_console.application.register_email_password import RegisterEmailPassword
 from muxivo_console.application.register_platform_connection import RegisterPlatformConnection
 from muxivo_console.application.resolve_browser_session import ResolveBrowserSession
+from muxivo_console.application.update_platform_channel_purpose import (
+    UpdatePlatformChannelPurpose,
+)
 from muxivo_console.application.update_platform_welcome_settings import (
     UpdatePlatformWelcomeSettings,
 )
@@ -192,6 +195,18 @@ def create_production_app(settings: ConsoleSettings):
             allow_insecure_http=settings.allow_insecure_discord_control_http,
         ),
     )
+    platform_channel_purpose_update = UpdatePlatformChannelPurpose(
+        authorizer=MembershipOrganizationAuthorizer(
+            SqlAlchemyOrganizationMembershipReader(sessions)
+        ),
+        connections=SqlAlchemyPlatformConnectionReader(sessions),
+        purposes=DiscordControlApiCatalog(
+            settings.discord_control_base_url,
+            assertions,
+            allow_insecure_http=settings.allow_insecure_discord_control_http,
+            identities=SqlAlchemyLoginIdentityReader(sessions),
+        ),
+    )
     platform_welcome_settings = GetPlatformWelcomeSettings(
         authorizer=MembershipOrganizationAuthorizer(
             SqlAlchemyOrganizationMembershipReader(sessions)
@@ -259,6 +274,7 @@ def create_production_app(settings: ConsoleSettings):
         platform_dashboard_use_case=platform_dashboard,
         platform_channels_use_case=platform_channels,
         platform_channel_purposes_use_case=platform_channel_purposes,
+        platform_channel_purpose_update_use_case=platform_channel_purpose_update,
         platform_welcome_settings_use_case=platform_welcome_settings,
         platform_welcome_settings_update_use_case=platform_welcome_settings_update,
         discord_identity_link_start=discord_identity_link_start,
