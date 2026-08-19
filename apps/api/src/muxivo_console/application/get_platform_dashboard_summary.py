@@ -10,6 +10,7 @@ from muxivo_console.application.ports import (
     PlatformConnectionReader,
     PlatformDashboardReader,
 )
+from muxivo_console.domain.activity import Platform
 from muxivo_console.domain.authorization import (
     AuthorizationAction,
     AuthorizationRequest,
@@ -48,10 +49,15 @@ class GetPlatformDashboardSummary:
         connection = await self.connections.find_for_organization(
             organization_id=organization_id, connection_id=connection_id
         )
-        if connection is None or connection.status not in {
-            ConnectionStatus.ACTIVE,
-            ConnectionStatus.DEGRADED,
-        }:
+        if (
+            connection is None
+            or connection.platform is not Platform.DISCORD
+            or connection.status
+            not in {
+                ConnectionStatus.ACTIVE,
+                ConnectionStatus.DEGRADED,
+            }
+        ):
             raise PlatformHealthUnavailableError("No usable platform connection exists.")
         return await self.dashboard.get_for_connection(
             organization_id=organization_id,

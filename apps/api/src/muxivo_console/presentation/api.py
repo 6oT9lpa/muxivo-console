@@ -26,6 +26,9 @@ from muxivo_console.application.create_organization import (
     CreateOrganizationCommand,
     OrganizationCreationRejectedError,
 )
+from muxivo_console.application.get_platform_dashboard_summary import (
+    GetPlatformDashboardSummary,
+)
 from muxivo_console.application.get_platform_health import (
     GetPlatformHealth,
     PlatformHealthUnavailableError,
@@ -65,6 +68,7 @@ from muxivo_console.contracts.v1.platform_connections import (
     PlatformConnectionListResponse,
     PlatformConnectionResponse,
 )
+from muxivo_console.contracts.v1.platform_dashboard import PlatformDashboardSummaryResponse
 from muxivo_console.contracts.v1.platform_health import (
     HealthSignalResponse,
     PlatformHealthResponse,
@@ -96,6 +100,7 @@ def create_app(
     platform_connection_registration_use_case: RegisterPlatformConnection | None = None,
     platform_connections_use_case: ListPlatformConnections | None = None,
     platform_health_use_case: GetPlatformHealth | None = None,
+    platform_dashboard_use_case: GetPlatformDashboardSummary | None = None,
     discord_identity_link_start: BeginIdentityLink | None = None,
     discord_identity_link_complete: CompleteIdentityLink | None = None,
     discord_authorization_url: Callable[..., str] | None = None,
@@ -476,6 +481,53 @@ def create_app(
                 HealthSignalResponse.model_validate(signal, from_attributes=True)
                 for signal in health.signals
             ],
+        )
+
+    @app.get(
+        "/api/v1/organizations/{organization_id}/platform-connections/{connection_id}/dashboard",
+        response_model=PlatformDashboardSummaryResponse,
+        tags=["platform-dashboard"],
+    )
+    async def get_platform_dashboard_summary(
+        organization_id: UUID, connection_id: UUID, request: Request
+    ) -> PlatformDashboardSummaryResponse:
+        actor_id = getattr(request.state, "actor_id", None)
+        if not isinstance(actor_id, UUID):
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied")
+        if platform_dashboard_use_case is None:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Platform dashboard is unavailable",
+            )
+        try:
+            summary = await platform_dashboard_use_case.execute(
+                actor_id=actor_id,
+                organization_id=organization_id,
+                connection_id=connection_id,
+                correlation_id=request.state.correlation_id,
+            )
+        except AccessDeniedError as error:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN, detail="Access denied"
+            ) from error
+        except PlatformHealthUnavailableError as error:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Platform dashboard is unavailable",
+            ) from error
+        except PlatformControlUnavailableError as error:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Platform control service is unavailable",
+            ) from error
+        return PlatformDashboardSummaryResponse(
+            organization_id=str(organization_id),
+            connection_id=str(connection_id),
+            platform=summary.platform,
+            messages_today=summary.messages_today,
+            ai_flagged_today=summary.ai_flagged_today,
+            creator_sources=summary.creator_sources,
+            bot_latency_ms=summary.bot_latency_ms,
         )
 
     return app
