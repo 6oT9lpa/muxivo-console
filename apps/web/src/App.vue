@@ -19,6 +19,7 @@ const selectedDiscordConnectionId = ref("");
 const dashboardSummary = ref<PlatformDashboardSummary | null>(null);
 const channelCatalog = ref<PlatformChannelCatalog | null>(null);
 const botSettings = ref<PlatformBotSettings | null>(null);
+const integrations = ref<PlatformIntegrations | null>(null);
 const welcomeSettings = ref<PlatformWelcomeSettings | null>(null);
 const channelPurposes = ref<PlatformChannelPurposes | null>(null);
 const aiModerationSummary = ref<PlatformAiModerationSummary | null>(null);
@@ -85,6 +86,14 @@ type PlatformBotSettings = {
   activity_rotation_enabled: boolean;
   activity_rotation_interval_seconds: number;
   retention_days: Record<string, number>;
+};
+type PlatformIntegrations = {
+  discord_bot_status: string;
+  creator_platforms_status: string;
+  creator_poll_interval_seconds: number;
+  creator_sources: { platform: string; total: number; active: number }[];
+  muxivo_core_status: string;
+  database_status: string;
 };
 type PlatformWelcomeSettings = {
   organization_id: string;
@@ -248,6 +257,7 @@ async function loadConnections() {
     dashboardSummary.value = null;
     channelCatalog.value = null;
     botSettings.value = null;
+    integrations.value = null;
     welcomeSettings.value = null;
     channelPurposes.value = null;
     aiModerationSummary.value = null;
@@ -328,10 +338,27 @@ async function loadPlatformBotSettings() {
   }
 }
 
+async function loadPlatformIntegrations() {
+  if (!organizationId.value.trim() || !selectedConnectionId.value) return;
+  busy.value = true;
+  notice.value = "";
+  try {
+    integrations.value = await consoleApi<PlatformIntegrations>(
+      `/api/v1/organizations/${encodeURIComponent(organizationId.value.trim())}/platform-connections/${encodeURIComponent(selectedConnectionId.value)}/integrations`,
+    );
+  } catch (error) {
+    integrations.value = null;
+    notice.value = messageFor(error);
+  } finally {
+    busy.value = false;
+  }
+}
+
 function selectPlatformConnection() {
   dashboardSummary.value = null;
   channelCatalog.value = null;
   botSettings.value = null;
+  integrations.value = null;
   platformHealth.value = null;
 }
 
@@ -615,6 +642,8 @@ function messageFor(error: unknown): string {
         <ul v-if="channelCatalog?.items.length" class="health-signals"><li v-for="channel in channelCatalog.items" :key="channel.id"><span><strong>{{ channel.name }}</strong><small>{{ channel.kind }}</small></span></li></ul>
         <div class="section-heading"><div><h4>Bot settings</h4><p>Non-secret runtime configuration. The platform rechecks native administrator authority before returning it.</p></div><button type="button" :disabled="busy || !selectedConnectionId" @click="loadPlatformBotSettings">{{ busy ? "Loading…" : "Load settings" }}</button></div>
         <dl v-if="botSettings" class="dashboard-metrics"><div><dt>Subscription</dt><dd>{{ botSettings.subscription_tier }}</dd></div><div><dt>Activity rotation</dt><dd>{{ botSettings.activity_rotation_enabled ? "Enabled" : "Disabled" }}</dd></div><div><dt>Rotation interval</dt><dd>{{ botSettings.activity_rotation_interval_seconds }} s</dd></div><div><dt>Retention rules</dt><dd>{{ Object.keys(botSettings.retention_days).length }}</dd></div></dl>
+        <div class="section-heading"><div><h4>Integrations</h4><p>Operational status only. Internal endpoints and credentials are never exposed.</p></div><button type="button" :disabled="busy || !selectedConnectionId" @click="loadPlatformIntegrations">{{ busy ? "Loading…" : "Load integrations" }}</button></div>
+        <dl v-if="integrations" class="dashboard-metrics"><div><dt>Discord bot</dt><dd>{{ integrations.discord_bot_status }}</dd></div><div><dt>Creator platforms</dt><dd>{{ integrations.creator_platforms_status }}</dd></div><div><dt>Creator poll</dt><dd>{{ integrations.creator_poll_interval_seconds }} s</dd></div><div><dt>Muxivo Core</dt><dd>{{ integrations.muxivo_core_status }}</dd></div><div><dt>Database</dt><dd>{{ integrations.database_status }}</dd></div></dl>
       </section>
       <section v-if="selectedConnection" class="platform-health" aria-labelledby="platform-health-heading">
         <div class="section-heading"><div><h3 id="platform-health-heading">{{ selectedConnection.platform }} platform health</h3><p>Read-only runtime signals are requested through the Console BFF; platform credentials never enter the browser.</p></div><button type="button" :disabled="busy" @click="loadPlatformHealth">{{ busy ? "Loading…" : "Load health" }}</button></div>
