@@ -2,7 +2,9 @@
 
 from muxivo_console.application.authenticate_email_password import AuthenticateEmailPassword
 from muxivo_console.application.begin_identity_link import BeginIdentityLink
+from muxivo_console.application.begin_oauth_login import BeginOAuthLogin
 from muxivo_console.application.complete_identity_link import CompleteIdentityLink
+from muxivo_console.application.complete_oauth_login import CompleteOAuthLogin
 from muxivo_console.application.create_browser_session import CreateBrowserSession
 from muxivo_console.application.create_organization import CreateOrganization
 from muxivo_console.application.get_platform_ai_moderation_policy import (
@@ -66,6 +68,10 @@ from muxivo_console.infrastructure.persistence.identity_link_writer import (
 from muxivo_console.infrastructure.persistence.identity_repository import (
     SqlAlchemyEmailPasswordAccountReader,
     SqlAlchemyLoginIdentityReader,
+)
+from muxivo_console.infrastructure.persistence.oauth_login_transaction_repository import (
+    SqlAlchemyOAuthLoginTransactionConsumer,
+    SqlAlchemyOAuthLoginTransactionWriter,
 )
 from muxivo_console.infrastructure.persistence.organization_repository import (
     SqlAlchemyOrganizationCreationWriter,
@@ -293,6 +299,8 @@ def create_production_app(settings: ConsoleSettings):
     )
     discord_identity_link_start = None
     discord_identity_link_complete = None
+    discord_login_start = None
+    discord_login_complete = None
     discord_authorization_url = None
     if settings.discord_oauth is not None:
         oauth_client = DiscordOAuthClient(
@@ -323,6 +331,23 @@ def create_production_app(settings: ConsoleSettings):
             provider_client=oauth_client,
             linker=identity_linker,
         )
+        discord_login_start = BeginOAuthLogin(
+            identifiers=identifiers,
+            clock=clock,
+            token_issuer=SecureOpaqueSessionTokenIssuer(),
+            token_hasher=session_hasher,
+            secrets=opaque_secrets,
+            transactions=SqlAlchemyOAuthLoginTransactionWriter(sessions),
+        )
+        discord_login_complete = CompleteOAuthLogin(
+            clock=clock,
+            token_hasher=session_hasher,
+            secrets=opaque_secrets,
+            transactions=SqlAlchemyOAuthLoginTransactionConsumer(sessions),
+            provider_client=oauth_client,
+            identities=SqlAlchemyLoginIdentityReader(sessions),
+            sessions=session_creator,
+        )
         discord_authorization_url = oauth_client.authorization_url
     return create_app(
         control_modules_use_case=modules,
@@ -344,6 +369,8 @@ def create_production_app(settings: ConsoleSettings):
         platform_welcome_settings_update_use_case=platform_welcome_settings_update,
         discord_identity_link_start=discord_identity_link_start,
         discord_identity_link_complete=discord_identity_link_complete,
+        discord_login_start=discord_login_start,
+        discord_login_complete=discord_login_complete,
         discord_authorization_url=discord_authorization_url,
         session_resolver=ResolveBrowserSession(
             clock=clock,

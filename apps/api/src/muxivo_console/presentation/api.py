@@ -4,7 +4,7 @@ from hmac import compare_digest
 from uuid import UUID, uuid4
 
 from fastapi import FastAPI, HTTPException, Request, status
-from fastapi.responses import JSONResponse, Response
+from fastapi.responses import JSONResponse, RedirectResponse, Response
 
 from muxivo_console.application.authenticate_email_password import (
     AuthenticateEmailPassword,
@@ -16,11 +16,20 @@ from muxivo_console.application.begin_identity_link import (
     BeginIdentityLinkCommand,
     IdentityLinkStartRejectedError,
 )
+from muxivo_console.application.begin_oauth_login import (
+    BeginOAuthLogin,
+    OAuthLoginStartRejectedError,
+)
 from muxivo_console.application.complete_identity_link import (
     CompleteIdentityLink,
     CompleteIdentityLinkCommand,
     IdentityLinkCompletionRejectedError,
 )
+from muxivo_console.application.complete_oauth_login import (
+    CompleteOAuthLogin,
+    OAuthLoginCompletionRejectedError,
+)
+from muxivo_console.application.create_browser_session import IssuedBrowserSession
 from muxivo_console.application.create_organization import (
     CreateOrganization,
     CreateOrganizationCommand,
@@ -143,9 +152,21 @@ CSRF_EXEMPT_PATHS = frozenset(
     {
         "/api/v1/auth/email-password/registrations",
         "/api/v1/auth/email-password/sessions",
+        "/api/v1/auth/discord/authorizations",
     }
 )
 SAFE_HTTP_METHODS = frozenset({"GET", "HEAD", "OPTIONS"})
+
+
+def _set_browser_session_cookies(response: Response, session: IssuedBrowserSession) -> None:
+    response.set_cookie(
+        key=SESSION_COOKIE_NAME, value=session.raw_token, expires=session.expires_at,
+        path="/", secure=True, httponly=True, samesite="lax",
+    )
+    response.set_cookie(
+        key=CSRF_COOKIE_NAME, value=session.raw_csrf_token, expires=session.expires_at,
+        path="/", secure=True, httponly=False, samesite="lax",
+    )
 
 
 def create_app(
@@ -168,6 +189,8 @@ def create_app(
     platform_welcome_settings_update_use_case: UpdatePlatformWelcomeSettings | None = None,
     discord_identity_link_start: BeginIdentityLink | None = None,
     discord_identity_link_complete: CompleteIdentityLink | None = None,
+    discord_login_start: BeginOAuthLogin | None = None,
+    discord_login_complete: CompleteOAuthLogin | None = None,
     discord_authorization_url: Callable[..., str] | None = None,
     session_resolver: ResolveBrowserSession | None = None,
 ) -> FastAPI:
@@ -223,6 +246,13 @@ def create_app(
     @app.get("/healthz", tags=["operations"])
     async def healthz() -> dict[str, str]:
         return {"status": "ok"}
+
+    @app.get("/api/v1/auth/session", tags=["authentication"])
+    async def get_browser_session(request: Request) -> dict[str, bool]:
+        actor_id = getattr(request.state, "actor_id", None)
+        if not isinstance(actor_id, UUID):
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied")
+        return {"authenticated": True}
 
     @app.get(
         "/api/v1/organizations/{organization_id}/audit-events",
@@ -301,13 +331,51 @@ def create_app(
                 status_code=status.HTTP_403_FORBIDDEN, detail="Discord identity linking failed"
             ) from error
 
+    @app.post("/api/v1/auth/discord/authorizations", tags=["authentication"])
+    async def begin_discord_oauth_login(request: Request) -> dict[str, str | int]:
+        if discord_login_start is None or discord_authorization_url is None:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Discord sign-in is unavailable",
+            )
+        try:
+            started = await discord_login_start.execute(
+                provider=LoginIdentityProvider.DISCORD,
+                correlation_id=request.state.correlation_id,
+            )
+        except OAuthLoginStartRejectedError as error:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Discord sign-in is unavailable",
+            ) from error
+        return {
+            "authorization_url": discord_authorization_url(
+                state=started.state, code_challenge=started.code_challenge
+            ),
+            "expires_in_seconds": started.expires_in_seconds,
+        }
+
     @app.get(
         "/api/v1/identity-links/discord/callback",
         tags=["identity-links"],
     )
     async def complete_discord_identity_link(
         code: str, state: str, request: Request
-    ) -> dict[str, bool]:
+    ) -> Response:
+        if discord_login_complete is not None:
+            try:
+                issued_session = await discord_login_complete.execute(
+                    provider=LoginIdentityProvider.DISCORD,
+                    state=state,
+                    authorization_code=code,
+                    correlation_id=request.state.correlation_id,
+                )
+            except OAuthLoginCompletionRejectedError:
+                issued_session = None
+            if issued_session is not None:
+                response = RedirectResponse(url="/", status_code=status.HTTP_303_SEE_OTHER)
+                _set_browser_session_cookies(response, issued_session)
+                return response
         if discord_identity_link_complete is None:
             raise HTTPException(
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
@@ -492,24 +560,7 @@ def create_app(
             ) from error
 
         response = Response(status_code=status.HTTP_204_NO_CONTENT)
-        response.set_cookie(
-            key=SESSION_COOKIE_NAME,
-            value=issued_session.raw_token,
-            expires=issued_session.expires_at,
-            path="/",
-            secure=True,
-            httponly=True,
-            samesite="lax",
-        )
-        response.set_cookie(
-            key=CSRF_COOKIE_NAME,
-            value=issued_session.raw_csrf_token,
-            expires=issued_session.expires_at,
-            path="/",
-            secure=True,
-            httponly=False,
-            samesite="lax",
-        )
+        _set_browser_session_cookies(response, issued_session)
         return response
 
     @app.get(
