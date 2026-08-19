@@ -2,7 +2,10 @@ import base64
 
 import pytest
 from cryptography.fernet import Fernet
-from muxivo_console.infrastructure.composition import create_production_app
+from muxivo_console.infrastructure.composition import (
+    create_development_app,
+    create_production_app,
+)
 from muxivo_console.infrastructure.naming import RandomSuffixOrganizationSlugGenerator
 from muxivo_console.infrastructure.settings import ConfigurationError, ConsoleSettings
 
@@ -52,6 +55,18 @@ def test_development_is_the_only_environment_that_allows_insecure_discord_http()
 
 def test_production_composition_wires_real_use_cases_without_development_catalog() -> None:
     app = create_production_app(ConsoleSettings.from_environment(environment()))
+
+    assert app.title == "Muxivo Console API"
+
+
+def test_development_composition_requires_explicit_development_environment() -> None:
+    with pytest.raises(ValueError, match="development settings"):
+        create_development_app(ConsoleSettings.from_environment(environment()))
+
+    values = environment()
+    values["MUXIVO_CONSOLE_ENVIRONMENT"] = "development"
+
+    app = create_development_app(ConsoleSettings.from_environment(values))
 
     assert app.title == "Muxivo Console API"
 

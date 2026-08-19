@@ -43,3 +43,40 @@ first-party sessions and organization RBAC are wired.
 - Storing Twitch, Discord or any other platform access tokens in the browser.
 - Giving a social-login provider implicit access to a platform adapter.
 - Making a Twitch Extension the source of truth for protected configuration.
+
+## Local development walkthrough
+
+The repository provides a localhost-only walkthrough for the real Console BFF,
+its database migrations and the Vue browser application. It intentionally uses
+a separate development ASGI entrypoint and does not weaken production cookie
+policy or use production credentials.
+
+Requirements: Docker Desktop, Python 3.12, Node.js and installed dependencies.
+For a fresh clone:
+
+```powershell
+py -3.12 -m venv .venv
+.\.venv\Scripts\python.exe -m pip install -e '.[dev]'
+Push-Location apps\web; npm install; Pop-Location
+```
+
+```powershell
+Set-Location 'E:\muxivo\muxivo Console'
+.\scripts\start-dev.ps1
+```
+
+Open `http://127.0.0.1:5173` and sign in with
+`demo@example.com` / `muxivo-demo-password`. Create an organization and use
+the workspace controls. The script creates its random development-only keys in
+the ignored `.dev/console.env` file and starts PostgreSQL, the API and Vite.
+
+The walkthrough exercises Console-owned authentication, organization and RBAC
+flows. Browser operations that read a connected Discord guild still require the
+real Discord Control API to be running on `http://127.0.0.1:8030`; the local
+walkthrough never pretends to have a Discord identity or administrator access.
+
+Stop the processes with:
+
+```powershell
+.\scripts\stop-dev.ps1
+```

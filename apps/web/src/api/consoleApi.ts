@@ -1,4 +1,5 @@
-const csrfCookieName = "__Host-muxivo_csrf";
+const csrfCookieName =
+  import.meta.env.VITE_CONSOLE_CSRF_COOKIE_NAME ?? "__Host-muxivo_csrf";
 
 export class ConsoleApiError extends Error {
   constructor(readonly status: number, message: string) {

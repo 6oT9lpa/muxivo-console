@@ -1,5 +1,6 @@
 from collections.abc import AsyncIterator, Callable
 from contextlib import asynccontextmanager
+from dataclasses import dataclass
 from hmac import compare_digest
 from uuid import UUID, uuid4
 
@@ -163,22 +164,44 @@ CSRF_EXEMPT_PATHS = frozenset(
 SAFE_HTTP_METHODS = frozenset({"GET", "HEAD", "OPTIONS"})
 
 
-def _set_browser_session_cookies(response: Response, session: IssuedBrowserSession) -> None:
+@dataclass(frozen=True, slots=True)
+class BrowserSessionCookieSettings:
+    """Browser-session cookie policy supplied only by the composition root."""
+
+    session_name: str = SESSION_COOKIE_NAME
+    csrf_name: str = CSRF_COOKIE_NAME
+    secure: bool = True
+
+    @classmethod
+    def development(cls) -> "BrowserSessionCookieSettings":
+        """Use local-only names because ``__Host-`` cookies must always be Secure."""
+        return cls(
+            session_name="muxivo_console_dev_session",
+            csrf_name="muxivo_console_dev_csrf",
+            secure=False,
+        )
+
+
+def _set_browser_session_cookies(
+    response: Response,
+    session: IssuedBrowserSession,
+    cookies: BrowserSessionCookieSettings,
+) -> None:
     response.set_cookie(
-        key=SESSION_COOKIE_NAME,
+        key=cookies.session_name,
         value=session.raw_token,
         expires=session.expires_at,
         path="/",
-        secure=True,
+        secure=cookies.secure,
         httponly=True,
         samesite="lax",
     )
     response.set_cookie(
-        key=CSRF_COOKIE_NAME,
+        key=cookies.csrf_name,
         value=session.raw_csrf_token,
         expires=session.expires_at,
         path="/",
-        secure=True,
+        secure=cookies.secure,
         httponly=False,
         samesite="lax",
     )
@@ -211,8 +234,10 @@ def create_app(
     discord_authorization_url: Callable[..., str] | None = None,
     session_resolver: ResolveBrowserSession | None = None,
     session_revoker: RevokeBrowserSession | None = None,
+    browser_session_cookies: BrowserSessionCookieSettings | None = None,
 ) -> FastAPI:
     """Create the Console BFF without coupling application code to FastAPI."""
+    cookies = browser_session_cookies or BrowserSessionCookieSettings()
     control_modules = control_modules_use_case or ListControlModules(
         authorizer=DenyByDefaultOrganizationAuthorizer(),
         catalog=StaticModuleCatalog(),
@@ -235,7 +260,7 @@ def create_app(
     @app.middleware("http")
     async def resolve_browser_session(request: Request, call_next) -> Response:
         if session_resolver is not None:
-            raw_token = request.cookies.get(SESSION_COOKIE_NAME)
+            raw_token = request.cookies.get(cookies.session_name)
             if raw_token is not None:
                 try:
                     principal = await session_resolver.execute(raw_token)
@@ -252,7 +277,7 @@ def create_app(
     async def protect_mutations_from_csrf(request: Request, call_next) -> Response:
         """Require a browser-readable token to accompany every authenticated mutation."""
         if request.method not in SAFE_HTTP_METHODS and request.url.path not in CSRF_EXEMPT_PATHS:
-            csrf_cookie = request.cookies.get(CSRF_COOKIE_NAME)
+            csrf_cookie = request.cookies.get(cookies.csrf_name)
             csrf_header = request.headers.get(CSRF_HEADER_NAME)
             if not csrf_cookie or not csrf_header or not compare_digest(csrf_cookie, csrf_header):
                 return JSONResponse(
@@ -295,10 +320,18 @@ def create_app(
             ) from error
         response = Response(status_code=status.HTTP_204_NO_CONTENT)
         response.delete_cookie(
-            key=SESSION_COOKIE_NAME, path="/", secure=True, httponly=True, samesite="lax"
+            key=cookies.session_name,
+            path="/",
+            secure=cookies.secure,
+            httponly=True,
+            samesite="lax",
         )
         response.delete_cookie(
-            key=CSRF_COOKIE_NAME, path="/", secure=True, httponly=False, samesite="lax"
+            key=cookies.csrf_name,
+            path="/",
+            secure=cookies.secure,
+            httponly=False,
+            samesite="lax",
         )
         return response
 
@@ -420,7 +453,7 @@ def create_app(
                 issued_session = None
             if issued_session is not None:
                 response = RedirectResponse(url="/", status_code=status.HTTP_303_SEE_OTHER)
-                _set_browser_session_cookies(response, issued_session)
+                _set_browser_session_cookies(response, issued_session, cookies)
                 return response
         if discord_identity_link_complete is None:
             raise HTTPException(
@@ -606,7 +639,7 @@ def create_app(
             ) from error
 
         response = Response(status_code=status.HTTP_204_NO_CONTENT)
-        _set_browser_session_cookies(response, issued_session)
+        _set_browser_session_cookies(response, issued_session, cookies)
         return response
 
     @app.get(

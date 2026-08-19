@@ -101,10 +101,14 @@ from muxivo_console.infrastructure.security import (
     ValidatedEmailAddressNormalizer,
 )
 from muxivo_console.infrastructure.settings import ConsoleSettings
-from muxivo_console.presentation.api import create_app
+from muxivo_console.presentation.api import BrowserSessionCookieSettings, create_app
 
 
-def create_production_app(settings: ConsoleSettings):
+def create_production_app(
+    settings: ConsoleSettings,
+    *,
+    browser_session_cookies: BrowserSessionCookieSettings | None = None,
+):
     """Compose a fully wired API without leaking infrastructure into handlers."""
     sessions = create_session_factory(settings.database_url)
     identifiers = Uuid7IdentifierGenerator()
@@ -392,4 +396,15 @@ def create_production_app(settings: ConsoleSettings):
             clock=clock,
             sessions=SqlAlchemyAuthSessionRevoker(sessions),
         ),
+        browser_session_cookies=browser_session_cookies,
+    )
+
+
+def create_development_app(settings: ConsoleSettings):
+    """Compose the real application with a localhost-only browser cookie policy."""
+    if settings.environment != "development":
+        raise ValueError("The development ASGI entrypoint requires development settings.")
+    return create_production_app(
+        settings,
+        browser_session_cookies=BrowserSessionCookieSettings.development(),
     )

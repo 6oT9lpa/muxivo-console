@@ -5,7 +5,12 @@ from fastapi.testclient import TestClient
 from muxivo_console.application.authenticate_email_password import AuthenticationRejectedError
 from muxivo_console.application.create_browser_session import IssuedBrowserSession
 from muxivo_console.domain.sessions import SessionAssuranceLevel
-from muxivo_console.presentation.api import CSRF_COOKIE_NAME, SESSION_COOKIE_NAME, create_app
+from muxivo_console.presentation.api import (
+    CSRF_COOKIE_NAME,
+    SESSION_COOKIE_NAME,
+    BrowserSessionCookieSettings,
+    create_app,
+)
 
 
 class AuthenticationUseCase:
@@ -64,6 +69,24 @@ def test_login_rejection_has_single_generic_public_failure() -> None:
     assert response.status_code == 401
     assert response.json() == {"detail": "Authentication failed"}
     assert "set-cookie" not in response.headers
+
+
+def test_development_cookie_policy_uses_non_secure_local_cookie_names() -> None:
+    authentication = AuthenticationUseCase()
+    client = TestClient(
+        create_app(
+            authentication_use_case=authentication,
+            browser_session_cookies=BrowserSessionCookieSettings.development(),
+        )
+    )
+
+    response = client.post("/api/v1/auth/email-password/sessions", json=payload())
+
+    cookies = response.headers.get_list("set-cookie")
+    assert response.status_code == 204
+    assert any(cookie.startswith("muxivo_console_dev_session=") for cookie in cookies)
+    assert any(cookie.startswith("muxivo_console_dev_csrf=") for cookie in cookies)
+    assert all("Secure" not in cookie for cookie in cookies)
 
 
 def test_login_is_unavailable_without_explicit_secure_runtime_wiring() -> None:
