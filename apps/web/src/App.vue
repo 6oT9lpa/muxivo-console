@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref } from "vue";
+import { computed, ref } from "vue";
 import { consoleApi, ConsoleApiError } from "./api/consoleApi";
 
 const email = ref("");
@@ -13,6 +13,8 @@ const platform = ref<"discord" | "twitch" | "telegram">("discord");
 const externalResourceId = ref("");
 const connections = ref<PlatformConnection[]>([]);
 const platformHealth = ref<PlatformHealth | null>(null);
+const selectedDiscordConnectionId = ref("");
+const dashboardSummary = ref<PlatformDashboardSummary | null>(null);
 
 type Organization = { id: string; name: string; slug: string };
 type PlatformConnection = {
@@ -34,6 +36,23 @@ type PlatformHealth = {
   platform: "discord" | "twitch" | "telegram";
   signals: PlatformHealthSignal[];
 };
+type PlatformDashboardSummary = {
+  organization_id: string;
+  connection_id: string;
+  platform: "discord";
+  messages_today: number;
+  ai_flagged_today: number;
+  creator_sources: number;
+  bot_latency_ms: number | null;
+};
+
+const usableDiscordConnections = computed(() =>
+  connections.value.filter(
+    (connection) =>
+      connection.platform === "discord" &&
+      (connection.status === "active" || connection.status === "degraded"),
+  ),
+);
 
 async function signIn() {
   busy.value = true;
@@ -97,11 +116,33 @@ async function loadConnections() {
     );
     connections.value = payload.items;
     platformHealth.value = null;
+    dashboardSummary.value = null;
+    selectedDiscordConnectionId.value = usableDiscordConnections.value[0]?.id ?? "";
   } catch (error) {
     notice.value = messageFor(error);
   } finally {
     busy.value = false;
   }
+}
+
+async function loadDiscordDashboard() {
+  if (!organizationId.value.trim() || !selectedDiscordConnectionId.value) return;
+  busy.value = true;
+  notice.value = "";
+  try {
+    dashboardSummary.value = await consoleApi<PlatformDashboardSummary>(
+      `/api/v1/organizations/${encodeURIComponent(organizationId.value.trim())}/platform-connections/${encodeURIComponent(selectedDiscordConnectionId.value)}/dashboard`,
+    );
+  } catch (error) {
+    dashboardSummary.value = null;
+    notice.value = messageFor(error);
+  } finally {
+    busy.value = false;
+  }
+}
+
+function selectDiscordConnection() {
+  dashboardSummary.value = null;
 }
 
 async function loadDiscordHealth() {
@@ -171,6 +212,11 @@ function messageFor(error: unknown): string {
       <section v-if="organizationId" class="platform-health" aria-labelledby="discord-health-heading">
         <div class="section-heading"><div><h3 id="discord-health-heading">Discord platform health</h3><p>Read-only runtime signals are requested through the Console BFF; Discord credentials never enter the browser.</p></div><button type="button" :disabled="busy" @click="loadDiscordHealth">{{ busy ? "Loading…" : "Load health" }}</button></div>
         <ul v-if="platformHealth" class="health-signals"><li v-for="signal in platformHealth.signals" :key="signal.key"><span><strong>{{ signal.display_name }}</strong><small>{{ signal.value }}</small></span><em :data-status="signal.status">{{ signal.status }}</em></li></ul>
+      </section>
+      <section v-if="usableDiscordConnections.length" class="platform-dashboard" aria-labelledby="discord-dashboard-heading">
+        <div class="section-heading"><div><h3 id="discord-dashboard-heading">Discord dashboard summary</h3><p>Safe aggregate counters for a Console-owned Discord connection. Audit details remain in Discord Activity.</p></div><button type="button" :disabled="busy || !selectedDiscordConnectionId" @click="loadDiscordDashboard">{{ busy ? "Loading…" : "Load summary" }}</button></div>
+        <label class="connection-picker">Discord connection<select v-model="selectedDiscordConnectionId" @change="selectDiscordConnection"><option v-for="connection in usableDiscordConnections" :key="connection.id" :value="connection.id">{{ connection.external_resource_id }} · {{ connection.status }}</option></select></label>
+        <dl v-if="dashboardSummary" class="dashboard-metrics"><div><dt>Messages today</dt><dd>{{ dashboardSummary.messages_today }}</dd></div><div><dt>AI flagged today</dt><dd>{{ dashboardSummary.ai_flagged_today }}</dd></div><div><dt>Creator sources</dt><dd>{{ dashboardSummary.creator_sources }}</dd></div><div><dt>Bot latency</dt><dd>{{ dashboardSummary.bot_latency_ms === null ? "Unavailable" : `${dashboardSummary.bot_latency_ms} ms` }}</dd></div></dl>
       </section>
     </section>
     <p v-if="notice" class="notice" role="status">{{ notice }}</p>
