@@ -1,5 +1,6 @@
 """Read aggregate platform health through the platform's Control API."""
 
+from collections.abc import Mapping
 from dataclasses import dataclass
 from uuid import UUID
 
@@ -27,7 +28,7 @@ class PlatformHealthUnavailableError(RuntimeError):
 class GetPlatformHealth:
     authorizer: OrganizationAuthorizer
     connections: PlatformConnectionReader
-    health: PlatformHealthReader
+    health_readers: Mapping[Platform, PlatformHealthReader]
 
     async def execute(
         self,
@@ -56,7 +57,10 @@ class GetPlatformHealth:
             for connection in connections
         ):
             raise PlatformHealthUnavailableError("No usable platform connection exists.")
-        return await self.health.get_for_organization(
+        health_reader = self.health_readers.get(platform)
+        if health_reader is None:
+            raise PlatformHealthUnavailableError("No platform health adapter is available.")
+        return await health_reader.get_for_organization(
             organization_id=organization_id,
             actor_id=actor_id,
             correlation_id=correlation_id,

@@ -1,5 +1,6 @@
 """Read generic channels from exactly one Console-owned platform connection."""
 
+from collections.abc import Mapping
 from dataclasses import dataclass
 from uuid import UUID
 
@@ -24,7 +25,7 @@ from muxivo_console.domain.connections import ConnectionStatus
 class ListPlatformConnectionChannels:
     authorizer: OrganizationAuthorizer
     connections: PlatformConnectionReader
-    channels: PlatformChannelCatalogReader
+    channel_catalogs: Mapping[Platform, PlatformChannelCatalogReader]
 
     async def execute(
         self,
@@ -49,11 +50,13 @@ class ListPlatformConnectionChannels:
         )
         if (
             connection is None
-            or connection.platform is not Platform.DISCORD
             or connection.status not in {ConnectionStatus.ACTIVE, ConnectionStatus.DEGRADED}
         ):
             raise PlatformHealthUnavailableError("No usable platform connection exists.")
-        return await self.channels.get_channel_catalog_for_connection(
+        channel_catalog = self.channel_catalogs.get(connection.platform)
+        if channel_catalog is None:
+            raise PlatformHealthUnavailableError("No channel catalog adapter is available.")
+        return await channel_catalog.get_channel_catalog_for_connection(
             organization_id=organization_id,
             actor_id=actor_id,
             external_resource_id=connection.external_resource_id,

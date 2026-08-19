@@ -1,5 +1,6 @@
 """Read a resource-bound, non-sensitive dashboard summary from a platform."""
 
+from collections.abc import Mapping
 from dataclasses import dataclass
 from uuid import UUID
 
@@ -24,7 +25,7 @@ from muxivo_console.domain.dashboard import PlatformDashboardSummary
 class GetPlatformDashboardSummary:
     authorizer: OrganizationAuthorizer
     connections: PlatformConnectionReader
-    dashboard: PlatformDashboardReader
+    dashboards: Mapping[Platform, PlatformDashboardReader]
 
     async def execute(
         self,
@@ -51,7 +52,6 @@ class GetPlatformDashboardSummary:
         )
         if (
             connection is None
-            or connection.platform is not Platform.DISCORD
             or connection.status
             not in {
                 ConnectionStatus.ACTIVE,
@@ -59,7 +59,10 @@ class GetPlatformDashboardSummary:
             }
         ):
             raise PlatformHealthUnavailableError("No usable platform connection exists.")
-        return await self.dashboard.get_for_connection(
+        dashboard = self.dashboards.get(connection.platform)
+        if dashboard is None:
+            raise PlatformHealthUnavailableError("No dashboard adapter is available.")
+        return await dashboard.get_for_connection(
             organization_id=organization_id,
             actor_id=actor_id,
             external_resource_id=connection.external_resource_id,

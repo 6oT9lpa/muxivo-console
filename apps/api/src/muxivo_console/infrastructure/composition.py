@@ -43,6 +43,7 @@ from muxivo_console.application.update_platform_channel_purpose import (
 from muxivo_console.application.update_platform_welcome_settings import (
     UpdatePlatformWelcomeSettings,
 )
+from muxivo_console.domain.activity import Platform
 from muxivo_console.infrastructure.discord_control_api import (
     DiscordControlApiCatalog,
     DiscordPlatformConnectionVerifier,
@@ -141,15 +142,17 @@ def create_production_app(settings: ConsoleSettings):
         signing_key=settings.discord_control_signing_key,
         clock=clock,
     )
+    discord_control_api = DiscordControlApiCatalog(
+        settings.discord_control_base_url,
+        assertions,
+        allow_insecure_http=settings.allow_insecure_discord_control_http,
+        identities=SqlAlchemyLoginIdentityReader(sessions),
+    )
     modules = ListControlModules(
         authorizer=MembershipOrganizationAuthorizer(
             SqlAlchemyOrganizationMembershipReader(sessions)
         ),
-        catalog=DiscordControlApiCatalog(
-            settings.discord_control_base_url,
-            assertions,
-            allow_insecure_http=settings.allow_insecure_discord_control_http,
-        ),
+        catalog=discord_control_api,
     )
     organizations = CreateOrganization(
         identifiers=identifiers,
@@ -187,33 +190,21 @@ def create_production_app(settings: ConsoleSettings):
             SqlAlchemyOrganizationMembershipReader(sessions)
         ),
         connections=SqlAlchemyPlatformConnectionReader(sessions),
-        health=DiscordControlApiCatalog(
-            settings.discord_control_base_url,
-            assertions,
-            allow_insecure_http=settings.allow_insecure_discord_control_http,
-        ),
+        health_readers={Platform.DISCORD: discord_control_api},
     )
     platform_dashboard = GetPlatformDashboardSummary(
         authorizer=MembershipOrganizationAuthorizer(
             SqlAlchemyOrganizationMembershipReader(sessions)
         ),
         connections=SqlAlchemyPlatformConnectionReader(sessions),
-        dashboard=DiscordControlApiCatalog(
-            settings.discord_control_base_url,
-            assertions,
-            allow_insecure_http=settings.allow_insecure_discord_control_http,
-        ),
+        dashboards={Platform.DISCORD: discord_control_api},
     )
     platform_channels = ListPlatformConnectionChannels(
         authorizer=MembershipOrganizationAuthorizer(
             SqlAlchemyOrganizationMembershipReader(sessions)
         ),
         connections=SqlAlchemyPlatformConnectionReader(sessions),
-        channels=DiscordControlApiCatalog(
-            settings.discord_control_base_url,
-            assertions,
-            allow_insecure_http=settings.allow_insecure_discord_control_http,
-        ),
+        channel_catalogs={Platform.DISCORD: discord_control_api},
     )
     platform_channel_purposes = GetPlatformChannelPurposes(
         authorizer=MembershipOrganizationAuthorizer(
