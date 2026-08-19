@@ -51,3 +51,15 @@ def test_rejects_non_recent_expired_or_legacy_sessions(level, age) -> None:
         RequireRecentAuthentication(FixedClock(now)).check(
             principal(level=level, authenticated_at=authenticated_at)
         )
+
+
+def test_rejects_a_recent_authentication_timestamp_in_the_future() -> None:
+    now = datetime(2026, 8, 19, 12, tzinfo=UTC)
+
+    with pytest.raises(RecentAuthenticationRequiredError):
+        RequireRecentAuthentication(FixedClock(now)).check(
+            principal(
+                level=SessionAssuranceLevel.RECENT_AUTHENTICATION,
+                authenticated_at=now + timedelta(seconds=1),
+            )
+        )

@@ -19,10 +19,12 @@ class RequireRecentAuthentication:
 
     def check(self, principal: BrowserSessionPrincipal) -> None:
         authenticated_at = principal.authenticated_at
+        now = self.clock.now()
         if (
             principal.assurance_level is not SessionAssuranceLevel.RECENT_AUTHENTICATION
             or authenticated_at is None
-            or self.clock.now() - authenticated_at > self.maximum_age
+            or authenticated_at > now
+            or now - authenticated_at > self.maximum_age
         ):
             raise RecentAuthenticationRequiredError(
                 "Recent authentication is required for this operation."
