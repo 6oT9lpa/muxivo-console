@@ -180,6 +180,7 @@ def create_app(
                     request.state.actor_id = principal.user_id
                     request.state.session_id = principal.session_id
                     request.state.assurance_level = principal.assurance_level
+                    request.state.authenticated_at = principal.authenticated_at
         return await call_next(request)
 
     @app.middleware("http")
