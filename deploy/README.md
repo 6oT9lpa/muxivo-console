@@ -18,6 +18,8 @@ credential path used by `muxivo-console-api.service`.
 - `nginx-console.conf.example` is the final HTTPS virtual host.
 - `console.env.example` documents the required production variable names without
   containing usable secrets.
+- `prometheus-console.yml.example` is a same-host scrape fragment for the
+  loopback-only `/metrics` endpoint; install it only in the monitoring network.
 
 The exact rollout and validation order is documented in
 `docs/operations/console-deployment.md`.

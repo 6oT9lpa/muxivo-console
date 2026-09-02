@@ -3,6 +3,14 @@
 Status: draft for staging preparation. This document is not legal advice and must
 be reviewed by counsel before public launch.
 
+Canonical supporting artifacts:
+
+- [`privacy-policy.draft.md`](../legal/privacy-policy.draft.md)
+- [`terms-of-service.draft.md`](../legal/terms-of-service.draft.md)
+- [`data-inventory.md`](data-inventory.md)
+- [`retention-policy.md`](retention-policy.md)
+- [`incident-runbook.md`](incident-runbook.md)
+
 ## External references used for this draft
 
 - FTC business guidance on privacy and security:
@@ -247,8 +255,12 @@ specific records under hold.
 
 ## Alerting plan
 
-Wire `/metrics` into the selected monitoring backend and load
-`docs/operations/prometheus-alerts.yml`. Minimum alerts:
+Wire `/metrics` into the selected monitoring backend using
+[`deploy/prometheus-console.yml.example`](../../deploy/prometheus-console.yml.example)
+as the same-host scrape reference, then load
+`docs/operations/prometheus-alerts.yml`. The API binds to loopback and the
+Nginx configuration keeps `/metrics` out of the public browser surface. Minimum
+alerts:
 
 - high 5xx rate over 5 minutes;
 - sustained p95 latency above target;

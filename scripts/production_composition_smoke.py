@@ -38,9 +38,7 @@ def production_smoke_environment() -> dict[str, str]:
         "MUXIVO_CONSOLE_PASSWORD_RECOVERY_SMTP_USERNAME": "smtp-user",
         "MUXIVO_CONSOLE_PASSWORD_RECOVERY_SMTP_PASSWORD": "smtp-password",
         "MUXIVO_CONSOLE_PASSWORD_RECOVERY_FROM_EMAIL": "security@muxivo.test",
-        "MUXIVO_CONSOLE_PASSWORD_RECOVERY_RESET_URL_BASE": (
-            "https://console.muxivo.test/recover"
-        ),
+        "MUXIVO_CONSOLE_PASSWORD_RECOVERY_RESET_URL_BASE": ("https://console.muxivo.test/recover"),
     }
 
 

@@ -37,6 +37,18 @@ def test_readiness_artifact_check_flags_removed_ci_gate(tmp_path: Path) -> None:
     assert any(issue.marker == "python scripts/audit_coverage.py" for issue in issues)
 
 
+def test_readiness_artifact_check_flags_missing_supporting_operations_artifact(
+    tmp_path: Path,
+) -> None:
+    _copy_required_artifacts(tmp_path)
+    artifact = tmp_path / "docs" / "operations" / "incident-runbook.md"
+    artifact.unlink()
+
+    issues = check_readiness_artifacts(tmp_path)
+
+    assert any(issue.artifact == artifact for issue in issues)
+
+
 def test_readiness_artifact_check_keeps_email_verification_out_of_foundation_scope(
     tmp_path: Path,
 ) -> None:
@@ -64,6 +76,12 @@ def _copy_required_artifacts(destination: Path) -> None:
     for source in (
         Path("docs/operations/production-readiness.md"),
         Path("docs/operations/prometheus-alerts.yml"),
+        Path("docs/legal/privacy-policy.draft.md"),
+        Path("docs/legal/terms-of-service.draft.md"),
+        Path("docs/operations/data-inventory.md"),
+        Path("docs/operations/retention-policy.md"),
+        Path("docs/operations/incident-runbook.md"),
+        Path("deploy/prometheus-console.yml.example"),
         Path(".github/workflows/console-quality.yml"),
     ):
         target = destination / source

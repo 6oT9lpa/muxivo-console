@@ -90,6 +90,40 @@ REQUIRED_BACKUP_DRILL_MARKERS: tuple[tuple[str, str], ...] = (
     ),
 )
 
+REQUIRED_SUPPORTING_ARTIFACTS: tuple[tuple[str, tuple[tuple[str, str], ...]], ...] = (
+    (
+        "docs/legal/privacy-policy.draft.md",
+        (
+            ("# Muxivo Console Privacy Policy — Draft", "privacy policy draft title"),
+            ("must not be published until", "privacy publication review warning"),
+        ),
+    ),
+    (
+        "docs/legal/terms-of-service.draft.md",
+        (("# Muxivo Console Terms of Service — Draft", "terms draft title"),),
+    ),
+    (
+        "docs/operations/data-inventory.md",
+        (("# Muxivo Console Data Inventory — Draft", "data inventory title"),),
+    ),
+    (
+        "docs/operations/retention-policy.md",
+        (("# Muxivo Console Retention Policy — Draft", "retention policy title"),),
+    ),
+    (
+        "docs/operations/incident-runbook.md",
+        (("# Muxivo Console Incident Runbook — Draft", "incident runbook title"),),
+    ),
+    (
+        "deploy/prometheus-console.yml.example",
+        (
+            ("scrape_configs:", "Prometheus scrape configuration"),
+            ("job_name: muxivo-console", "Console scrape job"),
+            ("127.0.0.1:8010", "loopback API target"),
+        ),
+    ),
+)
+
 REQUIRED_CI_MARKERS: tuple[tuple[str, str], ...] = (
     ("python scripts/secret_scan.py", "secret scan command"),
     ("python scripts/browser_token_exposure_scan.py", "browser token exposure scan command"),
@@ -120,6 +154,10 @@ def check_readiness_artifacts(root: Path = Path(".")) -> tuple[ReadinessArtifact
     _require_markers(readiness_path, readiness, REQUIRED_SCOPE_MARKERS, issues)
     _require_markers(readiness_path, readiness, REQUIRED_BACKUP_DRILL_MARKERS, issues)
     _require_markers(workflow_path, workflow, REQUIRED_CI_MARKERS, issues)
+    for relative_path, markers in REQUIRED_SUPPORTING_ARTIFACTS:
+        artifact_path = root / relative_path
+        artifact_text = _read_required_text(artifact_path, issues)
+        _require_markers(artifact_path, artifact_text, markers, issues)
     _require_markers(
         alerts_path,
         alerts,
