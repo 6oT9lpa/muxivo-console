@@ -195,6 +195,14 @@ The final host serves static frontend assets from
 `/srv/muxivo-console/web`, proxies only `/api/`, `/healthz` and `/readyz` to FRP
 `18081`, and does not expose `/metrics` publicly.
 
+As of 2026-09-02, the VPS has only the temporary HTTP Console host active. A
+read-only request routed directly to `138.124.119.238` returns the current
+Console build, but the public DNS record is not present yet. HTTPS SNI still
+falls through to the existing Discord Activity virtual host, and its
+certificate does not cover `console.muxivo.pro`. Do not use `-k` or treat that
+response as a successful Console deployment. Add and verify the dedicated DNS
+record and certificate before installing the final HTTPS host.
+
 ### 7. Verify end to end
 
 Run the checks in this order:
@@ -247,6 +255,10 @@ The repository-side implementation and local UI checks are ready, but a truthful
 public deployment still requires external values and services:
 
 - the `console.muxivo.pro` DNS record and certificate;
+- the final HTTPS Nginx virtual host and a reload after its certificate passes
+  hostname validation;
+- the production API service, environment and FRP upstream before sign-in or
+  any authenticated Console flow can be tested publicly;
 - a selected secret manager;
 - a dedicated production database credential;
 - Redis;
