@@ -1,4 +1,4 @@
-"""Enforce one concrete top-level application class per Python module."""
+"""Enforce one concrete top-level class per selected production module."""
 
 from __future__ import annotations
 
@@ -7,6 +7,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 APPLICATION_RELATIVE_PATH = Path("apps/api/src/muxivo_console/application")
+SETTINGS_RELATIVE_PATH = Path("apps/api/src/muxivo_console/infrastructure/settings.py")
 INTENTIONAL_REGISTRY_FILES = frozenset({"ports.py"})
 
 
@@ -33,15 +34,27 @@ def check_application_class_layout(root: Path = Path(".")) -> tuple[ClassLayoutI
     return tuple(issues)
 
 
+def check_settings_class_layout(root: Path = Path(".")) -> tuple[ClassLayoutIssue, ...]:
+    """Return configuration modules that define more than one class."""
+    settings_path = root / SETTINGS_RELATIVE_PATH
+    if not settings_path.exists():
+        return ()
+    tree = ast.parse(settings_path.read_text(encoding="utf-8"), filename=str(settings_path))
+    classes = tuple(node.name for node in tree.body if isinstance(node, ast.ClassDef))
+    if len(classes) <= 1:
+        return ()
+    return (ClassLayoutIssue(path=settings_path, classes=classes),)
+
+
 def main() -> int:
     """Run the check and print actionable violations for local and CI users."""
 
-    issues = check_application_class_layout()
+    issues = check_application_class_layout() + check_settings_class_layout()
     if issues:
         for issue in issues:
             print(f"{issue.path}: {', '.join(issue.classes)}")
         return 1
-    print("Application class layout check passed.")
+    print("Application and settings class layout check passed.")
     return 0
 
 

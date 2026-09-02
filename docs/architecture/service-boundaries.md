@@ -84,4 +84,5 @@ errors, response values and use cases therefore remain independently testable
 and their dependency direction stays visible. `application/ports.py` is the
 explicit exception: it is a single Protocol catalog for the application
 boundary rather than an implementation module. The
-`scripts/application_class_layout_check.py` script enforces this rule in CI.
+`scripts/application_class_layout_check.py` script enforces this rule in CI for
+the application modules and the production configuration facade.

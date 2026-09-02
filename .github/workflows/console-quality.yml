@@ -37,7 +37,7 @@ jobs:
       - name: Check backend formatting
         run: python -m ruff format --check apps/api/src tests
 
-      - name: Check application class layout
+      - name: Check application and settings class layout
         run: python scripts/application_class_layout_check.py
 
       - name: Scan for committed secrets

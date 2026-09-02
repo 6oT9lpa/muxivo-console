@@ -10,71 +10,34 @@ from uuid import UUID
 
 from cryptography.fernet import Fernet
 
+from muxivo_console.infrastructure.configuration_error import ConfigurationError
+from muxivo_console.infrastructure.connection_reconciliation_settings import (
+    ConnectionReconciliationSettings,
+)
+from muxivo_console.infrastructure.deployment_readiness_settings import (
+    DeploymentReadinessSettings,
+)
+from muxivo_console.infrastructure.discord_oauth_settings import DiscordOAuthSettings
+from muxivo_console.infrastructure.rate_limit_settings import RateLimitSettings
+from muxivo_console.infrastructure.security_cleanup_settings import SecurityCleanupSettings
+from muxivo_console.infrastructure.smtp_password_recovery_settings import (
+    SmtpPasswordRecoverySettings,
+)
+from muxivo_console.infrastructure.twitch_control_settings import TwitchControlSettings
+from muxivo_console.infrastructure.twitch_oauth_settings import TwitchOAuthSettings
 
-class ConfigurationError(ValueError):
-    """Raised before serving traffic when a required production setting is unsafe."""
-
-
-@dataclass(frozen=True, slots=True)
-class DiscordOAuthSettings:
-    client_id: str
-    client_secret: str
-    redirect_uri: str
-
-
-@dataclass(frozen=True, slots=True)
-class TwitchOAuthSettings:
-    client_id: str
-    client_secret: str
-    redirect_uri: str
-
-
-@dataclass(frozen=True, slots=True)
-class SmtpPasswordRecoverySettings:
-    host: str
-    port: int
-    from_email: str
-    reset_url_base: str
-    invitation_url_base: str | None = None
-    username: str | None = None
-    password: str | None = None
-    starttls: bool = True
-
-
-@dataclass(frozen=True, slots=True)
-class RateLimitSettings:
-    backend: str
-    redis_url: str | None = None
-
-
-@dataclass(frozen=True, slots=True)
-class DeploymentReadinessSettings:
-    public_base_url: str
-    secret_source: str
-
-
-@dataclass(frozen=True, slots=True)
-class ConnectionReconciliationSettings:
-    enabled: bool
-    system_actor_id: UUID
-    interval_seconds: float = 300.0
-    initial_delay_seconds: float = 10.0
-    batch_limit: int = 100
-
-
-@dataclass(frozen=True, slots=True)
-class SecurityCleanupSettings:
-    enabled: bool
-    interval_seconds: float = 86_400.0
-    initial_delay_seconds: float = 60.0
-    session_retention_days: int = 30
-    password_recovery_retention_hours: int = 24
-
-
-@dataclass(frozen=True, slots=True)
-class TwitchControlSettings:
-    base_url: str
-    signing_key: bytes
+__all__ = [
+    "ConfigurationError",
+    "ConnectionReconciliationSettings",
+    "ConsoleSettings",
+    "DeploymentReadinessSettings",
+    "DiscordOAuthSettings",
+    "RateLimitSettings",
+    "SecurityCleanupSettings",
+    "SmtpPasswordRecoverySettings",
+    "TwitchControlSettings",
+    "TwitchOAuthSettings",
+]
 
 
 @dataclass(frozen=True, slots=True)
