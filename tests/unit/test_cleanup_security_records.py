@@ -21,9 +21,7 @@ class Cleaner:
         self.session_cutoff = before
         return 7
 
-    async def delete_consumed_or_expired_password_recovery_transactions(
-        self, *, before
-    ) -> int:
+    async def delete_consumed_or_expired_password_recovery_transactions(self, *, before) -> int:
         self.password_recovery_cutoff = before
         return 3
 

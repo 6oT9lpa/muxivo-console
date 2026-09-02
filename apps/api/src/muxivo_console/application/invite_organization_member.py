@@ -81,9 +81,7 @@ class InviteOrganizationMember:
                 "correlation_id": str(command.correlation_id),
             },
         )
-        organization = await self.organizations.find_by_id(
-            organization_id=command.organization_id
-        )
+        organization = await self.organizations.find_by_id(organization_id=command.organization_id)
         actor = await self.memberships.get_membership(
             actor_id=command.actor_id, organization_id=command.organization_id
         )

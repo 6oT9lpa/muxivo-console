@@ -42,9 +42,8 @@ class SqlAlchemyOrganizationInvitationReader:
         return tuple(
             invitation
             for record in records
-            if (
-                invitation := invitation_from_records(record, scopes.get(record.id, ()))
-            ) is not None
+            if (invitation := invitation_from_records(record, scopes.get(record.id, ())))
+            is not None
         )
 
     async def find_for_organization(

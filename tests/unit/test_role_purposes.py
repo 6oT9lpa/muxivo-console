@@ -4,9 +4,7 @@ from muxivo_console.domain.role_purposes import PlatformRolePurposes, RolePurpos
 
 
 def test_accepts_platform_role_assignments() -> None:
-    assignments = PlatformRolePurposes(
-        Platform.DISCORD, {RolePurpose.ACTIVITY_ADMIN: "123"}
-    )
+    assignments = PlatformRolePurposes(Platform.DISCORD, {RolePurpose.ACTIVITY_ADMIN: "123"})
 
     assert assignments.assignments[RolePurpose.ACTIVITY_ADMIN] == "123"
 

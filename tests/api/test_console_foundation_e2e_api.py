@@ -238,9 +238,7 @@ def test_sign_in_create_organization_connect_audit_and_revoke_foundation_flow() 
     assert "access_token" not in registered_connection.text
     assert "refresh_token" not in registered_connection.text
 
-    listed_connections = client.get(
-        f"/api/v1/organizations/{organization_id}/platform-connections"
-    )
+    listed_connections = client.get(f"/api/v1/organizations/{organization_id}/platform-connections")
 
     assert listed_connections.status_code == 200
     assert listed_connections.json()["items"][0]["id"] == connection_id
@@ -255,8 +253,7 @@ def test_sign_in_create_organization_connect_audit_and_revoke_foundation_flow() 
     ]
 
     revoked_connection = client.post(
-        f"/api/v1/organizations/{organization_id}/platform-connections/"
-        f"{connection_id}/revocations",
+        f"/api/v1/organizations/{organization_id}/platform-connections/{connection_id}/revocations",
         headers={**csrf_header, "Idempotency-Key": "foundation-revoke-1"},
     )
 

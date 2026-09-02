@@ -29,16 +29,12 @@ def test_revokes_only_current_browser_session_and_clears_both_cookies() -> None:
     actor_id, session_id = uuid4(), uuid4()
     revoker = SessionRevoker()
     client = TestClient(
-        create_app(
-            session_resolver=SessionResolver(actor_id, session_id), session_revoker=revoker
-        )
+        create_app(session_resolver=SessionResolver(actor_id, session_id), session_revoker=revoker)
     )
     client.cookies.set("__Host-muxivo_session", "opaque")
     client.cookies.set("__Host-muxivo_csrf", "csrf-token")
 
-    response = client.delete(
-        "/api/v1/auth/session", headers={"X-CSRF-Token": "csrf-token"}
-    )
+    response = client.delete("/api/v1/auth/session", headers={"X-CSRF-Token": "csrf-token"})
 
     assert response.status_code == 204
     assert revoker.arguments is not None

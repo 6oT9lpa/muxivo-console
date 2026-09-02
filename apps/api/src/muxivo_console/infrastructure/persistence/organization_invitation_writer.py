@@ -31,9 +31,7 @@ class SqlAlchemyOrganizationInvitationWriter:
     ) -> None:
         self._session_factory = session_factory
 
-    async def create(
-        self, *, invitation: OrganizationInvitation, audit_event: AuditEvent
-    ) -> bool:
+    async def create(self, *, invitation: OrganizationInvitation, audit_event: AuditEvent) -> bool:
         try:
             async with self._session_factory() as session:
                 async with session.begin():
@@ -162,9 +160,7 @@ class SqlAlchemyOrganizationInvitationWriter:
         return True
 
 
-def _invitation_scope_record(
-    invitation_id: UUID, scope
-) -> OrganizationInvitationScopeRecord:
+def _invitation_scope_record(invitation_id: UUID, scope) -> OrganizationInvitationScopeRecord:
     if scope.id is None:
         raise ValueError("Invitation resource scopes require server-generated identifiers.")
     return OrganizationInvitationScopeRecord(
@@ -175,9 +171,7 @@ def _invitation_scope_record(
     )
 
 
-def _membership_scope_record(
-    membership_id: UUID, scope
-) -> MembershipResourceScopeRecord:
+def _membership_scope_record(membership_id: UUID, scope) -> MembershipResourceScopeRecord:
     if scope.id is None:
         raise ValueError("Membership resource scopes require server-generated identifiers.")
     return MembershipResourceScopeRecord(

@@ -927,8 +927,7 @@ def _parse_discord_server_statistics(payload: Any) -> PlatformServerStatistics:
     try:
         values = {field: summary[field] for field in fields}
         if not all(
-            isinstance(value, int) and not isinstance(value, bool)
-            for value in values.values()
+            isinstance(value, int) and not isinstance(value, bool) for value in values.values()
         ):
             raise ValueError("Server statistic must be an integer.")
         return PlatformServerStatistics(platform=Platform.DISCORD, **values)

@@ -60,14 +60,20 @@ class Sessions:
     async def execute(self, command) -> IssuedBrowserSession:
         self.command = command
         return IssuedBrowserSession(
-            uuid4(), "token", "csrf", Clock().now() + timedelta(days=1),
+            uuid4(),
+            "token",
+            "csrf",
+            Clock().now() + timedelta(days=1),
             SessionAssuranceLevel.PASSWORD,
         )
 
 
 def transaction() -> OAuthLoginTransaction:
     return OAuthLoginTransaction(
-        uuid4(), LoginIdentityProvider.DISCORD, "a" * 64, b"ciphertext",
+        uuid4(),
+        LoginIdentityProvider.DISCORD,
+        "a" * 64,
+        b"ciphertext",
         Clock().now() + timedelta(minutes=1),
     )
 
@@ -76,11 +82,18 @@ def transaction() -> OAuthLoginTransaction:
 async def test_creates_session_only_for_existing_verified_provider_identity() -> None:
     user_id, sessions = uuid4(), Sessions()
     use_case = CompleteOAuthLogin(
-        Clock(), Hasher(), Secrets(), Transactions(transaction()), Provider(),
-        Identities(user_id), sessions,
+        Clock(),
+        Hasher(),
+        Secrets(),
+        Transactions(transaction()),
+        Provider(),
+        Identities(user_id),
+        sessions,
     )
     issued = await use_case.execute(
-        provider=LoginIdentityProvider.DISCORD, state="state", authorization_code="code",
+        provider=LoginIdentityProvider.DISCORD,
+        state="state",
+        authorization_code="code",
         correlation_id=uuid4(),
     )
 
@@ -94,11 +107,18 @@ async def test_rejects_unknown_or_replayed_oauth_state_without_creating_session(
     sessions = Sessions()
     with pytest.raises(OAuthLoginCompletionRejectedError):
         use_case = CompleteOAuthLogin(
-            Clock(), Hasher(), Secrets(), Transactions(None), Provider(),
-            Identities(uuid4()), sessions,
+            Clock(),
+            Hasher(),
+            Secrets(),
+            Transactions(None),
+            Provider(),
+            Identities(uuid4()),
+            sessions,
         )
         await use_case.execute(
-            provider=LoginIdentityProvider.DISCORD, state="state", authorization_code="code",
+            provider=LoginIdentityProvider.DISCORD,
+            state="state",
+            authorization_code="code",
             correlation_id=uuid4(),
         )
     assert sessions.command is None
@@ -108,13 +128,20 @@ async def test_rejects_unknown_or_replayed_oauth_state_without_creating_session(
 async def test_hides_provider_failures_without_creating_a_session() -> None:
     sessions = Sessions()
     use_case = CompleteOAuthLogin(
-        Clock(), Hasher(), Secrets(), Transactions(transaction()), UnavailableProvider(),
-        Identities(uuid4()), sessions,
+        Clock(),
+        Hasher(),
+        Secrets(),
+        Transactions(transaction()),
+        UnavailableProvider(),
+        Identities(uuid4()),
+        sessions,
     )
 
     with pytest.raises(OAuthLoginCompletionRejectedError):
         await use_case.execute(
-            provider=LoginIdentityProvider.DISCORD, state="state", authorization_code="code",
+            provider=LoginIdentityProvider.DISCORD,
+            state="state",
+            authorization_code="code",
             correlation_id=uuid4(),
         )
 

@@ -73,10 +73,7 @@ def test_hides_unavailable_audit_timeline_connection_details() -> None:
     response = client_for(
         uuid4(),
         PlatformHealthUnavailableError("not available"),
-    ).get(
-        f"/api/v1/organizations/{uuid4()}/platform-connections/"
-        f"{uuid4()}/audit-timeline"
-    )
+    ).get(f"/api/v1/organizations/{uuid4()}/platform-connections/{uuid4()}/audit-timeline")
 
     assert response.status_code == 404
     assert response.json() == {"detail": "Platform audit timeline is unavailable"}

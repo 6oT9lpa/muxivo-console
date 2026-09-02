@@ -228,9 +228,7 @@ class SqlAlchemyOrganizationMemberRepository:
                 continue
         return tuple(members)
 
-    async def list_profiles(
-        self, organization_id: UUID
-    ) -> tuple[OrganizationMemberProfile, ...]:
+    async def list_profiles(self, organization_id: UUID) -> tuple[OrganizationMemberProfile, ...]:
         async with self._session_factory() as session:
             result = await session.execute(
                 select(OrganizationMembershipRecord, UserRecord.display_name)
@@ -240,9 +238,7 @@ class SqlAlchemyOrganizationMemberRepository:
             )
             rows = result.all()
             membership_ids = [membership.id for membership, _ in rows]
-            scopes_by_membership_id = await _scopes_by_membership_id(
-                session, membership_ids
-            )
+            scopes_by_membership_id = await _scopes_by_membership_id(session, membership_ids)
         profiles: list[OrganizationMemberProfile] = []
         for membership_record, display_name in rows:
             try:

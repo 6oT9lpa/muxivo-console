@@ -486,9 +486,7 @@ def _platform_connection_response(connection: PlatformConnection) -> PlatformCon
                 description=description,
                 status=_scope_status_for_connection(connection.status),
             )
-            for key, display_name, description in _scope_catalog_for_platform(
-                connection.platform
-            )
+            for key, display_name, description in _scope_catalog_for_platform(connection.platform)
         ],
     )
 
@@ -991,9 +989,7 @@ def create_app(
             ) from error
         response = JSONResponse(
             status_code=status.HTTP_200_OK,
-            content=BrowserSessionBulkRevocationResponse(
-                revoked_count=revoked_count
-            ).model_dump(),
+            content=BrowserSessionBulkRevocationResponse(revoked_count=revoked_count).model_dump(),
         )
         response.delete_cookie(
             key=cookies.session_name,
@@ -1138,9 +1134,7 @@ def create_app(
         status_code=status.HTTP_204_NO_CONTENT,
         tags=["authentication"],
     )
-    async def change_email_password(
-        payload: PasswordChangeRequest, request: Request
-    ) -> Response:
+    async def change_email_password(payload: PasswordChangeRequest, request: Request) -> Response:
         actor_id = getattr(request.state, "actor_id", None)
         session_id = getattr(request.state, "session_id", None)
         assurance_level = getattr(request.state, "assurance_level", None)
@@ -1755,8 +1749,7 @@ def create_app(
         now = datetime.now(UTC)
         return OrganizationInvitationListResponse(
             items=[
-                _organization_invitation_response(invitation, now=now)
-                for invitation in invitations
+                _organization_invitation_response(invitation, now=now) for invitation in invitations
             ]
         )
 
@@ -1931,10 +1924,7 @@ def create_app(
                 status_code=status.HTTP_403_FORBIDDEN, detail="Access denied"
             ) from error
         return PlatformConnectionListResponse(
-            items=[
-                _platform_connection_response(connection)
-                for connection in page.items
-            ],
+            items=[_platform_connection_response(connection) for connection in page.items],
             next_cursor=page.next_cursor,
         )
 

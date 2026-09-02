@@ -81,10 +81,7 @@ def test_hides_unavailable_server_statistics_connection_details() -> None:
     response = client_for(
         uuid4(),
         PlatformHealthUnavailableError("not available"),
-    ).get(
-        f"/api/v1/organizations/{uuid4()}/platform-connections/"
-        f"{uuid4()}/server-statistics"
-    )
+    ).get(f"/api/v1/organizations/{uuid4()}/platform-connections/{uuid4()}/server-statistics")
 
     assert response.status_code == 404
     assert response.json() == {"detail": "Platform server statistics are unavailable"}

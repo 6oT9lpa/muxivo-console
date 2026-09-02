@@ -34,9 +34,7 @@ class CleanupSecurityRecords:
     clock: Clock
     cleaner: SecurityRecordCleaner
 
-    async def execute(
-        self, command: CleanupSecurityRecordsCommand
-    ) -> CleanupSecurityRecordsResult:
+    async def execute(self, command: CleanupSecurityRecordsCommand) -> CleanupSecurityRecordsResult:
         now = self.clock.now()
         session_cutoff = now - command.session_retention
         password_recovery_cutoff = now - command.password_recovery_retention
@@ -59,9 +57,7 @@ class CleanupSecurityRecords:
             "security.cleanup.completed",
             extra={
                 "deleted_sessions": deleted_sessions,
-                "deleted_password_recovery_transactions": (
-                    deleted_password_recovery_transactions
-                ),
+                "deleted_password_recovery_transactions": (deleted_password_recovery_transactions),
             },
         )
         return CleanupSecurityRecordsResult(

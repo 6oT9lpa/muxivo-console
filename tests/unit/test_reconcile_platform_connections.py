@@ -105,9 +105,7 @@ async def test_reconciliation_updates_connection_statuses_and_records_audit() ->
         ConnectionStatus.REAUTH_REQUIRED,
         ConnectionStatus.ACTIVE,
     ]
-    assert {saved[1].action for saved in lifecycle.saved} == {
-        "platform_connection.reconciled"
-    }
+    assert {saved[1].action for saved in lifecycle.saved} == {"platform_connection.reconciled"}
 
 
 @pytest.mark.asyncio
@@ -132,8 +130,9 @@ async def test_reconciliation_skips_connections_without_platform_probe() -> None
 
 
 @pytest.mark.asyncio
-async def test_reconciliation_moves_pending_connection_to_degraded_after_preflight_failure(
-) -> None:
+async def test_reconciliation_moves_pending_connection_to_degraded_after_preflight_failure() -> (
+    None
+):
     pending = connection(ConnectionStatus.PENDING)
     lifecycle = FakeLifecycleWriter()
     worker = ReconcilePlatformConnections(

@@ -57,9 +57,7 @@ class ListOrganizationInvitations:
             )
             raise OrganizationInvitationListingRejectedError("Access denied.")
         result = tuple(
-            await self.invitations.list_for_organization(
-                organization_id=command.organization_id
-            )
+            await self.invitations.list_for_organization(organization_id=command.organization_id)
         )
         logger.info(
             "organization.invitation.list.completed",

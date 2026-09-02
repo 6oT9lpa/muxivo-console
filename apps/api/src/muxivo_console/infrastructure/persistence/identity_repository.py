@@ -134,9 +134,7 @@ class SqlAlchemyLoginIdentityReader:
                 continue
         return tuple(identities)
 
-    async def unlink(
-        self, *, identity_id: UUID, user_id: UUID, audit_event: AuditEvent
-    ) -> bool:
+    async def unlink(self, *, identity_id: UUID, user_id: UUID, audit_event: AuditEvent) -> bool:
         try:
             async with self._session_factory() as database_session:
                 async with database_session.begin():

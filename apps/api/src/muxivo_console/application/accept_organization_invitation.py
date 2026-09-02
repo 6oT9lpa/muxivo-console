@@ -46,9 +46,7 @@ class AcceptOrganizationInvitation:
     invitations: OrganizationInvitationReader
     writer: OrganizationInvitationWriter
 
-    async def execute(
-        self, command: AcceptOrganizationInvitationCommand
-    ) -> OrganizationMembership:
+    async def execute(self, command: AcceptOrganizationInvitationCommand) -> OrganizationMembership:
         logger.info(
             "organization.invitation.accept.started",
             extra={
@@ -136,16 +134,12 @@ def _fresh_scope_ids(
     identifiers: IdentifierGenerator, scopes: frozenset[MembershipResourceScope]
 ) -> frozenset[MembershipResourceScope]:
     return frozenset(
-        MembershipResourceScope(
-            id=identifiers.new(), resource=scope.resource, action=scope.action
-        )
+        MembershipResourceScope(id=identifiers.new(), resource=scope.resource, action=scope.action)
         for scope in scopes
     )
 
 
 def _is_usable_token(token: str) -> bool:
     return (
-        bool(token)
-        and len(token) <= 4096
-        and not any(character.isspace() for character in token)
+        bool(token) and len(token) <= 4096 and not any(character.isspace() for character in token)
     )

@@ -134,9 +134,7 @@ async def test_recovery_request_creates_hashed_token_and_notifies_active_account
         notifier=notifier,
     )
 
-    await use_case.execute(
-        RequestPasswordRecoveryCommand(" Creator@Example.com ", correlation_id)
-    )
+    await use_case.execute(RequestPasswordRecoveryCommand(" Creator@Example.com ", correlation_id))
 
     assert token_hasher.tokens == ["opaque-recovery-token"]
     assert transactions.transaction is not None

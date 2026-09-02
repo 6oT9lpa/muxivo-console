@@ -56,15 +56,20 @@ class BeginOAuthLogin:
         if not await self.transactions.create(
             transaction=transaction,
             audit_event=AuditEvent(
-                id=self.identifiers.new(), correlation_id=correlation_id, actor_id=None,
-                organization_id=None, action="auth.oauth_login_started",
-                resource_type="oauth_login_transaction", resource_id=str(transaction.id),
+                id=self.identifiers.new(),
+                correlation_id=correlation_id,
+                actor_id=None,
+                organization_id=None,
+                action="auth.oauth_login_started",
+                resource_type="oauth_login_transaction",
+                resource_id=str(transaction.id),
                 result="succeeded",
             ),
         ):
             raise OAuthLoginStartRejectedError("OAuth login could not be started.")
         challenge = base64.urlsafe_b64encode(hashlib.sha256(code_verifier.encode()).digest())
         return StartedOAuthLogin(
-            state=state, code_challenge=challenge.rstrip(b"=").decode(),
+            state=state,
+            code_challenge=challenge.rstrip(b"=").decode(),
             expires_in_seconds=int(self.lifetime.total_seconds()),
         )

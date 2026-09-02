@@ -82,9 +82,7 @@ def test_password_change_maps_browser_session_to_use_case_command() -> None:
     actor_id = uuid4()
     session_id = uuid4()
     use_case = PasswordChangeUseCase()
-    client = client_with_session(
-        actor_id=actor_id, session_id=session_id, password_change=use_case
-    )
+    client = client_with_session(actor_id=actor_id, session_id=session_id, password_change=use_case)
 
     response = client.put(
         "/api/v1/auth/password",

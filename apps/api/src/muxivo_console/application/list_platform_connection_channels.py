@@ -48,10 +48,10 @@ class ListPlatformConnectionChannels:
         connection = await self.connections.find_for_organization(
             organization_id=organization_id, connection_id=connection_id
         )
-        if (
-            connection is None
-            or connection.status not in {ConnectionStatus.ACTIVE, ConnectionStatus.DEGRADED}
-        ):
+        if connection is None or connection.status not in {
+            ConnectionStatus.ACTIVE,
+            ConnectionStatus.DEGRADED,
+        }:
             raise PlatformHealthUnavailableError("No usable platform connection exists.")
         channel_catalog = self.channel_catalogs.get(connection.platform)
         if channel_catalog is None:

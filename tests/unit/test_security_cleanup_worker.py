@@ -16,9 +16,7 @@ class Cleanup:
     def __init__(self) -> None:
         self.commands: list[CleanupSecurityRecordsCommand] = []
 
-    async def execute(
-        self, command: CleanupSecurityRecordsCommand
-    ) -> CleanupSecurityRecordsResult:
+    async def execute(self, command: CleanupSecurityRecordsCommand) -> CleanupSecurityRecordsResult:
         self.commands.append(command)
         return CleanupSecurityRecordsResult(
             deleted_sessions=2,

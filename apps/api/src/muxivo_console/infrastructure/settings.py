@@ -284,9 +284,7 @@ def _validate_oauth_redirect_uri(
     if parsed.scheme != "https" or not parsed.netloc:
         raise ConfigurationError(f"{setting_name} must use HTTPS.")
     if parsed.path != expected_path:
-        raise ConfigurationError(
-            f"{setting_name} must use {expected_path} outside development."
-        )
+        raise ConfigurationError(f"{setting_name} must use {expected_path} outside development.")
 
 
 def _optional_twitch_control_settings(values: Mapping[str, str]) -> TwitchControlSettings | None:
@@ -306,10 +304,14 @@ def _optional_twitch_control_settings(values: Mapping[str, str]) -> TwitchContro
 
 
 def _rate_limit_settings(values: Mapping[str, str], *, environment: str) -> RateLimitSettings:
-    backend = values.get(
-        "MUXIVO_CONSOLE_RATE_LIMIT_BACKEND",
-        "memory" if environment == "development" else "redis",
-    ).strip().lower()
+    backend = (
+        values.get(
+            "MUXIVO_CONSOLE_RATE_LIMIT_BACKEND",
+            "memory" if environment == "development" else "redis",
+        )
+        .strip()
+        .lower()
+    )
     if backend not in {"memory", "redis"}:
         raise ConfigurationError("MUXIVO_CONSOLE_RATE_LIMIT_BACKEND must be memory or redis.")
     if backend == "memory":
@@ -320,7 +322,9 @@ def _rate_limit_settings(values: Mapping[str, str], *, environment: str) -> Rate
         return RateLimitSettings(backend="memory")
     redis_url = _required(values, "MUXIVO_CONSOLE_RATE_LIMIT_REDIS_URL")
     if not redis_url.startswith(("redis://", "rediss://")):
-        raise ConfigurationError("MUXIVO_CONSOLE_RATE_LIMIT_REDIS_URL must use redis:// or rediss://.")
+        raise ConfigurationError(
+            "MUXIVO_CONSOLE_RATE_LIMIT_REDIS_URL must use redis:// or rediss://."
+        )
     return RateLimitSettings(backend="redis", redis_url=redis_url)
 
 
@@ -343,8 +347,7 @@ def _optional_cors_allowed_origins(
             )
         if public_base_url is not None and public_base_url not in origins:
             raise ConfigurationError(
-                "MUXIVO_CONSOLE_CORS_ALLOWED_ORIGINS must include "
-                "MUXIVO_CONSOLE_PUBLIC_BASE_URL."
+                "MUXIVO_CONSOLE_CORS_ALLOWED_ORIGINS must include MUXIVO_CONSOLE_PUBLIC_BASE_URL."
             )
     return origins
 
@@ -366,9 +369,7 @@ def _optional_password_recovery_smtp(
     if not has_any:
         if environment == "development":
             return None
-        raise ConfigurationError(
-            "Password recovery SMTP must be configured outside development."
-        )
+        raise ConfigurationError("Password recovery SMTP must be configured outside development.")
     if not all(provided):
         raise ConfigurationError("Password recovery SMTP configuration must be complete.")
     username = values.get("MUXIVO_CONSOLE_PASSWORD_RECOVERY_SMTP_USERNAME", "").strip() or None
@@ -381,16 +382,17 @@ def _optional_password_recovery_smtp(
         raise ConfigurationError(
             "Password recovery SMTP authentication is required outside development."
         )
-    reset_url_base = _required(
-        values, "MUXIVO_CONSOLE_PASSWORD_RECOVERY_RESET_URL_BASE"
-    ).rstrip("/")
+    reset_url_base = _required(values, "MUXIVO_CONSOLE_PASSWORD_RECOVERY_RESET_URL_BASE").rstrip(
+        "/"
+    )
     if environment != "development" and not reset_url_base.startswith("https://"):
         raise ConfigurationError(
             "MUXIVO_CONSOLE_PASSWORD_RECOVERY_RESET_URL_BASE must use HTTPS outside development."
         )
-    invitation_url_base = values.get(
-        "MUXIVO_CONSOLE_ORGANIZATION_INVITATION_URL_BASE", ""
-    ).strip().rstrip("/") or None
+    invitation_url_base = (
+        values.get("MUXIVO_CONSOLE_ORGANIZATION_INVITATION_URL_BASE", "").strip().rstrip("/")
+        or None
+    )
     if invitation_url_base is not None and environment != "development":
         _validate_public_https_url(
             invitation_url_base, "MUXIVO_CONSOLE_ORGANIZATION_INVITATION_URL_BASE"
@@ -539,9 +541,7 @@ def _optional_positive_float(values: Mapping[str, str], name: str, *, default: f
     return parsed
 
 
-def _optional_non_negative_float(
-    values: Mapping[str, str], name: str, *, default: float
-) -> float:
+def _optional_non_negative_float(values: Mapping[str, str], name: str, *, default: float) -> float:
     parsed = _optional_float(values, name, default=default)
     if parsed < 0:
         raise ConfigurationError(f"{name} must not be negative.")

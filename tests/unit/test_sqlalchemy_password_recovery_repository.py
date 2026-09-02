@@ -95,9 +95,7 @@ async def test_password_recovery_completion_records_password_recovered_audit_eve
         ]
     )
 
-    completed = await SqlAlchemyPasswordRecoveryRepository(
-        lambda: database_session
-    ).complete(
+    completed = await SqlAlchemyPasswordRecoveryRepository(lambda: database_session).complete(
         token_hash="a" * 64,
         password_hash="$argon2id$new-password-hash",
         completed_at=completed_at,

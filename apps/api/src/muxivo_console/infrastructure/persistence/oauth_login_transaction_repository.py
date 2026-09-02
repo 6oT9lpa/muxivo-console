@@ -27,21 +27,27 @@ class SqlAlchemyOAuthLoginTransactionWriter:
         try:
             async with self._session_factory() as session:
                 async with session.begin():
-                    session.add_all((
-                        OAuthLoginTransactionRecord(
-                            id=transaction.id, provider=transaction.provider.value,
-                            state_hash=transaction.state_hash,
-                            code_verifier_ciphertext=transaction.code_verifier_ciphertext,
-                            expires_at=transaction.expires_at,
-                        ),
-                        AuditEventRecord(
-                            id=audit_event.id, correlation_id=audit_event.correlation_id,
-                            actor_id=audit_event.actor_id,
-                            organization_id=audit_event.organization_id,
-                            action=audit_event.action, resource_type=audit_event.resource_type,
-                            resource_id=audit_event.resource_id, result=audit_event.result,
-                        ),
-                    ))
+                    session.add_all(
+                        (
+                            OAuthLoginTransactionRecord(
+                                id=transaction.id,
+                                provider=transaction.provider.value,
+                                state_hash=transaction.state_hash,
+                                code_verifier_ciphertext=transaction.code_verifier_ciphertext,
+                                expires_at=transaction.expires_at,
+                            ),
+                            AuditEventRecord(
+                                id=audit_event.id,
+                                correlation_id=audit_event.correlation_id,
+                                actor_id=audit_event.actor_id,
+                                organization_id=audit_event.organization_id,
+                                action=audit_event.action,
+                                resource_type=audit_event.resource_type,
+                                resource_id=audit_event.resource_id,
+                                result=audit_event.result,
+                            ),
+                        )
+                    )
         except IntegrityError:
             return False
         return True
@@ -56,17 +62,25 @@ class SqlAlchemyOAuthLoginTransactionConsumer:
     async def consume(
         self, *, state_hash: str, consumed_at: datetime
     ) -> OAuthLoginTransaction | None:
-        statement = update(OAuthLoginTransactionRecord).where(
-            OAuthLoginTransactionRecord.state_hash == state_hash,
-            OAuthLoginTransactionRecord.consumed_at.is_(None),
-            OAuthLoginTransactionRecord.expires_at > consumed_at,
-        ).values(consumed_at=consumed_at).returning(OAuthLoginTransactionRecord)
+        statement = (
+            update(OAuthLoginTransactionRecord)
+            .where(
+                OAuthLoginTransactionRecord.state_hash == state_hash,
+                OAuthLoginTransactionRecord.consumed_at.is_(None),
+                OAuthLoginTransactionRecord.expires_at > consumed_at,
+            )
+            .values(consumed_at=consumed_at)
+            .returning(OAuthLoginTransactionRecord)
+        )
         async with self._session_factory() as session:
             async with session.begin():
                 record = (await session.execute(statement)).scalar_one_or_none()
         if record is None:
             return None
         return OAuthLoginTransaction(
-            record.id, LoginIdentityProvider(record.provider), record.state_hash,
-            record.code_verifier_ciphertext, record.expires_at,
+            record.id,
+            LoginIdentityProvider(record.provider),
+            record.state_hash,
+            record.code_verifier_ciphertext,
+            record.expires_at,
         )

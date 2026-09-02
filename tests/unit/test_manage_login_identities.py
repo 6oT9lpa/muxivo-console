@@ -61,9 +61,7 @@ class IdentityUnlinkWriter:
         self.user_id: UUID | None = None
         self.audit_event: AuditEvent | None = None
 
-    async def unlink(
-        self, *, identity_id: UUID, user_id: UUID, audit_event: AuditEvent
-    ) -> bool:
+    async def unlink(self, *, identity_id: UUID, user_id: UUID, audit_event: AuditEvent) -> bool:
         self.identity_id = identity_id
         self.user_id = user_id
         self.audit_event = audit_event
@@ -135,9 +133,7 @@ async def test_inactive_user_cannot_list_login_identities() -> None:
     )
 
     with pytest.raises(LoginIdentityManagementRejectedError):
-        await use_case.execute(
-            ListLoginIdentitiesCommand(actor_id=uuid4(), correlation_id=uuid4())
-        )
+        await use_case.execute(ListLoginIdentitiesCommand(actor_id=uuid4(), correlation_id=uuid4()))
 
 
 @pytest.mark.asyncio

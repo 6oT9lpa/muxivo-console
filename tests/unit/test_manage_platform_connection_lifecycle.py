@@ -121,9 +121,7 @@ async def test_revoke_moves_active_connection_to_reauth_required_and_records_aud
         identifiers=SequenceIdentifiers([audit_id]),
     )
 
-    updated = await use_case.execute(
-        command(existing, PlatformConnectionLifecycleAction.REVOKE)
-    )
+    updated = await use_case.execute(command(existing, PlatformConnectionLifecycleAction.REVOKE))
 
     assert updated.status is ConnectionStatus.REAUTH_REQUIRED
     assert writer.connection == updated
@@ -153,9 +151,7 @@ async def test_lifecycle_replays_persisted_idempotent_result_without_new_audit()
         identifiers=SequenceIdentifiers([uuid4()]),
     )
 
-    updated = await use_case.execute(
-        command(existing, PlatformConnectionLifecycleAction.REVOKE)
-    )
+    updated = await use_case.execute(command(existing, PlatformConnectionLifecycleAction.REVOKE))
 
     assert updated == existing
     assert writer.connection is None
@@ -311,8 +307,6 @@ async def test_denied_actor_does_not_read_or_write_connection() -> None:
     )
 
     with pytest.raises(PlatformConnectionLifecycleRejectedError):
-        await use_case.execute(
-            command(existing, PlatformConnectionLifecycleAction.DISCONNECT)
-        )
+        await use_case.execute(command(existing, PlatformConnectionLifecycleAction.DISCONNECT))
 
     assert writer.connection is None

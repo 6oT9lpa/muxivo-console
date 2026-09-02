@@ -153,12 +153,12 @@ async def test_owner_adds_lower_role_with_scopes_and_audit_event() -> None:
 
     created = await use_case.execute(
         AddOrganizationMemberCommand(
-                actor_id=owner_id,
-                organization_id=organization_id,
-                email=" Creator@Example.com ",
-                role=OrganizationRole.VIEWER,
-                resource_scopes=(control_read_scope(),),
-                correlation_id=correlation_id,
+            actor_id=owner_id,
+            organization_id=organization_id,
+            email=" Creator@Example.com ",
+            role=OrganizationRole.VIEWER,
+            resource_scopes=(control_read_scope(),),
+            correlation_id=correlation_id,
         )
     )
 

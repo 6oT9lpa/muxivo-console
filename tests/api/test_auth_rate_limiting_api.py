@@ -138,9 +138,7 @@ def test_discord_oauth_callback_is_rate_limited_before_use_case() -> None:
     app = create_app(discord_identity_link_complete=use_case, rate_limiter=limiter)
     client = TestClient(app)
 
-    response = client.get(
-        "/api/v1/auth/discord/callback?code=oauth-code&state=oauth-state"
-    )
+    response = client.get("/api/v1/auth/discord/callback?code=oauth-code&state=oauth-state")
 
     assert_rate_limited(response, limiter, "auth.oauth.callback")
     assert use_case.called is False

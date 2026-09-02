@@ -56,16 +56,14 @@ def test_returns_secret_free_platform_integrations() -> None:
     )
 
     assert response.status_code == 200
-    assert response.json()["creator_sources"] == [
-        {"platform": "twitch", "total": 2, "active": 1}
-    ]
+    assert response.json()["creator_sources"] == [{"platform": "twitch", "total": 2, "active": 1}]
     assert "endpoint" not in response.json()
 
 
 def test_hides_unavailable_integrations_connection_details() -> None:
-    response = client_for(
-        uuid4(), PlatformHealthUnavailableError("not available")
-    ).get(f"/api/v1/organizations/{uuid4()}/platform-connections/{uuid4()}/integrations")
+    response = client_for(uuid4(), PlatformHealthUnavailableError("not available")).get(
+        f"/api/v1/organizations/{uuid4()}/platform-connections/{uuid4()}/integrations"
+    )
 
     assert response.status_code == 404
     assert response.json() == {"detail": "Platform integrations are unavailable"}

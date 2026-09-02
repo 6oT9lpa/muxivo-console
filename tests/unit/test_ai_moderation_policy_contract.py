@@ -14,6 +14,4 @@ def test_policy_contract_accepts_safe_shadow_defaults() -> None:
 
 def test_policy_contract_rejects_elevated_automated_action_without_acknowledgement() -> None:
     with pytest.raises(ValidationError, match="require acknowledgement"):
-        AiModerationPolicyUpdateRequest(
-            enforcement_mode="ELEVATED", allow_automated_ban=True
-        )
+        AiModerationPolicyUpdateRequest(enforcement_mode="ELEVATED", allow_automated_ban=True)

@@ -438,9 +438,7 @@ def create_production_app(
         )
     platform_connection_candidates = ListPlatformConnectionCandidates(
         authorizer=MembershipOrganizationAuthorizer(membership_reader),
-        candidates=PlatformConnectionCandidateCatalogRouter(
-            platform_connection_candidate_catalogs
-        ),
+        candidates=PlatformConnectionCandidateCatalogRouter(platform_connection_candidate_catalogs),
     )
     platform_connections = RegisterPlatformConnection(
         authorizer=MembershipOrganizationAuthorizer(membership_reader),
@@ -626,7 +624,7 @@ def create_production_app(
                     batch_limit=settings.connection_reconciliation.batch_limit,
                 ),
             )
-    )
+        )
     discord_identity_link_start = None
     discord_identity_link_complete = None
     twitch_identity_link_start = None

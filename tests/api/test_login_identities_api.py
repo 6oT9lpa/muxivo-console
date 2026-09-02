@@ -43,9 +43,7 @@ class SessionResolver:
 
 
 class IdentityListUseCase:
-    def __init__(
-        self, identities: tuple[LoginIdentityProfile, ...], rejects: bool = False
-    ) -> None:
+    def __init__(self, identities: tuple[LoginIdentityProfile, ...], rejects: bool = False) -> None:
         self.identities = identities
         self.rejects = rejects
         self.command = None
@@ -58,9 +56,7 @@ class IdentityListUseCase:
 
 
 class IdentityUnlinkUseCase:
-    def __init__(
-        self, identity: LoginIdentityProfile | None = None, rejects: bool = False
-    ) -> None:
+    def __init__(self, identity: LoginIdentityProfile | None = None, rejects: bool = False) -> None:
         self.identity = identity
         self.rejects = rejects
         self.command = None

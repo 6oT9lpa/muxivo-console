@@ -81,9 +81,7 @@ class SqlAlchemyAuthSessionListingReader:
     ) -> None:
         self._session_factory = session_factory
 
-    async def list_active_for_user(
-        self, *, user_id: UUID, active_at
-    ) -> tuple[AuthSession, ...]:
+    async def list_active_for_user(self, *, user_id: UUID, active_at) -> tuple[AuthSession, ...]:
         statement = (
             select(AuthSessionRecord)
             .where(
@@ -127,10 +125,14 @@ class SqlAlchemyAuthSessionRevoker:
                     return False
                 session.add(
                     AuditEventRecord(
-                        id=audit_event.id, correlation_id=audit_event.correlation_id,
-                        actor_id=audit_event.actor_id, organization_id=audit_event.organization_id,
-                        action=audit_event.action, resource_type=audit_event.resource_type,
-                        resource_id=audit_event.resource_id, result=audit_event.result,
+                        id=audit_event.id,
+                        correlation_id=audit_event.correlation_id,
+                        actor_id=audit_event.actor_id,
+                        organization_id=audit_event.organization_id,
+                        action=audit_event.action,
+                        resource_type=audit_event.resource_type,
+                        resource_id=audit_event.resource_id,
+                        result=audit_event.result,
                     )
                 )
         return True

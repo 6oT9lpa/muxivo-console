@@ -109,8 +109,7 @@ class InMemoryHttpMetricsRecorder:
                 )
             labels = f'{base_labels},le="+Inf"'
             lines.append(
-                f"muxivo_console_http_request_duration_seconds_bucket{{{labels}}} "
-                f"{sample.count}"
+                f"muxivo_console_http_request_duration_seconds_bucket{{{labels}}} {sample.count}"
             )
         return "\n".join(lines) + "\n"
 

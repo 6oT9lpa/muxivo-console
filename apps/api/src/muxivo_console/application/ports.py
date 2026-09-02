@@ -293,9 +293,7 @@ class OrganizationReader(Protocol):
 class OrganizationMemberReader(Protocol):
     """Reads members for one Console-owned organization."""
 
-    async def list_profiles(
-        self, organization_id: UUID
-    ) -> Sequence[OrganizationMemberProfile]: ...
+    async def list_profiles(self, organization_id: UUID) -> Sequence[OrganizationMemberProfile]: ...
 
     async def list_for_organization(
         self, organization_id: UUID
@@ -455,9 +453,7 @@ class SecurityRecordCleaner(Protocol):
 
     async def delete_expired_or_revoked_sessions(self, *, before) -> int: ...
 
-    async def delete_consumed_or_expired_password_recovery_transactions(
-        self, *, before
-    ) -> int: ...
+    async def delete_consumed_or_expired_password_recovery_transactions(self, *, before) -> int: ...
 
 
 class PasswordRecoveryNotifier(Protocol):

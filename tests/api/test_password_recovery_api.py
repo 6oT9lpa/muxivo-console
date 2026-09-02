@@ -59,9 +59,7 @@ def test_password_recovery_completion_maps_token_and_password_without_csrf() -> 
 def test_password_recovery_completion_hides_invalid_token_reason() -> None:
     client = TestClient(
         create_app(
-            password_recovery_completion_use_case=PasswordRecoveryCompletionUseCase(
-                rejects=True
-            )
+            password_recovery_completion_use_case=PasswordRecoveryCompletionUseCase(rejects=True)
         )
     )
 

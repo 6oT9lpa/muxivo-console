@@ -32,9 +32,7 @@ class SqlAlchemySecurityRecordCleaner:
                 result = await session.execute(statement)
         return int(result.rowcount or 0)
 
-    async def delete_consumed_or_expired_password_recovery_transactions(
-        self, *, before
-    ) -> int:
+    async def delete_consumed_or_expired_password_recovery_transactions(self, *, before) -> int:
         statement = delete(PasswordRecoveryTransactionRecord).where(
             or_(
                 PasswordRecoveryTransactionRecord.expires_at < before,
