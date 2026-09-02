@@ -34,6 +34,9 @@ jobs:
       - name: Lint backend
         run: python -m ruff check apps/api/src tests
 
+      - name: Check backend formatting
+        run: python -m ruff format --check apps/api/src tests
+
       - name: Scan for committed secrets
         run: python scripts/secret_scan.py
 
