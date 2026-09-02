@@ -10,7 +10,7 @@ import {
   Sun,
   UsersRound,
 } from "@lucide/vue";
-import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { consoleApi, ConsoleApiError } from "./api/consoleApi";
 import LanguageSwitcher from "./components/common/LanguageSwitcher.vue";
 import PublicFooter from "./components/common/PublicFooter.vue";
@@ -119,6 +119,8 @@ const organizationName = ref("");
 const authenticated = ref(false);
 const landingTab = ref<"overview" | "about">("overview");
 const loginOpen = ref(false);
+const loginDialog = ref<HTMLElement | null>(null);
+const loginTrigger = ref<HTMLButtonElement | null>(null);
 const theme = ref<Theme>(initialTheme);
 const activeConsoleSection = ref<ConsoleSection>("overview");
 const busy = ref(false);
@@ -251,14 +253,25 @@ function scrollToConsoleSection(section: ConsoleSection): void {
 
 const previousBodyOverflow = ref("");
 
-watch(loginOpen, (isOpen) => {
+watch(loginOpen, async (isOpen) => {
   if (typeof document === "undefined") return;
   if (isOpen) {
     previousBodyOverflow.value = document.body.style.overflow;
     document.body.style.overflow = "hidden";
+    await nextTick();
+    const firstInput = loginDialog.value?.querySelector<HTMLInputElement>("input:not([disabled])");
+    if (firstInput) {
+      firstInput.focus();
+    } else {
+      loginDialog.value?.querySelector<HTMLElement>("button:not([disabled])")?.focus();
+    }
+    clientLogger.info("console.auth.dialog_opened");
     return;
   }
   document.body.style.overflow = previousBodyOverflow.value;
+  await nextTick();
+  loginTrigger.value?.focus();
+  clientLogger.info("console.auth.dialog_closed");
 });
 
 onBeforeUnmount(() => {
@@ -267,6 +280,32 @@ onBeforeUnmount(() => {
 
 function navLetters(label: string): string[] {
   return Array.from(label);
+}
+
+function handleLoginDialogKeydown(event: KeyboardEvent): void {
+  if (event.key !== "Tab") return;
+  const dialog = loginDialog.value;
+  if (!dialog) return;
+
+  const focusableElements = Array.from(
+    dialog.querySelectorAll<HTMLElement>(
+      "button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), a[href], [tabindex]:not([tabindex='-1'])",
+    ),
+  ).filter((element) => element.getClientRects().length > 0);
+  if (!focusableElements.length) {
+    event.preventDefault();
+    return;
+  }
+
+  const firstElement = focusableElements[0];
+  const lastElement = focusableElements[focusableElements.length - 1];
+  if (event.shiftKey && document.activeElement === firstElement) {
+    event.preventDefault();
+    lastElement.focus();
+  } else if (!event.shiftKey && document.activeElement === lastElement) {
+    event.preventDefault();
+    firstElement.focus();
+  }
 }
 
 const usableConnections = computed(() =>
@@ -1617,7 +1656,7 @@ function messageFor(error: unknown): string {
             <Sun v-if="theme === 'dark'" :size="18" aria-hidden="true" />
             <Moon v-else :size="18" aria-hidden="true" />
           </button>
-          <button class="panel-cta" type="button" @click="loginOpen = true">
+          <button ref="loginTrigger" class="panel-cta" type="button" @click="loginOpen = true">
             {{ t("header.see_panel") }}
           </button>
         </div>
@@ -1628,10 +1667,12 @@ function messageFor(error: unknown): string {
       <PublicFooter />
       <section
         v-if="loginOpen"
+        ref="loginDialog"
         class="login-overlay"
         role="dialog"
         aria-modal="true"
-        :aria-label="t('console.auth.dialog_label')"
+        aria-labelledby="console-auth-dialog-title"
+        @keydown="handleLoginDialogKeydown"
         @keydown.esc="loginOpen = false"
       >
         <div class="login-panel">
@@ -1644,7 +1685,7 @@ function messageFor(error: unknown): string {
             ×
           </button>
           <span class="eyebrow">MUXIVO CONSOLE</span>
-          <h2>
+          <h2 id="console-auth-dialog-title">
             {{
               authMode === "sign-in"
                 ? t("console.auth.welcome_title")

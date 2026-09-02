@@ -169,7 +169,14 @@ test("landing page and sign-in dialog fit a narrow viewport", async ({ page }) =
   ).toBe(false);
 
   await page.getByRole("button", { name: /see panel|открыть панель/i }).click();
-  await expect(page.getByRole("dialog")).toBeVisible();
+  const dialog = page.getByRole("dialog");
+  await expect(dialog).toBeVisible();
+  await expect(dialog).toHaveAttribute("aria-labelledby", "console-auth-dialog-title");
+  await expect(page.getByLabel("Email", { exact: true })).toBeFocused();
+  const lastFocusableControl = dialog.locator("button").last();
+  await lastFocusableControl.focus();
+  await page.keyboard.press("Tab");
+  await expect(dialog.getByRole("button", { name: "Close" })).toBeFocused();
   expect(
     await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth),
   ).toBe(false);
