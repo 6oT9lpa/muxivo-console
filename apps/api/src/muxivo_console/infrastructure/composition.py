@@ -109,6 +109,9 @@ from muxivo_console.infrastructure.persistence.connection_repository import (
     SqlAlchemyPlatformConnectionWriter,
 )
 from muxivo_console.infrastructure.persistence.database import create_session_factory
+from muxivo_console.infrastructure.persistence.database_readiness import (
+    SqlAlchemyDatabaseReadinessProbe,
+)
 from muxivo_console.infrastructure.persistence.identity_link_transaction_writer import (
     SqlAlchemyIdentityLinkTransactionConsumer,
     SqlAlchemyIdentityLinkTransactionWriter,
@@ -782,6 +785,7 @@ def create_production_app(
         password_recovery_completion_use_case=password_recovery_completion,
         rate_limiter=_rate_limiter_for(settings),
         metrics_recorder=InMemoryHttpMetricsRecorder(),
+        readiness_probe=SqlAlchemyDatabaseReadinessProbe(sessions),
         browser_session_cookies=browser_session_cookies,
         session_fingerprint_hasher=session_fingerprint_hasher,
         browser_security_policy=BrowserSecurityPolicy(

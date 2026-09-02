@@ -522,6 +522,12 @@ class HttpMetricsRecorder(Protocol):
     def render_prometheus(self) -> str: ...
 
 
+class ReadinessProbe(Protocol):
+    """Checks whether the composed Console can safely accept application traffic."""
+
+    async def check(self, *, correlation_id: UUID) -> bool: ...
+
+
 class EmailPasswordRegistrationWriter(Protocol):
     """Atomically writes a registration and its audit event."""
 

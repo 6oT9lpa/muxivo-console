@@ -38,6 +38,7 @@ completed.
 | Security | Recent authentication refresh and gates for password change, identity unlink and sensitive writes | Implemented |
 | Security | Scheduled cleanup for expired sessions and recovery transactions | Implemented |
 | Observability | `/metrics` scraped and alert rules configured | Metrics endpoint and alert rules implemented; scraper backend pending |
+| Operations | Liveness/readiness endpoints distinguish process health from database readiness | Implemented; external monitor wiring pending |
 | Lifecycle | Periodic platform connection reconciliation worker | Implemented |
 | Lifecycle | Idempotency keys for retry-safe lifecycle actions | Implemented |
 | Lifecycle | Browser-safe platform resource candidate discovery | Console contract/UI implemented; Control API endpoints pending |

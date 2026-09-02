@@ -28,6 +28,12 @@ server {
         proxy_set_header X-Forwarded-Proto $scheme;
     }
 
+    location = /readyz {
+        proxy_pass http://127.0.0.1:18081/readyz;
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+
     location / {
         try_files $uri $uri/ /index.html;
     }

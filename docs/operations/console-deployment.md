@@ -156,8 +156,10 @@ then inspect its structured journal entries for:
 - migration success from the service pre-start command;
 - `http.request.started` and `http.request.completed` without secret fields.
 
-Check `http://127.0.0.1:8010/healthz` locally before exposing the route through
-FRP.
+Check `http://127.0.0.1:8010/healthz` and
+`http://127.0.0.1:8010/readyz` locally before exposing the routes through FRP.
+The first endpoint proves process liveness; the second fails closed unless the
+dedicated Console database is reachable.
 
 ### 5. Add only the new FRP proxy
 
@@ -177,15 +179,16 @@ site with `nginx-console.conf.example`, validate again and reload. Verify that
 the original `muxivo.pro` server still serves the Discord Activity.
 
 The final host serves static frontend assets from
-`/srv/muxivo-console/web`, proxies only `/api/` and `/healthz` to FRP `18081`,
-and does not expose `/metrics` publicly.
+`/srv/muxivo-console/web`, proxies only `/api/`, `/healthz` and `/readyz` to FRP
+`18081`, and does not expose `/metrics` publicly.
 
 ### 7. Verify end to end
 
 Run the checks in this order:
 
 1. `nginx -t` and HTTPS certificate hostname validation.
-2. `curl -fsS https://console.muxivo.pro/healthz` and security headers.
+2. `curl -fsS https://console.muxivo.pro/healthz` and `/readyz`, then inspect
+   security headers.
 3. Browser sign-in, organization creation, organization switcher and empty
    state.
 4. Organization member invite, allowed role/scope changes, forbidden

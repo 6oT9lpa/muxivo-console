@@ -35,3 +35,15 @@ def test_development_bootstrap_does_not_bypass_registration_lifecycle() -> None:
 
     assert "UPDATE users SET status" not in script
     assert "pending_verification" not in script
+
+
+def test_deployment_proxies_readiness_without_exposing_metrics() -> None:
+    bootstrap = Path("deploy/nginx-console-bootstrap.conf.example").read_text()
+    final = Path("deploy/nginx-console.conf.example").read_text()
+
+    assert "location = /readyz" in bootstrap
+    assert "location = /readyz" in final
+    assert "proxy_pass http://127.0.0.1:18081/readyz" in final
+    assert "location = /metrics" in final
+    assert "allow 127.0.0.1" in final
+    assert "deny all" in final

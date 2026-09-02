@@ -145,6 +145,7 @@ from muxivo_console.application.manage_platform_connection_lifecycle import (
 from muxivo_console.application.ports import (
     HttpMetricsRecorder,
     RateLimiter,
+    ReadinessProbe,
     SessionFingerprintHasher,
 )
 from muxivo_console.application.reauthenticate_browser_session import (
@@ -606,6 +607,7 @@ def create_app(
     password_recovery_completion_use_case: CompletePasswordRecovery | None = None,
     rate_limiter: RateLimiter | None = None,
     metrics_recorder: HttpMetricsRecorder | None = None,
+    readiness_probe: ReadinessProbe | None = None,
     organization_creation_use_case: CreateOrganization | None = None,
     organization_list_use_case: ListOrganizations | None = None,
     organization_members_use_case: ListOrganizationMembers | None = None,
@@ -871,6 +873,45 @@ def create_app(
 
     @app.get("/healthz", tags=["operations"])
     async def healthz() -> dict[str, str]:
+        return {"status": "ok"}
+
+    @app.get("/readyz", tags=["operations"])
+    async def readyz(request: Request) -> dict[str, str]:
+        if readiness_probe is None:
+            logger.error(
+                "operations.readiness.unavailable",
+                extra={"correlation_id": str(request.state.correlation_id)},
+            )
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Readiness is unavailable",
+            )
+        try:
+            ready = await readiness_probe.check(
+                correlation_id=request.state.correlation_id,
+            )
+        except Exception as error:
+            logger.error(
+                "operations.readiness.check_failed",
+                extra={
+                    "correlation_id": str(request.state.correlation_id),
+                    "error_type": type(error).__name__,
+                },
+            )
+            ready = False
+        if not ready:
+            logger.warning(
+                "operations.readiness.failed",
+                extra={"correlation_id": str(request.state.correlation_id)},
+            )
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Service is not ready",
+            )
+        logger.info(
+            "operations.readiness.completed",
+            extra={"correlation_id": str(request.state.correlation_id)},
+        )
         return {"status": "ok"}
 
     @app.get("/metrics", tags=["operations"])
