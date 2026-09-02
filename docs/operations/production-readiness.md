@@ -53,7 +53,7 @@ completed.
 | Compliance | Data inventory and retention schedule approved | Draft |
 | Operations | Incident runbook approved and exercised | Draft |
 | Operations | Backup/restore drill completed | Drill procedure documented; staging exercise pending |
-| Deployment | Staging/prod domains provisioned | Enforced in settings; values pending |
+| Deployment | Staging/prod domains provisioned | Temporary staging `beget.ame-life.com` is active; canonical production host pending |
 | Deployment | Staging/prod OAuth credentials provisioned | Discord/Twitch OAuth enforced; values pending |
 | Secrets | KMS/secret manager selected and wired | Secret-manager source enforced; provider pending |
 

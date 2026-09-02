@@ -40,10 +40,20 @@ def test_development_bootstrap_does_not_bypass_registration_lifecycle() -> None:
 def test_deployment_proxies_readiness_without_exposing_metrics() -> None:
     bootstrap = Path("deploy/nginx-console-bootstrap.conf.example").read_text()
     final = Path("deploy/nginx-console.conf.example").read_text()
+    staging = Path("deploy/nginx-console-beget.conf.example").read_text()
 
     assert "location = /readyz" in bootstrap
     assert "location = /readyz" in final
+    assert "server_name beget.ame-life.com" in staging
+    assert "ssl_certificate /etc/letsencrypt/live/beget.ame-life.com/fullchain.pem" in staging
+    assert "return 301 https://$host$request_uri" in staging
+    assert "ssl_protocols TLSv1.2 TLSv1.3" not in staging
+    assert "ssl_protocols TLSv1.2 TLSv1.3" not in final
     assert "proxy_pass http://127.0.0.1:18081/readyz" in final
+    assert "proxy_pass http://127.0.0.1:18081/readyz" in staging
     assert "location = /metrics" in final
+    assert "location = /metrics" in staging
     assert "allow 127.0.0.1" in final
+    assert "allow 127.0.0.1" in staging
     assert "deny all" in final
+    assert "deny all" in staging

@@ -195,13 +195,19 @@ The final host serves static frontend assets from
 `/srv/muxivo-console/web`, proxies only `/api/`, `/healthz` and `/readyz` to FRP
 `18081`, and does not expose `/metrics` publicly.
 
-As of 2026-09-02, the VPS has only the temporary HTTP Console host active. A
-read-only request routed directly to `138.124.119.238` returns the current
-Console build, but the public DNS record is not present yet. HTTPS SNI still
-falls through to the existing Discord Activity virtual host, and its
-certificate does not cover `console.muxivo.pro`. Do not use `-k` or treat that
-response as a successful Console deployment. Add and verify the dedicated DNS
-record and certificate before installing the final HTTPS host.
+As of 2026-09-02, the temporary staging host is `beget.ame-life.com`. Its DNS
+record resolves to `138.124.119.238`, its dedicated certificate covers the
+hostname, and the active HTTPS vhost serves the current Console build. The
+canonical `console.muxivo.pro` host remains separate and still requires its own
+DNS record, certificate and final HTTPS vhost. The staging host is suitable for
+visual checks only until the API, FRP route and production environment are
+provisioned.
+
+For this temporary rollout, install
+`deploy/nginx-console-beget.conf.example` as the dedicated staging vhost. Keep
+the existing `muxivo.pro` and Discord Activity vhost unchanged, and configure
+the staging public base URL, CORS origin, recovery URLs and OAuth redirect URLs
+to use `https://beget.ame-life.com`.
 
 ### 7. Verify end to end
 

@@ -5,6 +5,12 @@ existing Discord Activity. The existing Activity keeps its current public host,
 local port and FRP proxy. Console uses its own local API port `8010`, FRP port
 `18081` and host `console.muxivo.pro`.
 
+For the current temporary staging rollout, use `beget.ame-life.com` instead of
+the canonical host. Its DNS record and dedicated certificate already exist on
+the VPS; `nginx-console-beget.conf.example` contains the isolated HTTPS host.
+The application environment must use the staging URL for its public base URL,
+CORS allowlist, recovery links and OAuth redirect URIs while this host is active.
+
 Do not copy credentials from the examples into Git. The production environment
 must be rendered by the selected secret manager and loaded through the systemd
 credential path used by `muxivo-console-api.service`.
@@ -16,6 +22,8 @@ credential path used by `muxivo-console-api.service`.
   authentication settings.
 - `nginx-console-bootstrap.conf.example` serves the HTTP/ACME bootstrap host.
 - `nginx-console.conf.example` is the final HTTPS virtual host.
+- `nginx-console-beget.conf.example` is the temporary HTTPS staging host for
+  `beget.ame-life.com`; it must not replace the existing Activity host.
 - `console.env.example` documents the required production variable names without
   containing usable secrets.
 - `prometheus-console.yml.example` is a same-host scrape fragment for the

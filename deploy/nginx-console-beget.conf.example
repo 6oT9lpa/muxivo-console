@@ -1,26 +1,29 @@
-# Final HTTPS host for the Console frontend and BFF API.
-# Keep the existing muxivo.pro server block unchanged.
+# Temporary HTTPS staging host for Muxivo Console.
+#
+# `beget.ame-life.com` already resolves to the VPS and has its own certificate.
+# Keep the canonical `console.muxivo.pro` host separate until its DNS and
+# certificate are provisioned. Do not reuse the muxivo.pro Activity certificate.
 
 server_tokens off;
 
 server {
     listen 80;
     listen [::]:80;
-    server_name console.muxivo.pro;
+    server_name beget.ame-life.com;
     return 301 https://$host$request_uri;
 }
 
 server {
     listen 443 ssl http2;
     listen [::]:443 ssl http2;
-    server_name console.muxivo.pro;
+    server_name beget.ame-life.com;
 
     root /srv/muxivo-console/web;
     index index.html;
     client_max_body_size 2m;
 
-    ssl_certificate /etc/letsencrypt/live/console.muxivo.pro/fullchain.pem;
-    ssl_certificate_key /etc/letsencrypt/live/console.muxivo.pro/privkey.pem;
+    ssl_certificate /etc/letsencrypt/live/beget.ame-life.com/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/beget.ame-life.com/privkey.pem;
     include /etc/letsencrypt/options-ssl-nginx.conf;
     ssl_dhparam /etc/letsencrypt/ssl-dhparams.pem;
 
@@ -69,8 +72,6 @@ server {
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto $scheme;
-        # Console API is HTTP-only today; keep the header explicit so this
-        # server block does not depend on a global nginx `map` directive.
         proxy_set_header Connection "";
         proxy_read_timeout 60s;
     }
