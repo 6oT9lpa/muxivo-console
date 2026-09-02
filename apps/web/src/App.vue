@@ -64,6 +64,11 @@ const recoveryEmail = ref("");
 const recoveryToken = ref("");
 const recoveryNewPassword = ref("");
 const recoveryConfirmPassword = ref("");
+const invitationToken = ref(
+  typeof window !== "undefined"
+    ? new URL(window.location.href).searchParams.get("token") ?? ""
+    : "",
+);
 const organizationName = ref("");
 const authenticated = ref(false);
 const landingTab = ref<"overview" | "about">("overview");
@@ -75,6 +80,7 @@ const notice = ref("");
 const browserSessions = ref<BrowserSession[]>([]);
 const loginIdentities = ref<LoginIdentity[]>([]);
 const organizations = ref<OrganizationListItem[]>([]);
+const organizationInvitations = ref<OrganizationInvitation[]>([]);
 const selectedOrganizationId = ref(
   typeof window !== "undefined"
     ? window.localStorage.getItem(ACTIVE_ORGANIZATION_STORAGE_KEY) ?? ""
@@ -244,12 +250,30 @@ type OrganizationMembership = {
   id: string | null;
   organization_id: string;
   user_id: string;
+  display_name: string | null;
   role: OrganizationRole;
   resource_scopes: { id: string | null; resource: AuthorizationResource; action: AuthorizationAction }[];
 };
 type OrganizationListItem = {
   organization: Organization;
   membership: OrganizationMembership;
+};
+type OrganizationInvitation = {
+  id: string;
+  organization_id: string;
+  email_hint: string;
+  role: OrganizationRole;
+  resource_scopes: {
+    id: string | null;
+    resource: AuthorizationResource;
+    action: AuthorizationAction;
+  }[];
+  status: "pending" | "accepted" | "revoked" | "expired";
+  expires_at: string;
+  created_at: string;
+  accepted_at: string | null;
+  revoked_at: string | null;
+  delivery_status: "sent" | "unavailable" | "failed" | null;
 };
 type PlatformConnectionGrantedScope = {
   key: string;
@@ -460,6 +484,7 @@ async function signIn() {
     password.value = "";
     notice.value = t("console.notice.signed_in");
     await Promise.all([loadOrganizations(), loadBrowserSessions(), loadLoginIdentities()]);
+    await acceptInvitationIfPresent();
   } catch (error) {
     notice.value = messageFor(error);
   } finally {
@@ -581,8 +606,10 @@ async function signOut() {
     confirmNewPassword.value = "";
     connections.value = [];
     organizations.value = [];
+    organizationInvitations.value = [];
     selectedOrganizationId.value = "";
     organizationMembers.value = [];
+    clearInvitationToken();
     localStorage.removeItem(ACTIVE_ORGANIZATION_STORAGE_KEY);
     notice.value = t("console.notice.signed_out");
   } catch (error) {
@@ -593,10 +620,14 @@ async function signOut() {
 }
 
 onMounted(async () => {
+  if (invitationToken.value) {
+    loginOpen.value = true;
+  }
   try {
     await consoleApi<{ authenticated: boolean }>("/api/v1/auth/session");
     authenticated.value = true;
     await Promise.all([loadOrganizations(), loadBrowserSessions(), loadLoginIdentities()]);
+    await acceptInvitationIfPresent();
   } catch {
     // A missing session is the normal first-visit state.
   }
@@ -663,7 +694,9 @@ async function revokeAllSessions() {
     newPassword.value = "";
     confirmNewPassword.value = "";
     organizations.value = [];
+    organizationInvitations.value = [];
     selectedOrganizationId.value = "";
+    clearInvitationToken();
     resetOrganizationWorkspace();
     localStorage.removeItem(ACTIVE_ORGANIZATION_STORAGE_KEY);
     notice.value = t("console.notice.sessions_revoked", { count: payload.revoked_count });
@@ -796,7 +829,11 @@ async function selectOrganization() {
 async function refreshOrganizationWorkspace() {
   resetOrganizationWorkspace();
   if (!activeOrganizationId.value) return;
-  await Promise.all([loadConnections(), loadOrganizationMembers()]);
+  await Promise.all([
+    loadConnections(),
+    loadOrganizationMembers(),
+    loadOrganizationInvitations(),
+  ]);
 }
 
 function persistActiveOrganization() {
@@ -806,6 +843,7 @@ function persistActiveOrganization() {
 function resetOrganizationWorkspace() {
   connections.value = [];
   organizationMembers.value = [];
+  organizationInvitations.value = [];
   platformHealth.value = null;
   controlModules.value = [];
   dashboardSummary.value = null;
@@ -895,14 +933,34 @@ async function loadOrganizationMembers() {
   }
 }
 
+async function loadOrganizationInvitations() {
+  if (!activeOrganizationId.value || !canManageOrganizationMembers.value) {
+    organizationInvitations.value = [];
+    return;
+  }
+  busy.value = true;
+  notice.value = "";
+  try {
+    const payload = await consoleApi<{ items: OrganizationInvitation[] }>(
+      `/api/v1/organizations/${encodeURIComponent(activeOrganizationId.value)}/member-invitations`,
+    );
+    organizationInvitations.value = payload.items;
+  } catch (error) {
+    organizationInvitations.value = [];
+    notice.value = messageFor(error);
+  } finally {
+    busy.value = false;
+  }
+}
+
 async function addOrganizationMember() {
   if (!activeOrganizationId.value || !newMemberEmail.value.trim()) return;
   normalizeNewMemberScopes();
   busy.value = true;
   notice.value = "";
   try {
-    const membership = await consoleApi<OrganizationMembership>(
-      `/api/v1/organizations/${encodeURIComponent(activeOrganizationId.value)}/members`,
+    const invitation = await consoleApi<OrganizationInvitation>(
+      `/api/v1/organizations/${encodeURIComponent(activeOrganizationId.value)}/member-invitations`,
       {
         method: "POST",
         body: JSON.stringify({
@@ -912,11 +970,36 @@ async function addOrganizationMember() {
         }),
       },
     );
-    organizationMembers.value = [membership, ...organizationMembers.value];
+    organizationInvitations.value = [invitation, ...organizationInvitations.value];
     newMemberEmail.value = "";
     newMemberRole.value = "viewer";
     newMemberScopes.value = [{ resource: "console.control_modules", action: "read" }];
-    notice.value = t("console.notice.member_invited");
+    notice.value =
+      invitation.delivery_status === "sent"
+        ? t("console.notice.member_invited")
+        : t("console.notice.member_invitation_delivery_unavailable");
+  } catch (error) {
+    notice.value = messageFor(error);
+  } finally {
+    busy.value = false;
+  }
+}
+
+async function revokeOrganizationInvitation(invitation: OrganizationInvitation) {
+  if (!activeOrganizationId.value || invitation.status !== "pending") return;
+  busy.value = true;
+  notice.value = "";
+  try {
+    await consoleApi<void>(
+      `/api/v1/organizations/${encodeURIComponent(activeOrganizationId.value)}/member-invitations/${encodeURIComponent(invitation.id)}`,
+      { method: "DELETE" },
+    );
+    organizationInvitations.value = organizationInvitations.value.map((current) =>
+      current.id === invitation.id
+        ? { ...current, status: "revoked", revoked_at: new Date().toISOString() }
+        : current,
+    );
+    notice.value = t("console.notice.member_invitation_revoked");
   } catch (error) {
     notice.value = messageFor(error);
   } finally {
@@ -1026,6 +1109,61 @@ function scopeLabel(scope: MembershipScopeInput): string {
 
 function roleLabel(role: OrganizationRole): string {
   return t(`console.roles.${role}`);
+}
+
+function memberDisplayLabel(member: OrganizationMembership): string {
+  return (
+    member.display_name?.trim() ||
+    t("console.members.member_fallback", { value: member.user_id.slice(0, 8) })
+  );
+}
+
+function invitationStatusLabel(status: OrganizationInvitation["status"]): string {
+  return t(`console.invitation_status.${status}`);
+}
+
+function clearInvitationToken() {
+  invitationToken.value = "";
+  if (typeof window === "undefined") return;
+  const url = new URL(window.location.href);
+  url.searchParams.delete("token");
+  window.history.replaceState(
+    window.history.state,
+    document.title,
+    `${url.pathname}${url.search}${url.hash}`,
+  );
+}
+
+async function acceptInvitationIfPresent() {
+  if (authenticated.value && invitationToken.value) {
+    await acceptOrganizationInvitation();
+  }
+}
+
+async function acceptOrganizationInvitation() {
+  if (!authenticated.value || !invitationToken.value) return;
+  busy.value = true;
+  notice.value = "";
+  try {
+    const membership = await consoleApi<OrganizationMembership>(
+      "/api/v1/member-invitations/accept",
+      {
+        method: "POST",
+        body: JSON.stringify({ token: invitationToken.value }),
+      },
+    );
+    clearInvitationToken();
+    await loadOrganizations(membership.organization_id);
+    notice.value = t("console.notice.member_invitation_accepted");
+  } catch (error) {
+    if (error instanceof ConsoleApiError && error.status === 403) {
+      notice.value = t("console.notice.member_invitation_invalid");
+    } else {
+      notice.value = messageFor(error);
+    }
+  } finally {
+    busy.value = false;
+  }
 }
 
 function providerLabel(provider: LoginIdentity["provider"]): string {
@@ -1616,6 +1754,10 @@ function messageFor(error: unknown): string {
                 : t("console.auth.create_description")
             }}
           </p>
+          <div v-if="invitationToken" class="auth-invitation-context" role="status">
+            <strong>{{ t("console.invitation.accept_title") }}</strong>
+            <p>{{ t("console.invitation.accept_description") }}</p>
+          </div>
           <div class="auth-mode-tabs" role="tablist" :aria-label="t('console.auth.mode_label')">
             <button
               type="button"
@@ -1850,6 +1992,22 @@ function messageFor(error: unknown): string {
         </header>
 
         <main class="console-content">
+    <section
+      v-if="invitationToken"
+      class="card invitation-card console-section"
+      aria-labelledby="organization-invitation-heading"
+    >
+      <div class="section-heading">
+        <div>
+          <span class="eyebrow">{{ t("console.invitation.eyebrow") }}</span>
+          <h2 id="organization-invitation-heading">{{ t("console.invitation.accept_title") }}</h2>
+          <p>{{ t("console.invitation.accept_description") }}</p>
+        </div>
+        <button type="button" :disabled="busy" @click="acceptOrganizationInvitation">
+          {{ busy ? t("console.members.loading") : t("console.invitation.accept_button") }}
+        </button>
+      </div>
+    </section>
     <section id="console-overview" class="card console-section console-overview-card">
       <div class="section-heading">
         <div>
@@ -2116,10 +2274,48 @@ function messageFor(error: unknown): string {
           </fieldset>
           <button :disabled="busy">{{ busy ? t("console.members.inviting") : t("console.members.invite") }}</button>
         </form>
+        <div class="section-heading policy-heading">
+          <div>
+            <h3>{{ t("console.members.invitations_title") }}</h3>
+            <p>{{ t("console.members.invitations_description") }}</p>
+          </div>
+          <button type="button" :disabled="busy" @click="loadOrganizationInvitations">
+            {{ busy ? t("console.members.loading") : t("console.members.load_invitations") }}
+          </button>
+        </div>
+        <ul v-if="organizationInvitations.length" class="health-signals invitation-list">
+          <li v-for="invitation in organizationInvitations" :key="invitation.id">
+            <span>
+              <strong>{{ invitation.email_hint }} · {{ roleLabel(invitation.role) }}</strong>
+              <small>
+                {{ t("console.members.invitation_status", { value: invitationStatusLabel(invitation.status) }) }} ·
+                {{ t("console.members.invitation_expires", { value: formatSessionTime(invitation.expires_at) }) }}
+              </small>
+              <small v-if="invitation.delivery_status === 'unavailable' || invitation.delivery_status === 'failed'">
+                {{ t("console.members.invitation_delivery_unavailable") }}
+              </small>
+            </span>
+            <div class="invitation-actions">
+              <em :data-status="invitation.status">{{ invitationStatusLabel(invitation.status) }}</em>
+              <button
+                v-if="invitation.status === 'pending'"
+                type="button"
+                :disabled="busy"
+                @click="revokeOrganizationInvitation(invitation)"
+              >
+                {{ t("console.members.revoke_invitation") }}
+              </button>
+            </div>
+          </li>
+        </ul>
+        <p v-else-if="!busy">{{ t("console.members.invitations_empty") }}</p>
         <ul v-if="organizationMembers.length" class="health-signals">
           <li v-for="member in organizationMembers" :key="member.user_id">
             <span>
-              <strong>{{ member.user_id }}</strong>
+              <strong>{{ memberDisplayLabel(member) }}</strong>
+              <small v-if="member.display_name">
+                {{ t("console.members.member_identifier", { value: member.user_id.slice(0, 8) }) }}
+              </small>
               <small>{{ t("console.members.member_scopes", { role: roleLabel(member.role), count: member.resource_scopes.length }) }}</small>
             </span>
             <select

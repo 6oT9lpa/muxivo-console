@@ -35,6 +35,7 @@ class SmtpPasswordRecoverySettings:
     port: int
     from_email: str
     reset_url_base: str
+    invitation_url_base: str | None = None
     username: str | None = None
     password: str | None = None
     starttls: bool = True
@@ -376,12 +377,23 @@ def _optional_password_recovery_smtp(
         raise ConfigurationError(
             "Password recovery SMTP username and password must be configured together."
         )
+    if environment != "development" and (username is None or password is None):
+        raise ConfigurationError(
+            "Password recovery SMTP authentication is required outside development."
+        )
     reset_url_base = _required(
         values, "MUXIVO_CONSOLE_PASSWORD_RECOVERY_RESET_URL_BASE"
     ).rstrip("/")
     if environment != "development" and not reset_url_base.startswith("https://"):
         raise ConfigurationError(
             "MUXIVO_CONSOLE_PASSWORD_RECOVERY_RESET_URL_BASE must use HTTPS outside development."
+        )
+    invitation_url_base = values.get(
+        "MUXIVO_CONSOLE_ORGANIZATION_INVITATION_URL_BASE", ""
+    ).strip().rstrip("/") or None
+    if invitation_url_base is not None and environment != "development":
+        _validate_public_https_url(
+            invitation_url_base, "MUXIVO_CONSOLE_ORGANIZATION_INVITATION_URL_BASE"
         )
     starttls = _optional_boolean(
         values,
@@ -395,6 +407,10 @@ def _optional_password_recovery_smtp(
         port=_required_port(values, "MUXIVO_CONSOLE_PASSWORD_RECOVERY_SMTP_PORT"),
         from_email=_required(values, "MUXIVO_CONSOLE_PASSWORD_RECOVERY_FROM_EMAIL"),
         reset_url_base=reset_url_base,
+        invitation_url_base=(
+            values.get("MUXIVO_CONSOLE_ORGANIZATION_INVITATION_URL_BASE", "").strip().rstrip("/")
+            or None
+        ),
         username=username,
         password=password,
         starttls=starttls,

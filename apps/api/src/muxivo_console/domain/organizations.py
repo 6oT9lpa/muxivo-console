@@ -87,6 +87,18 @@ class OrganizationMembership:
 
 
 @dataclass(frozen=True, slots=True)
+class OrganizationMemberProfile:
+    """Safe display projection for one organization member."""
+
+    membership: OrganizationMembership
+    display_name: str
+
+    def __post_init__(self) -> None:
+        if not self.display_name.strip() or len(self.display_name) > 64:
+            raise ValueError("Organization member display name must contain 1 to 64 characters.")
+
+
+@dataclass(frozen=True, slots=True)
 class OrganizationMembershipProfile:
     """Organization plus the current actor's membership, used by the Console switcher."""
 

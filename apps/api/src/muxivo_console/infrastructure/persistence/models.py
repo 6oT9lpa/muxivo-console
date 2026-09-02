@@ -231,6 +231,70 @@ class MembershipResourceScopeRecord(Base):
     __table_args__ = (Index("ix_membership_resource_scopes_membership_id", "membership_id"),)
 
 
+class OrganizationInvitationRecord(Base):
+    __tablename__ = "organization_invitations"
+
+    id: Mapped[UUID] = mapped_column(PostgreSQLUUID(as_uuid=True), primary_key=True)
+    organization_id: Mapped[UUID] = mapped_column(
+        PostgreSQLUUID(as_uuid=True),
+        ForeignKey("organizations.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    invited_by_user_id: Mapped[UUID | None] = mapped_column(
+        PostgreSQLUUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="SET NULL"),
+    )
+    email_ciphertext: Mapped[bytes] = mapped_column(LargeBinary, nullable=False)
+    email_lookup_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    email_hint: Mapped[str] = mapped_column(String(192), nullable=False)
+    token_hash: Mapped[str] = mapped_column(String(64), nullable=False, unique=True)
+    role: Mapped[str] = mapped_column(String(32), nullable=False)
+    delivery_status: Mapped[str | None] = mapped_column(String(16))
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    accepted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+
+    __table_args__ = (
+        CheckConstraint(
+            "role IN ('admin', 'moderator', 'analyst', 'viewer')",
+            name="ck_organization_invitations_role",
+        ),
+        CheckConstraint(
+            "delivery_status IS NULL OR delivery_status IN ('sent', 'unavailable', 'failed')",
+            name="ck_organization_invitations_delivery_status",
+        ),
+        Index("ix_organization_invitations_organization_created", "organization_id", "created_at"),
+        Index("ix_organization_invitations_email_lookup_hash", "email_lookup_hash"),
+        Index("ix_organization_invitations_token_expires", "token_hash", "expires_at"),
+    )
+
+
+class OrganizationInvitationScopeRecord(Base):
+    __tablename__ = "organization_invitation_scopes"
+
+    id: Mapped[UUID] = mapped_column(PostgreSQLUUID(as_uuid=True), primary_key=True)
+    invitation_id: Mapped[UUID] = mapped_column(
+        PostgreSQLUUID(as_uuid=True),
+        ForeignKey("organization_invitations.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    resource: Mapped[str] = mapped_column(String(96), nullable=False)
+    action: Mapped[str] = mapped_column(String(32), nullable=False)
+
+    __table_args__ = (
+        UniqueConstraint(
+            "invitation_id",
+            "resource",
+            "action",
+            name="uq_organization_invitation_scope",
+        ),
+        Index("ix_organization_invitation_scopes_invitation_id", "invitation_id"),
+    )
+
+
 class AuthSessionRecord(Base):
     __tablename__ = "auth_sessions"
 

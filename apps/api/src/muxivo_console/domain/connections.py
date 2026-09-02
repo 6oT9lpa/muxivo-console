@@ -16,7 +16,14 @@ class ConnectionStatus(StrEnum):
 
 
 _ALLOWED_TRANSITIONS: dict[ConnectionStatus, frozenset[ConnectionStatus]] = {
-    ConnectionStatus.PENDING: frozenset({ConnectionStatus.ACTIVE, ConnectionStatus.DISCONNECTED}),
+    ConnectionStatus.PENDING: frozenset(
+        {
+            ConnectionStatus.ACTIVE,
+            ConnectionStatus.DEGRADED,
+            ConnectionStatus.REAUTH_REQUIRED,
+            ConnectionStatus.DISCONNECTED,
+        }
+    ),
     ConnectionStatus.ACTIVE: frozenset(
         {
             ConnectionStatus.DEGRADED,

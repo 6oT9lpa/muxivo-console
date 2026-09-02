@@ -34,8 +34,13 @@ from muxivo_console.domain.identity import (
 from muxivo_console.domain.identity_linking import IdentityLinkTransaction
 from muxivo_console.domain.integrations import PlatformIntegrations
 from muxivo_console.domain.oauth_login import OAuthLoginTransaction
+from muxivo_console.domain.organization_invitations import (
+    OrganizationInvitation,
+    OrganizationInvitationDeliveryStatus,
+)
 from muxivo_console.domain.organizations import (
     Organization,
+    OrganizationMemberProfile,
     OrganizationMembership,
     OrganizationMembershipProfile,
 )
@@ -276,8 +281,18 @@ class OrganizationListingReader(Protocol):
     ) -> Sequence[OrganizationMembershipProfile]: ...
 
 
+class OrganizationReader(Protocol):
+    """Loads one organization name for user-facing invitation delivery."""
+
+    async def find_by_id(self, *, organization_id: UUID) -> Organization | None: ...
+
+
 class OrganizationMemberReader(Protocol):
     """Reads members for one Console-owned organization."""
+
+    async def list_profiles(
+        self, organization_id: UUID
+    ) -> Sequence[OrganizationMemberProfile]: ...
 
     async def list_for_organization(
         self, organization_id: UUID
@@ -296,6 +311,51 @@ class OrganizationMemberWriter(Protocol):
     ) -> bool: ...
 
     async def remove_member(self, *, membership_id: UUID, audit_event: AuditEvent) -> bool: ...
+
+
+class OrganizationInvitationReader(Protocol):
+    """Reads invitation metadata without returning plaintext secrets."""
+
+    async def list_for_organization(
+        self, *, organization_id: UUID
+    ) -> Sequence[OrganizationInvitation]: ...
+
+    async def find_for_organization(
+        self, *, organization_id: UUID, invitation_id: UUID
+    ) -> OrganizationInvitation | None: ...
+
+    async def find_pending_by_token_hash(
+        self, *, token_hash: str, now
+    ) -> OrganizationInvitation | None: ...
+
+
+class OrganizationInvitationWriter(Protocol):
+    """Atomically creates, accepts or revokes invitation state and audits it."""
+
+    async def create(
+        self, *, invitation: OrganizationInvitation, audit_event: AuditEvent
+    ) -> bool: ...
+
+    async def accept(
+        self,
+        *,
+        invitation: OrganizationInvitation,
+        membership: OrganizationMembership,
+        accepted_at,
+        audit_event: AuditEvent,
+    ) -> bool: ...
+
+    async def revoke(
+        self, *, invitation_id: UUID, organization_id: UUID, revoked_at, audit_event: AuditEvent
+    ) -> bool: ...
+
+    async def update_delivery_status(
+        self,
+        *,
+        invitation_id: UUID,
+        organization_id: UUID,
+        delivery_status: OrganizationInvitationDeliveryStatus,
+    ) -> bool: ...
 
 
 class IdentifierGenerator(Protocol):
@@ -409,6 +469,22 @@ class PasswordRecoveryNotifier(Protocol):
         expires_at,
         correlation_id: UUID,
     ) -> None: ...
+
+
+class OrganizationInvitationNotifier(Protocol):
+    """Delivers an invitation link without exposing its raw token to application logs."""
+
+    async def send(
+        self,
+        *,
+        invitation_id: UUID,
+        organization_name: str,
+        recipient_email: str,
+        role: str,
+        raw_token: str,
+        expires_at,
+        correlation_id: UUID,
+    ) -> bool: ...
 
 
 @dataclass(frozen=True, slots=True)

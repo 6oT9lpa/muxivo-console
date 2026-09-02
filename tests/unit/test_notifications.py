@@ -4,7 +4,10 @@ from email.message import EmailMessage
 from uuid import uuid4
 
 import pytest
-from muxivo_console.infrastructure.notifications import SmtpPasswordRecoveryNotifier
+from muxivo_console.infrastructure.notifications import (
+    SmtpOrganizationInvitationNotifier,
+    SmtpPasswordRecoveryNotifier,
+)
 from muxivo_console.infrastructure.settings import SmtpPasswordRecoverySettings
 
 
@@ -80,3 +83,56 @@ async def test_smtp_password_recovery_notifier_sends_reset_message_without_token
     assert "https://console.muxivo.test/recover?token=opaque-recovery-token" in body
     assert "opaque-recovery-token" in body
     assert "opaque-recovery-token" not in caplog.text
+
+
+@pytest.mark.asyncio
+async def test_smtp_organization_invitation_notifier_sends_link_without_token_logs(
+    caplog,
+) -> None:
+    fake_smtp: FakeSmtp | None = None
+
+    def smtp_factory(host: str, port: int, *, timeout: float) -> FakeSmtp:
+        nonlocal fake_smtp
+        fake_smtp = FakeSmtp(host, port, timeout=timeout)
+        return fake_smtp
+
+    notifier = SmtpOrganizationInvitationNotifier(
+        SmtpPasswordRecoverySettings(
+            host="connect.smtp.bz",
+            port=587,
+            from_email="security@muxivo.test",
+            reset_url_base="https://console.muxivo.test/recover",
+            invitation_url_base="https://console.muxivo.test/accept-invitation",
+            username="smtp-user",
+            password="smtp-password",
+            starttls=True,
+        ),
+        smtp_factory=smtp_factory,
+        timeout_seconds=3,
+    )
+    caplog.set_level(logging.INFO, logger="muxivo_console.infrastructure.notifications")
+
+    delivered = await notifier.send(
+        invitation_id=uuid4(),
+        organization_name="Creator community",
+        recipient_email="invitee@example.com",
+        role="viewer",
+        raw_token="opaque-invitation-token",
+        expires_at=datetime(2026, 8, 22, 12, tzinfo=UTC),
+        correlation_id=uuid4(),
+    )
+
+    assert delivered is True
+    assert fake_smtp is not None
+    assert fake_smtp.host == "connect.smtp.bz"
+    assert fake_smtp.port == 587
+    assert fake_smtp.timeout == 3
+    assert fake_smtp.started_tls is True
+    assert fake_smtp.login_arguments == ("smtp-user", "smtp-password")
+    assert fake_smtp.message is not None
+    assert fake_smtp.message["From"] == "security@muxivo.test"
+    assert fake_smtp.message["To"] == "invitee@example.com"
+    assert "https://console.muxivo.test/accept-invitation?token=opaque-invitation-token" in (
+        fake_smtp.message.get_content()
+    )
+    assert "opaque-invitation-token" not in caplog.text

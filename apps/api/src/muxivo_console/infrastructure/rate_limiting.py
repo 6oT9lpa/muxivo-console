@@ -40,6 +40,8 @@ DEFAULT_AUTH_RATE_LIMIT_RULES: Mapping[str, RateLimitRule] = {
     "auth.reauthentication": RateLimitRule(limit=10, window_seconds=60),
     "auth.password_recovery.request": RateLimitRule(limit=5, window_seconds=60),
     "auth.password_recovery.complete": RateLimitRule(limit=10, window_seconds=60),
+    "auth.invitation.accept": RateLimitRule(limit=10, window_seconds=60),
+    "organization.invitation.create": RateLimitRule(limit=20, window_seconds=60),
 }
 
 

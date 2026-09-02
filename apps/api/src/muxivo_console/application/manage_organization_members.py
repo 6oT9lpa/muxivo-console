@@ -18,6 +18,7 @@ from muxivo_console.domain.audit import AuditEvent
 from muxivo_console.domain.identity import UserStatus
 from muxivo_console.domain.organizations import (
     MembershipResourceScope,
+    OrganizationMemberProfile,
     OrganizationMembership,
     OrganizationRole,
 )
@@ -71,7 +72,7 @@ class ListOrganizationMembers:
 
     async def execute(
         self, command: ListOrganizationMembersCommand
-    ) -> tuple[OrganizationMembership, ...]:
+    ) -> tuple[OrganizationMemberProfile, ...]:
         logger.info(
             "organization.members.list.started",
             extra={
@@ -93,7 +94,7 @@ class ListOrganizationMembers:
                 },
             )
             raise OrganizationMemberManagementRejectedError("Access denied.")
-        members = tuple(await self.members.list_for_organization(command.organization_id))
+        members = tuple(await self.members.list_profiles(command.organization_id))
         logger.info(
             "organization.members.list.completed",
             extra={

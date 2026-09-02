@@ -1,5 +1,6 @@
 """Production composition root; this is the only place concrete adapters meet."""
 
+from muxivo_console.application.accept_organization_invitation import AcceptOrganizationInvitation
 from muxivo_console.application.authenticate_email_password import AuthenticateEmailPassword
 from muxivo_console.application.begin_identity_link import BeginIdentityLink
 from muxivo_console.application.begin_oauth_login import BeginOAuthLogin
@@ -28,12 +29,14 @@ from muxivo_console.application.get_platform_server_statistics import (
 from muxivo_console.application.get_platform_welcome_settings import (
     GetPlatformWelcomeSettings,
 )
+from muxivo_console.application.invite_organization_member import InviteOrganizationMember
 from muxivo_console.application.link_verified_identity import LinkVerifiedIdentity
 from muxivo_console.application.list_browser_sessions import ListBrowserSessions
 from muxivo_console.application.list_control_modules import ListControlModules
 from muxivo_console.application.list_organization_audit_events import (
     ListOrganizationAuditEvents,
 )
+from muxivo_console.application.list_organization_invitations import ListOrganizationInvitations
 from muxivo_console.application.list_organizations import ListOrganizations
 from muxivo_console.application.list_platform_connection_channels import (
     ListPlatformConnectionChannels,
@@ -65,6 +68,9 @@ from muxivo_console.application.require_recent_authentication import RequireRece
 from muxivo_console.application.resolve_browser_session import ResolveBrowserSession
 from muxivo_console.application.revoke_all_browser_sessions import RevokeAllBrowserSessions
 from muxivo_console.application.revoke_browser_session import RevokeBrowserSession
+from muxivo_console.application.revoke_organization_invitation import (
+    RevokeOrganizationInvitation,
+)
 from muxivo_console.application.update_platform_ai_moderation_policy import (
     UpdatePlatformAiModerationPolicy,
 )
@@ -86,7 +92,9 @@ from muxivo_console.infrastructure.logging_redaction import install_secret_redac
 from muxivo_console.infrastructure.metrics import InMemoryHttpMetricsRecorder
 from muxivo_console.infrastructure.naming import RandomSuffixOrganizationSlugGenerator
 from muxivo_console.infrastructure.notifications import (
+    SmtpOrganizationInvitationNotifier,
     SmtpPasswordRecoveryNotifier,
+    UndeliveredOrganizationInvitationNotifier,
     UndeliveredPasswordRecoveryNotifier,
 )
 from muxivo_console.infrastructure.persistence.audit_repository import (
@@ -114,6 +122,12 @@ from muxivo_console.infrastructure.persistence.identity_repository import (
 from muxivo_console.infrastructure.persistence.oauth_login_transaction_repository import (
     SqlAlchemyOAuthLoginTransactionConsumer,
     SqlAlchemyOAuthLoginTransactionWriter,
+)
+from muxivo_console.infrastructure.persistence.organization_invitation_reader import (
+    SqlAlchemyOrganizationInvitationReader,
+)
+from muxivo_console.infrastructure.persistence.organization_invitation_writer import (
+    SqlAlchemyOrganizationInvitationWriter,
 )
 from muxivo_console.infrastructure.persistence.organization_repository import (
     SqlAlchemyOrganizationCreationWriter,
@@ -189,6 +203,7 @@ def create_production_app(
     user_statuses = SqlAlchemyUserStatusReader(sessions)
     membership_reader = SqlAlchemyOrganizationMembershipReader(sessions)
     organization_member_repository = SqlAlchemyOrganizationMemberRepository(sessions)
+    organization_reader = SqlAlchemyOrganizationListingReader(sessions)
     email_protector = FernetEmailProtector(
         lookup_key=settings.email_lookup_key,
         encryption_key=settings.email_encryption_key,
@@ -260,6 +275,13 @@ def create_production_app(
         transactions=password_recovery_repository,
         notifier=password_recovery_notifier,
     )
+    organization_invitation_notifier = (
+        SmtpOrganizationInvitationNotifier(settings.password_recovery_smtp)
+        if settings.password_recovery_smtp is not None
+        else UndeliveredOrganizationInvitationNotifier()
+    )
+    organization_invitation_reader = SqlAlchemyOrganizationInvitationReader(sessions)
+    organization_invitation_writer = SqlAlchemyOrganizationInvitationWriter(sessions)
     password_recovery_completion = CompletePasswordRecovery(
         identifiers=identifiers,
         clock=clock,
@@ -305,7 +327,7 @@ def create_production_app(
     )
     listed_organizations = ListOrganizations(
         user_statuses=user_statuses,
-        organizations=SqlAlchemyOrganizationListingReader(sessions),
+        organizations=organization_reader,
     )
     listed_organization_members = ListOrganizationMembers(
         memberships=membership_reader,
@@ -329,6 +351,39 @@ def create_production_app(
         identifiers=identifiers,
         memberships=membership_reader,
         members=organization_member_repository,
+    )
+    organization_invitation_create = InviteOrganizationMember(
+        identifiers=identifiers,
+        clock=clock,
+        email_normalizer=ValidatedEmailAddressNormalizer(),
+        email_protector=email_protector,
+        token_issuer=SecureOpaqueSessionTokenIssuer(),
+        token_hasher=session_hasher,
+        organizations=organization_reader,
+        memberships=membership_reader,
+        invitations=organization_invitation_writer,
+        notifier=organization_invitation_notifier,
+    )
+    organization_invitation_list = ListOrganizationInvitations(
+        memberships=membership_reader,
+        invitations=organization_invitation_reader,
+    )
+    organization_invitation_revoke = RevokeOrganizationInvitation(
+        clock=clock,
+        identifiers=identifiers,
+        memberships=membership_reader,
+        invitations=organization_invitation_reader,
+        writer=organization_invitation_writer,
+    )
+    organization_invitation_accept = AcceptOrganizationInvitation(
+        clock=clock,
+        identifiers=identifiers,
+        token_hasher=session_hasher,
+        user_emails=SqlAlchemyUserEmailLookupReader(sessions),
+        user_statuses=user_statuses,
+        memberships=membership_reader,
+        invitations=organization_invitation_reader,
+        writer=organization_invitation_writer,
     )
     platform_connection_verifiers = {
         Platform.DISCORD: DiscordPlatformConnectionVerifier(
@@ -629,6 +684,10 @@ def create_production_app(
         organization_member_add_use_case=organization_member_add,
         organization_member_update_use_case=organization_member_update,
         organization_member_remove_use_case=organization_member_remove,
+        organization_invitation_create_use_case=organization_invitation_create,
+        organization_invitation_list_use_case=organization_invitation_list,
+        organization_invitation_revoke_use_case=organization_invitation_revoke,
+        organization_invitation_accept_use_case=organization_invitation_accept,
         platform_connection_registration_use_case=platform_connections,
         platform_connection_lifecycle_use_case=platform_connection_lifecycle,
         platform_connections_use_case=listed_platform_connections,

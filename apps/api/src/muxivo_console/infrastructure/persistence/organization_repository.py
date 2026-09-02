@@ -15,6 +15,7 @@ from muxivo_console.domain.identity import UserStatus
 from muxivo_console.domain.organizations import (
     MembershipResourceScope,
     Organization,
+    OrganizationMemberProfile,
     OrganizationMembership,
     OrganizationMembershipProfile,
     OrganizationRole,
@@ -147,6 +148,20 @@ class SqlAlchemyOrganizationListingReader:
     ) -> None:
         self._session_factory = session_factory
 
+    async def find_by_id(self, *, organization_id: UUID) -> Organization | None:
+        async with self._session_factory() as session:
+            record = (
+                await session.execute(
+                    select(OrganizationRecord).where(OrganizationRecord.id == organization_id)
+                )
+            ).scalar_one_or_none()
+        if record is None:
+            return None
+        try:
+            return Organization(id=record.id, name=record.name, slug=record.slug)
+        except ValueError:
+            return None
+
     async def list_for_actor(self, *, actor_id: UUID) -> tuple[OrganizationMembershipProfile, ...]:
         async with self._session_factory() as session:
             result = await session.execute(
@@ -212,6 +227,37 @@ class SqlAlchemyOrganizationMemberRepository:
             except ValueError:
                 continue
         return tuple(members)
+
+    async def list_profiles(
+        self, organization_id: UUID
+    ) -> tuple[OrganizationMemberProfile, ...]:
+        async with self._session_factory() as session:
+            result = await session.execute(
+                select(OrganizationMembershipRecord, UserRecord.display_name)
+                .join(UserRecord, UserRecord.id == OrganizationMembershipRecord.user_id)
+                .where(OrganizationMembershipRecord.organization_id == organization_id)
+                .order_by(OrganizationMembershipRecord.role, UserRecord.display_name)
+            )
+            rows = result.all()
+            membership_ids = [membership.id for membership, _ in rows]
+            scopes_by_membership_id = await _scopes_by_membership_id(
+                session, membership_ids
+            )
+        profiles: list[OrganizationMemberProfile] = []
+        for membership_record, display_name in rows:
+            try:
+                profiles.append(
+                    OrganizationMemberProfile(
+                        membership=_membership_from_record(
+                            membership_record,
+                            scopes_by_membership_id.get(membership_record.id, ()),
+                        ),
+                        display_name=display_name,
+                    )
+                )
+            except (TypeError, ValueError):
+                continue
+        return tuple(profiles)
 
     async def add_member(
         self, *, membership: OrganizationMembership, audit_event: AuditEvent

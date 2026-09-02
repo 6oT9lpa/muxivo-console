@@ -132,7 +132,8 @@ async def test_reconciliation_skips_connections_without_platform_probe() -> None
 
 
 @pytest.mark.asyncio
-async def test_reconciliation_skips_invalid_state_machine_transition() -> None:
+async def test_reconciliation_moves_pending_connection_to_degraded_after_preflight_failure(
+) -> None:
     pending = connection(ConnectionStatus.PENDING)
     lifecycle = FakeLifecycleWriter()
     worker = ReconcilePlatformConnections(
@@ -156,6 +157,6 @@ async def test_reconciliation_skips_invalid_state_machine_transition() -> None:
     )
 
     assert result.inspected == 1
-    assert result.changed == 0
-    assert result.skipped == 1
-    assert lifecycle.saved == []
+    assert result.changed == 1
+    assert result.skipped == 0
+    assert lifecycle.saved[0][0].status is ConnectionStatus.DEGRADED

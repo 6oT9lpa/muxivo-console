@@ -2,6 +2,7 @@ import logging
 from collections.abc import AsyncIterator, Callable, Sequence
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
+from datetime import UTC, datetime
 from hmac import compare_digest
 from time import perf_counter
 from typing import Protocol
@@ -11,6 +12,11 @@ from fastapi import FastAPI, HTTPException, Request, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, RedirectResponse, Response
 
+from muxivo_console.application.accept_organization_invitation import (
+    AcceptOrganizationInvitation,
+    AcceptOrganizationInvitationCommand,
+    OrganizationInvitationAcceptanceRejectedError,
+)
 from muxivo_console.application.authenticate_email_password import (
     AuthenticateEmailPassword,
     AuthenticateEmailPasswordCommand,
@@ -75,6 +81,11 @@ from muxivo_console.application.get_platform_server_statistics import (
 from muxivo_console.application.get_platform_welcome_settings import (
     GetPlatformWelcomeSettings,
 )
+from muxivo_console.application.invite_organization_member import (
+    InviteOrganizationMember,
+    InviteOrganizationMemberCommand,
+    OrganizationInvitationRejectedError,
+)
 from muxivo_console.application.list_browser_sessions import (
     BrowserSessionListRejectedError,
     BrowserSessionSecurityView,
@@ -88,6 +99,11 @@ from muxivo_console.application.list_control_modules import (
 )
 from muxivo_console.application.list_organization_audit_events import (
     ListOrganizationAuditEvents,
+)
+from muxivo_console.application.list_organization_invitations import (
+    ListOrganizationInvitations,
+    ListOrganizationInvitationsCommand,
+    OrganizationInvitationListingRejectedError,
 )
 from muxivo_console.application.list_organizations import (
     ListOrganizations,
@@ -155,6 +171,11 @@ from muxivo_console.application.revoke_all_browser_sessions import (
     RevokeAllBrowserSessionsCommand,
 )
 from muxivo_console.application.revoke_browser_session import RevokeBrowserSession
+from muxivo_console.application.revoke_organization_invitation import (
+    OrganizationInvitationRevocationRejectedError,
+    RevokeOrganizationInvitation,
+    RevokeOrganizationInvitationCommand,
+)
 from muxivo_console.application.update_platform_ai_moderation_policy import (
     UpdatePlatformAiModerationPolicy,
 )
@@ -189,6 +210,10 @@ from muxivo_console.contracts.v1.identities import (
 )
 from muxivo_console.contracts.v1.organizations import (
     OrganizationCreateRequest,
+    OrganizationInvitationAcceptRequest,
+    OrganizationInvitationCreateRequest,
+    OrganizationInvitationListResponse,
+    OrganizationInvitationResponse,
     OrganizationListItemResponse,
     OrganizationListResponse,
     OrganizationMemberCreateRequest,
@@ -242,7 +267,14 @@ from muxivo_console.contracts.v1.sessions import (
 from muxivo_console.domain.activity import Platform
 from muxivo_console.domain.connections import ConnectionStatus, PlatformConnection
 from muxivo_console.domain.identity import LoginIdentityProfile, LoginIdentityProvider
-from muxivo_console.domain.organizations import MembershipResourceScope, OrganizationMembership
+from muxivo_console.domain.organization_invitations import (
+    OrganizationInvitation,
+)
+from muxivo_console.domain.organizations import (
+    MembershipResourceScope,
+    OrganizationMemberProfile,
+    OrganizationMembership,
+)
 from muxivo_console.domain.sessions import SessionAssuranceLevel
 from muxivo_console.domain.welcome import PlatformWelcomeSettings
 from muxivo_console.infrastructure.development import (
@@ -339,11 +371,16 @@ def _set_browser_session_cookies(
     )
 
 
-def _membership_response(membership: OrganizationMembership) -> OrganizationMembershipResponse:
+def _membership_response(
+    membership: OrganizationMembership,
+    *,
+    display_name: str | None = None,
+) -> OrganizationMembershipResponse:
     return OrganizationMembershipResponse(
         id=membership.id,
         organization_id=membership.organization_id,
         user_id=membership.actor_id,
+        display_name=display_name,
         role=membership.role,
         resource_scopes=[
             OrganizationMembershipScopeResponse(
@@ -357,6 +394,48 @@ def _membership_response(membership: OrganizationMembership) -> OrganizationMemb
             )
         ],
     )
+
+
+def _organization_invitation_response(
+    invitation: OrganizationInvitation,
+    *,
+    now: datetime,
+    delivery_status: str | None = None,
+) -> OrganizationInvitationResponse:
+    resolved_delivery_status = delivery_status
+    if resolved_delivery_status is None and invitation.delivery_status is not None:
+        resolved_delivery_status = invitation.delivery_status.value
+    return OrganizationInvitationResponse(
+        id=invitation.id,
+        organization_id=invitation.organization_id,
+        email_hint=invitation.email_hint,
+        role=invitation.role,
+        resource_scopes=[
+            OrganizationMembershipScopeResponse(
+                id=scope.id,
+                resource=scope.resource,
+                action=scope.action,
+            )
+            for scope in sorted(
+                invitation.resource_scopes,
+                key=lambda item: (item.resource.value, item.action.value, str(item.id)),
+            )
+        ],
+        status=invitation.status_at(now),
+        expires_at=invitation.expires_at,
+        created_at=invitation.created_at,
+        accepted_at=invitation.accepted_at,
+        revoked_at=invitation.revoked_at,
+        delivery_status=resolved_delivery_status,
+    )
+
+
+def _organization_member_response(
+    member: OrganizationMemberProfile | OrganizationMembership,
+) -> OrganizationMembershipResponse:
+    if isinstance(member, OrganizationMemberProfile):
+        return _membership_response(member.membership, display_name=member.display_name)
+    return _membership_response(member)
 
 
 def _scope_requests_to_domain(
@@ -491,6 +570,10 @@ def create_app(
     organization_member_add_use_case: AddOrganizationMember | None = None,
     organization_member_update_use_case: UpdateOrganizationMember | None = None,
     organization_member_remove_use_case: RemoveOrganizationMember | None = None,
+    organization_invitation_create_use_case: InviteOrganizationMember | None = None,
+    organization_invitation_list_use_case: ListOrganizationInvitations | None = None,
+    organization_invitation_revoke_use_case: RevokeOrganizationInvitation | None = None,
+    organization_invitation_accept_use_case: AcceptOrganizationInvitation | None = None,
     platform_connection_registration_use_case: RegisterPlatformConnection | None = None,
     platform_connection_lifecycle_use_case: ManagePlatformConnectionLifecycle | None = None,
     platform_connections_use_case: ListPlatformConnections | None = None,
@@ -1463,7 +1546,7 @@ def create_app(
                 status_code=status.HTTP_403_FORBIDDEN, detail="Access denied"
             ) from error
         return OrganizationMemberListResponse(
-            items=[_membership_response(member) for member in members]
+            items=[_organization_member_response(member) for member in members]
         )
 
     @app.post(
@@ -1569,6 +1652,146 @@ def create_app(
                 detail="Organization member removal failed",
             ) from error
         return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+    @app.post(
+        "/api/v1/organizations/{organization_id}/member-invitations",
+        response_model=OrganizationInvitationResponse,
+        status_code=status.HTTP_202_ACCEPTED,
+        tags=["organization-members"],
+    )
+    async def create_organization_member_invitation(
+        organization_id: UUID, payload: OrganizationInvitationCreateRequest, request: Request
+    ) -> OrganizationInvitationResponse:
+        await enforce_auth_rate_limit(request, scope="organization.invitation.create")
+        actor_id = getattr(request.state, "actor_id", None)
+        if not isinstance(actor_id, UUID):
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied")
+        if organization_invitation_create_use_case is None:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Organization invitations are unavailable",
+            )
+        try:
+            result = await organization_invitation_create_use_case.execute(
+                InviteOrganizationMemberCommand(
+                    actor_id=actor_id,
+                    organization_id=organization_id,
+                    email=str(payload.email),
+                    role=payload.role,
+                    resource_scopes=_scope_requests_to_domain(payload.resource_scopes),
+                    correlation_id=request.state.correlation_id,
+                )
+            )
+        except OrganizationInvitationRejectedError as error:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Organization invitation could not be created",
+            ) from error
+        return _organization_invitation_response(
+            result.invitation,
+            now=datetime.now(UTC),
+            delivery_status=result.delivery_status,
+        )
+
+    @app.get(
+        "/api/v1/organizations/{organization_id}/member-invitations",
+        response_model=OrganizationInvitationListResponse,
+        tags=["organization-members"],
+    )
+    async def list_organization_member_invitations(
+        organization_id: UUID, request: Request
+    ) -> OrganizationInvitationListResponse:
+        actor_id = getattr(request.state, "actor_id", None)
+        if not isinstance(actor_id, UUID):
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied")
+        if organization_invitation_list_use_case is None:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Organization invitations are unavailable",
+            )
+        try:
+            invitations = await organization_invitation_list_use_case.execute(
+                ListOrganizationInvitationsCommand(
+                    actor_id=actor_id,
+                    organization_id=organization_id,
+                    correlation_id=request.state.correlation_id,
+                )
+            )
+        except OrganizationInvitationListingRejectedError as error:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN, detail="Access denied"
+            ) from error
+        now = datetime.now(UTC)
+        return OrganizationInvitationListResponse(
+            items=[
+                _organization_invitation_response(invitation, now=now)
+                for invitation in invitations
+            ]
+        )
+
+    @app.delete(
+        "/api/v1/organizations/{organization_id}/member-invitations/{invitation_id}",
+        status_code=status.HTTP_204_NO_CONTENT,
+        tags=["organization-members"],
+    )
+    async def revoke_organization_member_invitation(
+        organization_id: UUID, invitation_id: UUID, request: Request
+    ) -> Response:
+        actor_id = getattr(request.state, "actor_id", None)
+        if not isinstance(actor_id, UUID):
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied")
+        if organization_invitation_revoke_use_case is None:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Organization invitations are unavailable",
+            )
+        try:
+            await organization_invitation_revoke_use_case.execute(
+                RevokeOrganizationInvitationCommand(
+                    actor_id=actor_id,
+                    organization_id=organization_id,
+                    invitation_id=invitation_id,
+                    correlation_id=request.state.correlation_id,
+                )
+            )
+        except OrganizationInvitationRevocationRejectedError as error:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Organization invitation revocation failed",
+            ) from error
+        return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+    @app.post(
+        "/api/v1/member-invitations/accept",
+        response_model=OrganizationMembershipResponse,
+        tags=["organization-members"],
+    )
+    async def accept_organization_member_invitation(
+        payload: OrganizationInvitationAcceptRequest, request: Request
+    ) -> OrganizationMembershipResponse:
+        await enforce_auth_rate_limit(request, scope="auth.invitation.accept")
+        actor_id = getattr(request.state, "actor_id", None)
+        if not isinstance(actor_id, UUID):
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied")
+        if organization_invitation_accept_use_case is None:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Organization invitation acceptance is unavailable",
+            )
+        try:
+            membership = await organization_invitation_accept_use_case.execute(
+                AcceptOrganizationInvitationCommand(
+                    actor_id=actor_id,
+                    raw_token=payload.token,
+                    correlation_id=request.state.correlation_id,
+                )
+            )
+        except OrganizationInvitationAcceptanceRejectedError as error:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Organization invitation acceptance failed",
+            ) from error
+        return _membership_response(membership)
 
     @app.post(
         "/api/v1/organizations/{organization_id}/platform-connections",

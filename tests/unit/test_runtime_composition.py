@@ -38,6 +38,8 @@ def environment() -> dict[str, str]:
         "MUXIVO_CONSOLE_RATE_LIMIT_REDIS_URL": "redis://rate-limit.internal:6379/0",
         "MUXIVO_CONSOLE_PASSWORD_RECOVERY_SMTP_HOST": "smtp.internal",
         "MUXIVO_CONSOLE_PASSWORD_RECOVERY_SMTP_PORT": "587",
+        "MUXIVO_CONSOLE_PASSWORD_RECOVERY_SMTP_USERNAME": "smtp-user",
+        "MUXIVO_CONSOLE_PASSWORD_RECOVERY_SMTP_PASSWORD": "smtp-password",
         "MUXIVO_CONSOLE_PASSWORD_RECOVERY_FROM_EMAIL": "security@muxivo.test",
         "MUXIVO_CONSOLE_PASSWORD_RECOVERY_RESET_URL_BASE": "https://console.muxivo.test/recover",
     }
@@ -304,6 +306,12 @@ def test_settings_parse_password_recovery_smtp_and_reject_insecure_values() -> N
     values = environment()
     values["MUXIVO_CONSOLE_PASSWORD_RECOVERY_SMTP_STARTTLS"] = "false"
     with pytest.raises(ConfigurationError, match="STARTTLS"):
+        ConsoleSettings.from_environment(values)
+
+    values = environment()
+    values.pop("MUXIVO_CONSOLE_PASSWORD_RECOVERY_SMTP_USERNAME")
+    values.pop("MUXIVO_CONSOLE_PASSWORD_RECOVERY_SMTP_PASSWORD")
+    with pytest.raises(ConfigurationError, match="authentication is required"):
         ConsoleSettings.from_environment(values)
 
 

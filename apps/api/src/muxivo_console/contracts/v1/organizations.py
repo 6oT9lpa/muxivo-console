@@ -1,8 +1,11 @@
+from datetime import datetime
+from typing import Literal
 from uuid import UUID
 
 from pydantic import BaseModel, EmailStr, Field, field_validator
 
 from muxivo_console.domain.authorization import AuthorizationAction, AuthorizationResource
+from muxivo_console.domain.organization_invitations import OrganizationInvitationStatus
 from muxivo_console.domain.organizations import OrganizationRole
 
 
@@ -39,6 +42,7 @@ class OrganizationMembershipResponse(BaseModel):
     id: UUID | None = None
     organization_id: UUID
     user_id: UUID
+    display_name: str | None = None
     role: OrganizationRole
     resource_scopes: list[OrganizationMembershipScopeResponse] = Field(default_factory=list)
 
@@ -65,3 +69,31 @@ class OrganizationMemberUpdateRequest(BaseModel):
 
 class OrganizationMemberListResponse(BaseModel):
     items: list[OrganizationMembershipResponse] = Field(default_factory=list)
+
+
+class OrganizationInvitationCreateRequest(BaseModel):
+    email: EmailStr
+    role: OrganizationRole
+    resource_scopes: list[OrganizationMembershipScopeRequest] = Field(default_factory=list)
+
+
+class OrganizationInvitationResponse(BaseModel):
+    id: UUID
+    organization_id: UUID
+    email_hint: str
+    role: OrganizationRole
+    resource_scopes: list[OrganizationMembershipScopeResponse] = Field(default_factory=list)
+    status: OrganizationInvitationStatus
+    expires_at: datetime
+    created_at: datetime
+    accepted_at: datetime | None = None
+    revoked_at: datetime | None = None
+    delivery_status: Literal["sent", "unavailable", "failed"] | None = None
+
+
+class OrganizationInvitationListResponse(BaseModel):
+    items: list[OrganizationInvitationResponse] = Field(default_factory=list)
+
+
+class OrganizationInvitationAcceptRequest(BaseModel):
+    token: str = Field(min_length=1, max_length=4096)

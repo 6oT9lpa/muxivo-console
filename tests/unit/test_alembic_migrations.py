@@ -20,4 +20,4 @@ def test_alembic_head_is_the_latest_console_foundation_revision() -> None:
     config = Config(str(Path("alembic.ini")))
     script_directory = ScriptDirectory.from_config(config)
 
-    assert script_directory.get_current_head() == "20260809_0004"
+    assert script_directory.get_current_head() == "20260902_0006"

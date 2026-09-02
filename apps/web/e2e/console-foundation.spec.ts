@@ -6,6 +6,7 @@ const ownerMembershipId = "22222222-2222-4222-8222-222222222222";
 const ownerUserId = "33333333-3333-4333-8333-333333333333";
 const connectionId = "44444444-4444-4444-8444-444444444444";
 const browserSessionId = "55555555-5555-4555-8555-555555555555";
+const invitationId = "66666666-6666-4666-8666-666666666666";
 const externalResourceId = "123456789012345678";
 
 type PlatformConnection = {
@@ -31,6 +32,7 @@ test("sign-in, create organization, connect Discord, audit and revoke from the b
     authenticated: false,
     registeredEmail: "",
     organizations: [] as unknown[],
+    invitations: [] as unknown[],
     connections: [] as PlatformConnection[],
     auditEvents: [] as unknown[],
     observedLifecycleIdempotencyKey: "",
@@ -96,6 +98,15 @@ test("sign-in, create organization, connect Discord, audit and revoke from the b
     )
     .toBe(organizationId);
 
+  const membersSection = page.locator("#console-members");
+  await membersSection.getByLabel("Email", { exact: true }).fill("invitee@example.com");
+  await membersSection.getByRole("button", { name: "Invite member" }).click();
+  await expect(page.getByRole("status")).toContainText("Organization member invited.");
+  await expect(membersSection).toContainText("i***@example.com");
+  await membersSection.getByRole("button", { name: "Revoke invitation" }).click();
+  await expect(page.getByRole("status")).toContainText("Organization invitation revoked.");
+  await expect(membersSection).toContainText("Revoked");
+
   const connectionWizard = page.locator(
     "section[aria-labelledby='connection-wizard-heading']",
   );
@@ -152,6 +163,7 @@ async function installConsoleApiMock(
     authenticated: boolean;
     registeredEmail: string;
     organizations: unknown[];
+    invitations: unknown[];
     connections: PlatformConnection[];
     auditEvents: unknown[];
     observedLifecycleIdempotencyKey: string;
@@ -222,6 +234,7 @@ async function installConsoleApiMock(
             id: ownerMembershipId,
             organization_id: organizationId,
             user_id: ownerUserId,
+            display_name: "Creator",
             role: "owner",
             resource_scopes: [],
           },
@@ -237,11 +250,56 @@ async function installConsoleApiMock(
             id: ownerMembershipId,
             organization_id: organizationId,
             user_id: ownerUserId,
+            display_name: "Creator",
             role: "owner",
             resource_scopes: [],
           },
         ],
       });
+    }
+    if (method === "GET" && path === `/api/v1/organizations/${organizationId}/member-invitations`) {
+      return json(route, { items: state.invitations });
+    }
+    if (method === "POST" && path === `/api/v1/organizations/${organizationId}/member-invitations`) {
+      const payload = JSON.parse(request.postData() ?? "{}");
+      expect(payload).toMatchObject({
+        email: "invitee@example.com",
+        role: "viewer",
+      });
+      const invitation = {
+        id: invitationId,
+        organization_id: organizationId,
+        email_hint: "i***@example.com",
+        role: "viewer",
+        resource_scopes: [
+          { id: null, resource: "console.control_modules", action: "read" },
+        ],
+        status: "pending",
+        expires_at: "2026-09-09T12:00:00Z",
+        created_at: "2026-09-02T12:00:00Z",
+        accepted_at: null,
+        revoked_at: null,
+        delivery_status: "sent",
+      };
+      state.invitations = [invitation];
+      state.auditEvents.push(
+        auditEvent("organization.member.invitation.created", "organization_invitation", invitationId),
+      );
+      return json(route, invitation, 202);
+    }
+    if (
+      method === "DELETE" &&
+      path === `/api/v1/organizations/${organizationId}/member-invitations/${invitationId}`
+    ) {
+      state.invitations = state.invitations.map((invitation) => ({
+        ...(invitation as Record<string, unknown>),
+        status: "revoked",
+        revoked_at: "2026-09-02T12:01:00Z",
+      }));
+      state.auditEvents.push(
+        auditEvent("organization.member.invitation.revoked", "organization_invitation", invitationId),
+      );
+      return empty(route);
     }
     if (
       method === "GET" &&

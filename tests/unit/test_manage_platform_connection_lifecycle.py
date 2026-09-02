@@ -283,7 +283,7 @@ async def test_disconnect_is_retry_safe_when_connection_is_already_disconnected(
 
 @pytest.mark.asyncio
 async def test_invalid_transition_fails_closed_without_writing() -> None:
-    existing = connection(ConnectionStatus.PENDING)
+    existing = connection(ConnectionStatus.DISCONNECTED)
     writer = LifecycleWriter()
     use_case = ManagePlatformConnectionLifecycle(
         authorizer=Authorizer(True),
@@ -293,7 +293,7 @@ async def test_invalid_transition_fails_closed_without_writing() -> None:
     )
 
     with pytest.raises(PlatformConnectionLifecycleRejectedError):
-        await use_case.execute(command(existing, PlatformConnectionLifecycleAction.REVOKE))
+        await use_case.execute(command(existing, PlatformConnectionLifecycleAction.REAUTHORIZE))
 
     assert writer.connection is None
     assert writer.audit_event is None

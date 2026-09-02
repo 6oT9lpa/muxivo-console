@@ -19,6 +19,7 @@ def connection(status: ConnectionStatus) -> PlatformConnection:
     ("current", "target"),
     (
         (ConnectionStatus.PENDING, ConnectionStatus.ACTIVE),
+        (ConnectionStatus.PENDING, ConnectionStatus.DEGRADED),
         (ConnectionStatus.ACTIVE, ConnectionStatus.DEGRADED),
         (ConnectionStatus.DEGRADED, ConnectionStatus.ACTIVE),
         (ConnectionStatus.ACTIVE, ConnectionStatus.REAUTH_REQUIRED),
@@ -37,7 +38,6 @@ def test_allows_only_documented_lifecycle_transitions(
 @pytest.mark.parametrize(
     ("current", "target"),
     (
-        (ConnectionStatus.PENDING, ConnectionStatus.DEGRADED),
         (ConnectionStatus.ACTIVE, ConnectionStatus.PENDING),
         (ConnectionStatus.DISCONNECTED, ConnectionStatus.ACTIVE),
         (ConnectionStatus.DISCONNECTED, ConnectionStatus.REAUTH_REQUIRED),
