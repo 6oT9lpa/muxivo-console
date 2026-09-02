@@ -14,6 +14,11 @@ WORKER_FACADE_RELATIVE_PATHS = (
     Path("apps/api/src/muxivo_console/infrastructure/reconciliation_worker.py"),
     Path("apps/api/src/muxivo_console/infrastructure/security_cleanup_worker.py"),
 )
+ADDITIONAL_FACADE_RELATIVE_PATHS = (
+    Path("apps/api/src/muxivo_console/infrastructure/development.py"),
+    Path("apps/api/src/muxivo_console/infrastructure/metrics.py"),
+    Path("apps/api/src/muxivo_console/presentation/api.py"),
+)
 INTENTIONAL_REGISTRY_FILES = frozenset({"ports.py"})
 
 
@@ -63,6 +68,14 @@ def check_worker_class_layout(root: Path = Path(".")) -> tuple[ClassLayoutIssue,
     return tuple(issues)
 
 
+def check_additional_facade_class_layout(root: Path = Path(".")) -> tuple[ClassLayoutIssue, ...]:
+    """Return selected infrastructure/presentation facades with multiple classes."""
+    issues: list[ClassLayoutIssue] = []
+    for relative_path in ADDITIONAL_FACADE_RELATIVE_PATHS:
+        issues.extend(_check_single_module(root, relative_path))
+    return tuple(issues)
+
+
 def _check_single_module(root: Path, relative_path: Path) -> tuple[ClassLayoutIssue, ...]:
     module_path = root / relative_path
     if not module_path.exists():
@@ -83,12 +96,13 @@ def main() -> int:
         + check_security_class_layout()
         + check_rate_limiting_class_layout()
         + check_worker_class_layout()
+        + check_additional_facade_class_layout()
     )
     if issues:
         for issue in issues:
             print(f"{issue.path}: {', '.join(issue.classes)}")
         return 1
-    print("Application, settings, security, rate-limit and worker class layout check passed.")
+    print("Selected production class layout check passed.")
     return 0
 
 

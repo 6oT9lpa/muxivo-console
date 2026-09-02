@@ -3,6 +3,7 @@
 from pathlib import Path
 
 from scripts.application_class_layout_check import (
+    check_additional_facade_class_layout,
     check_application_class_layout,
     check_rate_limiting_class_layout,
     check_security_class_layout,
@@ -137,4 +138,27 @@ def test_worker_class_layout_check_reports_multiple_worker_classes(tmp_path: Pat
 
     assert len(issues) == 1
     assert issues[0].path == worker_path
+    assert issues[0].classes == ("First", "Second")
+
+
+def test_additional_facade_class_layout_check_allows_selected_facades() -> None:
+    assert check_additional_facade_class_layout() == ()
+
+
+def test_additional_facade_class_layout_check_reports_multiple_facade_classes(
+    tmp_path: Path,
+) -> None:
+    metrics_path = (
+        tmp_path / "apps" / "api" / "src" / "muxivo_console" / "infrastructure" / "metrics.py"
+    )
+    metrics_path.parent.mkdir(parents=True)
+    metrics_path.write_text(
+        "class First:\n    pass\nclass Second:\n    pass\n",
+        encoding="utf-8",
+    )
+
+    issues = check_additional_facade_class_layout(tmp_path)
+
+    assert len(issues) == 1
+    assert issues[0].path == metrics_path
     assert issues[0].classes == ("First", "Second")

@@ -1,11 +1,9 @@
 import logging
 from collections.abc import AsyncIterator, Callable, Sequence
 from contextlib import asynccontextmanager
-from dataclasses import dataclass
 from datetime import UTC, datetime
 from hmac import compare_digest
 from time import perf_counter
-from typing import Protocol
 from uuid import UUID, uuid4
 
 from fastapi import FastAPI, HTTPException, Request, status
@@ -295,9 +293,26 @@ from muxivo_console.infrastructure.development import (
     DenyByDefaultOrganizationAuthorizer,
     StaticModuleCatalog,
 )
+from muxivo_console.presentation.background_service import BackgroundService
+from muxivo_console.presentation.browser_security_constants import (
+    CSRF_COOKIE_NAME,
+    DEFAULT_CONTENT_SECURITY_POLICY,
+    SESSION_COOKIE_NAME,
+)
+from muxivo_console.presentation.browser_security_policy import BrowserSecurityPolicy
+from muxivo_console.presentation.browser_session_cookie_settings import (
+    BrowserSessionCookieSettings,
+)
 
-SESSION_COOKIE_NAME = "__Host-muxivo_session"
-CSRF_COOKIE_NAME = "__Host-muxivo_csrf"
+__all__ = [
+    "BrowserSecurityPolicy",
+    "BrowserSessionCookieSettings",
+    "CSRF_COOKIE_NAME",
+    "DEFAULT_CONTENT_SECURITY_POLICY",
+    "SESSION_COOKIE_NAME",
+    "create_app",
+]
+
 CSRF_HEADER_NAME = "X-CSRF-Token"
 CSRF_EXEMPT_PATHS = frozenset(
     {
@@ -310,54 +325,6 @@ CSRF_EXEMPT_PATHS = frozenset(
 )
 SAFE_HTTP_METHODS = frozenset({"GET", "HEAD", "OPTIONS"})
 logger = logging.getLogger(__name__)
-DEFAULT_CONTENT_SECURITY_POLICY = (
-    "default-src 'self'; "
-    "base-uri 'self'; "
-    "frame-ancestors 'none'; "
-    "object-src 'none'; "
-    "script-src 'self'; "
-    "style-src 'self' 'unsafe-inline'; "
-    "img-src 'self' data:; "
-    "connect-src 'self'"
-)
-
-
-class BackgroundService(Protocol):
-    async def start(self) -> None: ...
-
-    async def stop(self) -> None: ...
-
-
-@dataclass(frozen=True, slots=True)
-class BrowserSessionCookieSettings:
-    """Browser-session cookie policy supplied only by the composition root."""
-
-    session_name: str = SESSION_COOKIE_NAME
-    csrf_name: str = CSRF_COOKIE_NAME
-    secure: bool = True
-
-    @classmethod
-    def development(cls) -> "BrowserSessionCookieSettings":
-        """Use local-only names because ``__Host-`` cookies must always be Secure."""
-        return cls(
-            session_name="muxivo_console_dev_session",
-            csrf_name="muxivo_console_dev_csrf",
-            secure=False,
-        )
-
-
-@dataclass(frozen=True, slots=True)
-class BrowserSecurityPolicy:
-    """Browser-facing security policy controlled by the composition root."""
-
-    cors_allowed_origins: tuple[str, ...] = ()
-    content_security_policy: str = DEFAULT_CONTENT_SECURITY_POLICY
-    hsts_enabled: bool = True
-    hsts_value: str = "max-age=31536000; includeSubDomains"
-
-    @classmethod
-    def development(cls, *, cors_allowed_origins: tuple[str, ...] = ()) -> "BrowserSecurityPolicy":
-        return cls(cors_allowed_origins=cors_allowed_origins, hsts_enabled=False)
 
 
 def _set_browser_session_cookies(

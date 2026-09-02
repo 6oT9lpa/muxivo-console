@@ -3,23 +3,12 @@
 from __future__ import annotations
 
 from collections import defaultdict
-from dataclasses import dataclass
 from threading import Lock
 
+from muxivo_console.infrastructure.http_metric_key import HttpMetricKey
+from muxivo_console.infrastructure.http_metric_sample import HttpMetricSample
+
 DEFAULT_HTTP_DURATION_BUCKETS = (0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0, 10.0)
-
-
-@dataclass(frozen=True, order=True, slots=True)
-class HttpMetricKey:
-    method: str
-    route: str
-    status_code: int
-
-
-@dataclass(frozen=True, slots=True)
-class HttpMetricSample:
-    count: int
-    duration_seconds_sum: float
 
 
 class InMemoryHttpMetricsRecorder:
@@ -124,3 +113,11 @@ def _labels_for(key: HttpMetricKey) -> str:
 
 def _escape_label_value(value: str) -> str:
     return value.replace("\\", "\\\\").replace("\n", "\\n").replace('"', '\\"')
+
+
+__all__ = [
+    "DEFAULT_HTTP_DURATION_BUCKETS",
+    "HttpMetricKey",
+    "HttpMetricSample",
+    "InMemoryHttpMetricsRecorder",
+]

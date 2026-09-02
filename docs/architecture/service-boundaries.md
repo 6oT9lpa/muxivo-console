@@ -89,3 +89,5 @@ the application modules, production configuration facade and security adapter
 facade, plus the rate-limit adapter facade.
 Runtime worker modules follow the same boundary: worker settings are separate
 value objects and the worker module keeps only the worker implementation.
+Selected development, metrics and presentation facades are checked by the same
+CI layout gate; their concrete implementations are kept in dedicated modules.
