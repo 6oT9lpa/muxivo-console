@@ -20,6 +20,10 @@ credential path used by `muxivo-console-api.service`.
   containing usable secrets.
 - `prometheus-console.yml.example` is a same-host scrape fragment for the
   loopback-only `/metrics` endpoint; install it only in the monitoring network.
+- `scripts/production_network_preflight.py` performs the final read-only public
+  check for approved DNS resolution, certificate hostname validation, frontend
+  reachability, API liveness/readiness and required browser security headers.
+  It never sends credentials or changes DNS, Nginx, FRP or service state.
 
 The exact rollout and validation order is documented in
 `docs/operations/console-deployment.md`.

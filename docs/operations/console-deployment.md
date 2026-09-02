@@ -210,6 +210,19 @@ Run the checks in this order:
 9. `/metrics` from the monitoring network only, followed by the drafted alert
    rules.
 
+The read-only network portion can be repeated from an approved operator host
+after DNS, TLS, FRP and the API are ready:
+
+```bash
+export MUXIVO_CONSOLE_PUBLIC_BASE_URL=https://console.muxivo.pro
+export MUXIVO_CONSOLE_EXPECTED_DNS_IPS=138.124.119.238
+python scripts/production_network_preflight.py
+```
+
+The command logs each validation stage and reports only stage names and error
+types. It does not print response bodies, certificate contents, credentials or
+tokens, and it never restarts services or changes DNS.
+
 If a check fails, stop at the failed boundary, preserve the journal and browser
 correlation ID, and do not roll back unrelated Activity services.
 
