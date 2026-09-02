@@ -93,9 +93,10 @@ def test_public_surface_requires_health_endpoints_and_security_headers() -> None
     def http_getter(
         _settings: NetworkPreflightSettings,
         path: str,
-    ) -> tuple[int, Mapping[str, str]]:
+    ) -> tuple[int, Mapping[str, str], str]:
         calls.append(path)
-        return 200, headers
+        body = '<meta name="muxivo-app" content="console" />' if path == "/" else "{}"
+        return 200, headers, body
 
     validate_public_http_surface(settings, http_getter=http_getter)
 
@@ -110,7 +111,11 @@ def test_public_surface_rejects_missing_security_header() -> None:
     with pytest.raises(OSError, match="security headers"):
         validate_public_http_surface(
             settings,
-            http_getter=lambda *_args: (200, headers),
+            http_getter=lambda *_args: (
+                200,
+                headers,
+                '<meta name="muxivo-app" content="console" />',
+            ),
         )
 
 
@@ -122,11 +127,12 @@ def test_public_surface_checks_security_headers_on_each_endpoint() -> None:
     def http_getter(
         _settings: NetworkPreflightSettings,
         path: str,
-    ) -> tuple[int, Mapping[str, str]]:
+    ) -> tuple[int, Mapping[str, str], str]:
         calls.append(path)
         if path == "/readyz":
-            return 200, {}
-        return 200, complete_headers
+            return 200, {}, "{}"
+        body = '<meta name="muxivo-app" content="console" />' if path == "/" else "{}"
+        return 200, complete_headers, body
 
     with pytest.raises(OSError, match="public surface"):
         validate_public_http_surface(settings, http_getter=http_getter)
@@ -147,12 +153,31 @@ def test_run_preflight_reports_failed_stages_without_revealing_values(caplog) ->
             (2, 1, 6, "", ("203.0.113.20", 443)),
         ],
         tls_validator=raise_tls,
-        http_getter=lambda *_args: (200, {}),
+        http_getter=lambda *_args: (
+            200,
+            {},
+            '<meta name="muxivo-app" content="console" />',
+        ),
     )
 
     assert failures == ("dns", "tls", "public_http_surface")
     assert "certificate mismatch" not in caplog.text
     assert "138.124.119.238" not in caplog.text
+
+
+def test_public_surface_rejects_a_neighboring_site_on_the_console_host() -> None:
+    settings = settings_from_environment(_environment())
+    headers = {header: "configured" for header in REQUIRED_SECURITY_HEADERS}
+
+    def http_getter(
+        _settings: NetworkPreflightSettings,
+        path: str,
+    ) -> tuple[int, Mapping[str, str], str]:
+        body = "<title>Muxivo Discord</title>" if path == "/" else "{}"
+        return 200, headers, body
+
+    with pytest.raises(OSError, match="frontend identity marker"):
+        validate_public_http_surface(settings, http_getter=http_getter)
 
 
 def test_script_has_no_repository_local_output_dependency() -> None:

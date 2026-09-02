@@ -5,6 +5,7 @@ from __future__ import annotations
 import ipaddress
 import logging
 import os
+import re
 import socket
 import ssl
 from collections.abc import Callable, Mapping
@@ -31,7 +32,10 @@ REQUIRED_SECURITY_HEADERS: tuple[str, ...] = (
 
 DnsResolver = Callable[..., list[tuple[Any, ...]]]
 TlsValidator = Callable[["NetworkPreflightSettings"], None]
-HttpGetter = Callable[["NetworkPreflightSettings", str], tuple[int, Mapping[str, str]]]
+HttpGetter = Callable[["NetworkPreflightSettings", str], tuple[int, Mapping[str, str], str]]
+
+CONSOLE_FRONTEND_MARKER = '<meta name="muxivo-app" content="console"'
+MAX_RESPONSE_BODY_BYTES = 16_384
 
 
 @dataclass(frozen=True, slots=True)
@@ -144,8 +148,8 @@ def fetch_http(
     path: str,
     *,
     opener: Callable[..., Any] = urlopen,
-) -> tuple[int, Mapping[str, str]]:
-    """Fetch one public endpoint while returning status and headers only."""
+) -> tuple[int, Mapping[str, str], str]:
+    """Fetch one public endpoint while keeping response data in memory only."""
     if not path.startswith("/"):
         raise ValueError("preflight endpoint path must start with '/'.")
 
@@ -162,8 +166,8 @@ def fetch_http(
         with opener(request, timeout=settings.timeout_seconds) as response:
             status = int(response.status)
             headers = {str(key).lower(): str(value) for key, value in response.headers.items()}
-            response.read(8192)
-            return status, headers
+            body = response.read(MAX_RESPONSE_BODY_BYTES).decode("utf-8", errors="replace")
+            return status, headers, body
     except HTTPError as error:
         raise OSError(f"endpoint returned HTTP {error.code}") from error
     except URLError as error:
@@ -190,11 +194,13 @@ def validate_public_http_surface(
             path,
             extra={"stage": stage, "path": path},
         )
-        status, headers = http_getter(settings, path)
+        status, headers, body = http_getter(settings, path)
         endpoint_statuses[stage] = status
         header_sets[stage] = headers
         if status != 200:
             raise OSError(f"{path} returned HTTP {status}")
+        if stage == "frontend" and not _has_console_frontend_marker(body):
+            raise OSError("public frontend identity marker is missing")
         logger.info(
             "production_preflight.stage_succeeded stage=%s status=%s",
             stage,
@@ -325,6 +331,12 @@ def _parse_timeout(value: str) -> float:
             "MUXIVO_CONSOLE_NETWORK_PREFLIGHT_TIMEOUT_SECONDS must be between 0 and 60."
         )
     return timeout
+
+
+def _has_console_frontend_marker(body: str) -> bool:
+    """Ensure the public root belongs to Console rather than a neighboring site."""
+    normalized_body = re.sub(r"\s+", " ", body).lower()
+    return CONSOLE_FRONTEND_MARKER in normalized_body
 
 
 if __name__ == "__main__":
