@@ -14,15 +14,15 @@ describe("connection wizard copy", () => {
   });
 
   it.each([
-    ["discord", "Connect Discord server", "Discord server ID", "Discord"],
-    ["twitch", "Connect Twitch channel", "Twitch channel ID", "Twitch"],
+    ["discord", "Connect Discord server", "Available Discord servers", "Discord"],
+    ["twitch", "Connect Twitch channel", "Available Twitch channels", "Twitch"],
   ] satisfies [ConnectablePlatform, string, string, string][])(
     "describes the %s product wizard instead of a raw resource form",
     (platform, title, resourceLabel, ownershipKeyword) => {
       const copy = connectionWizardFor(platform);
 
       expect(copy.title).toBe(title);
-      expect(copy.resourceLabel).toBe(resourceLabel);
+      expect(copy.candidateLabel).toBe(resourceLabel);
       expect(copy.preflightSteps).toContain(
         `Link the matching ${ownershipKeyword} identity.`,
       );

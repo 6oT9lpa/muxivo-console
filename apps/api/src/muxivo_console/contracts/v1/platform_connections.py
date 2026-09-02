@@ -39,3 +39,17 @@ class PlatformConnectionResponse(BaseModel):
 class PlatformConnectionListResponse(BaseModel):
     items: list[PlatformConnectionResponse]
     next_cursor: UUID | None = None
+
+
+class PlatformConnectionCandidateResponse(BaseModel):
+    """A selectable platform resource; credentials never belong in this contract."""
+
+    platform: Platform
+    external_resource_id: str = Field(min_length=1, max_length=255)
+    display_name: str = Field(min_length=1, max_length=255)
+
+
+class PlatformConnectionCandidateListResponse(BaseModel):
+    platform: Platform
+    identity_linked: bool
+    items: list[PlatformConnectionCandidateResponse] = Field(default_factory=list)

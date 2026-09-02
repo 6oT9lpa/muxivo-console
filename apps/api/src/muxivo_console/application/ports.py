@@ -45,6 +45,9 @@ from muxivo_console.domain.organizations import (
     OrganizationMembershipProfile,
 )
 from muxivo_console.domain.password_recovery import PasswordRecoveryTransaction
+from muxivo_console.domain.platform_connection_candidate_catalog import (
+    PlatformConnectionCandidateCatalog,
+)
 from muxivo_console.domain.role_purposes import PlatformRolePurposes
 from muxivo_console.domain.server_statistics import (
     PlatformServerStatistics,
@@ -632,6 +635,27 @@ class PlatformConnectionVerifier(Protocol):
         external_resource_id: str,
         correlation_id: UUID,
     ) -> bool: ...
+
+
+class PlatformConnectionCandidateCatalogReader(Protocol):
+    """Discovers selectable, browser-safe resources for one linked platform identity."""
+
+    async def list_for_organization(
+        self, *, organization_id: UUID, actor_id: UUID, correlation_id: UUID
+    ) -> PlatformConnectionCandidateCatalog: ...
+
+
+class PlatformConnectionCandidateReader(Protocol):
+    """Routes candidate discovery to the adapter for the requested platform."""
+
+    async def list_for_platform(
+        self,
+        *,
+        organization_id: UUID,
+        actor_id: UUID,
+        platform: Platform,
+        correlation_id: UUID,
+    ) -> PlatformConnectionCandidateCatalog: ...
 
 
 class PlatformConnectionWriter(Protocol):

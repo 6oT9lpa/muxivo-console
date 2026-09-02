@@ -73,11 +73,12 @@ def test_callback_completes_state_flow_without_requiring_browser_session() -> No
     client = TestClient(create_app(discord_identity_link_complete=complete))
 
     response = client.get(
-        "/api/v1/identity-links/discord/callback?code=oauth-code&state=opaque-state"
+        "/api/v1/identity-links/discord/callback?code=oauth-code&state=opaque-state",
+        follow_redirects=False,
     )
 
-    assert response.status_code == 200
-    assert response.json() == {"linked": True}
+    assert response.status_code == 303
+    assert response.headers["location"] == "/?identity_linked=discord"
     assert complete.command.authorization_code == "oauth-code"
     assert complete.command.state == "opaque-state"
 
@@ -86,10 +87,13 @@ def test_canonical_auth_callback_can_complete_identity_link_state_flow() -> None
     complete = CompleteUseCase()
     client = TestClient(create_app(discord_identity_link_complete=complete))
 
-    response = client.get("/api/v1/auth/discord/callback?code=oauth-code&state=opaque-state")
+    response = client.get(
+        "/api/v1/auth/discord/callback?code=oauth-code&state=opaque-state",
+        follow_redirects=False,
+    )
 
-    assert response.status_code == 200
-    assert response.json() == {"linked": True}
+    assert response.status_code == 303
+    assert response.headers["location"] == "/?identity_linked=discord"
     assert complete.command.authorization_code == "oauth-code"
     assert complete.command.state == "opaque-state"
 
@@ -130,10 +134,13 @@ def test_twitch_callback_completes_twitch_identity_link_state_flow() -> None:
     complete = CompleteUseCase()
     client = TestClient(create_app(twitch_identity_link_complete=complete))
 
-    response = client.get("/api/v1/auth/twitch/callback?code=oauth-code&state=opaque-state")
+    response = client.get(
+        "/api/v1/auth/twitch/callback?code=oauth-code&state=opaque-state",
+        follow_redirects=False,
+    )
 
-    assert response.status_code == 200
-    assert response.json() == {"linked": True}
+    assert response.status_code == 303
+    assert response.headers["location"] == "/?identity_linked=twitch"
     assert complete.command.provider.value == "twitch"
     assert complete.command.authorization_code == "oauth-code"
     assert complete.command.state == "opaque-state"

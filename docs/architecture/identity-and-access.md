@@ -83,15 +83,19 @@ implicit side effect of sign-in.
 
 ### Twitch
 
-The user selects **Connect Twitch channel**. The Twitch consent screen requests
-only the scopes required by the enabled capabilities. The backend verifies the
-authorized Twitch user, identifies the broadcaster resource, creates the
-connection in `PENDING`, performs bot/EventSub/moderator preflight checks and
-only then activates it.
+The user selects **Connect Twitch channel**. Console asks the Twitch Control API
+for a browser-safe list of channels available to the linked broadcaster
+identity, so the user never pastes a channel ID. The Twitch consent screen
+requests only the scopes required by the enabled capabilities. The backend
+verifies the authorized Twitch user and the selected broadcaster resource,
+creates the connection in `PENDING`, performs bot/EventSub/moderator preflight
+checks and only then activates it.
 
 ### Discord
 
-The user selects **Connect Discord server**. The Console verifies that the user
+The user selects **Connect Discord server**. Console asks the Discord Control
+API for a browser-safe list of servers available to the linked Discord identity,
+so the user never pastes a guild ID. The Console then verifies that the user
 has the required guild authority, that the Muxivo Discord bot is installed and
 that the selected guild is not already attached to another organization unless
 an explicit transfer process is completed.

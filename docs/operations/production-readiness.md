@@ -32,6 +32,7 @@ completed.
 | Observability | `/metrics` scraped and alert rules configured | Alert rules drafted; backend pending |
 | Lifecycle | Periodic platform connection reconciliation worker | Implemented |
 | Lifecycle | Idempotency keys for retry-safe lifecycle actions | Implemented |
+| Lifecycle | Browser-safe platform resource candidate discovery | Console contract/UI implemented; Control API endpoints pending |
 | Lifecycle | Discord/Twitch ownership verification before registration | Implemented; Twitch Control API config pending |
 | Lifecycle | Discord/Twitch browser-safe connection health adapters | Implemented; Twitch Control API config pending |
 | Lifecycle | Discord token/scope reconciliation contract | Implemented |
@@ -326,6 +327,9 @@ Minimum documented drill before production:
 ## Remaining engineering follow-up
 
 - Provision shared Redis/edge rate-limit backend for staging/prod.
+- Implement the signed `/connection-candidates` endpoint in each platform
+  Control API and validate it against the contract in the Console deployment
+  runbook.
 - Configure Twitch Control API service URL and signing key in staging/prod.
 - Provision real SMTP credentials for staging and production.
 - Load `docs/operations/prometheus-alerts.yml` into the selected metrics backend.

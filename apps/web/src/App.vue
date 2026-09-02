@@ -69,6 +69,14 @@ const invitationToken = ref(
     ? new URL(window.location.href).searchParams.get("token") ?? ""
     : "",
 );
+const identityLinkedProvider = ref<"discord" | "twitch" | null>(
+  typeof window !== "undefined"
+    ? (() => {
+        const provider = new URL(window.location.href).searchParams.get("identity_linked");
+        return provider === "discord" || provider === "twitch" ? provider : null;
+      })()
+    : null,
+);
 const organizationName = ref("");
 const authenticated = ref(false);
 const landingTab = ref<"overview" | "about">("overview");
@@ -93,7 +101,11 @@ const newMemberScopes = ref<MembershipScopeInput[]>([
   { resource: "console.control_modules", action: "read" },
 ]);
 const platform = ref<ConnectablePlatform>("discord");
-const externalResourceId = ref("");
+const connectionCandidates = ref<PlatformConnectionCandidate[]>([]);
+const connectionCandidatesIdentityLinked = ref<boolean | null>(null);
+const connectionCandidatesLoading = ref(false);
+const connectionCandidatesUnavailable = ref(false);
+const selectedConnectionCandidateId = ref("");
 const connections = ref<PlatformConnection[]>([]);
 const platformHealth = ref<PlatformHealth | null>(null);
 const controlModules = ref<ControlModule[]>([]);
@@ -169,8 +181,8 @@ const localizedConnectionWizardOptions = computed(() =>
     title: t(`console.connections.wizard.${option.platform}.title`),
     summary: t(`console.connections.wizard.${option.platform}.summary`),
     actionLabel: t(`console.connections.wizard.${option.platform}.action`),
-    resourceLabel: t(`console.connections.wizard.${option.platform}.resource`),
-    resourceHelp: t(`console.connections.wizard.${option.platform}.help`),
+    candidateLabel: t(`console.connections.wizard.${option.platform}.candidate`),
+    candidateHelp: t(`console.connections.wizard.${option.platform}.candidate_help`),
     preflightSteps: option.preflightSteps.map((_, index) =>
       t(`console.connections.wizard.${option.platform}.step_${index + 1}`),
     ),
@@ -288,6 +300,16 @@ type PlatformConnection = {
   external_resource_id: string;
   status: "pending" | "active" | "degraded" | "reauth_required" | "disconnected";
   granted_scopes: PlatformConnectionGrantedScope[];
+};
+type PlatformConnectionCandidate = {
+  platform: "discord" | "twitch";
+  external_resource_id: string;
+  display_name: string;
+};
+type PlatformConnectionCandidateCatalog = {
+  platform: "discord" | "twitch";
+  identity_linked: boolean;
+  items: PlatformConnectionCandidate[];
 };
 type PlatformHealthSignal = {
   key: string;
@@ -443,10 +465,40 @@ const activeOrganization = computed(
     ) ?? null,
 );
 const activeOrganizationId = computed(() => activeOrganization.value?.organization.id ?? "");
+function activeMembershipAllows(resource: AuthorizationResource, action: AuthorizationAction) {
+  const membership = activeOrganization.value?.membership;
+  if (!membership) return false;
+  if (membership.role === "owner") return true;
+  return membership.resource_scopes.some(
+    (scope) => scope.resource === resource && scope.action === action,
+  );
+}
 const canManageOrganizationMembers = computed(
   () =>
     activeOrganization.value?.membership.role === "owner" ||
     activeOrganization.value?.membership.role === "admin",
+);
+const canReadPlatformConnections = computed(() =>
+  activeMembershipAllows("console.platform_connections", "read"),
+);
+const canManagePlatformConnections = computed(() =>
+  activeMembershipAllows("console.platform_connections", "manage"),
+);
+const selectableConnectionCandidates = computed(() =>
+  connectionCandidates.value.filter(
+    (candidate) =>
+      !connections.value.some(
+        (connection) =>
+          connection.platform === candidate.platform &&
+          connection.external_resource_id === candidate.external_resource_id,
+      ),
+  ),
+);
+const selectedConnectionCandidate = computed(
+  () =>
+    selectableConnectionCandidates.value.find(
+      (candidate) => candidate.external_resource_id === selectedConnectionCandidateId.value,
+    ) ?? null,
 );
 const currentBrowserSession = computed(
   () => browserSessions.value.find((session) => session.is_current) ?? null,
@@ -623,6 +675,12 @@ onMounted(async () => {
   if (invitationToken.value) {
     loginOpen.value = true;
   }
+  const linkedProvider = identityLinkedProvider.value;
+  if (linkedProvider && typeof window !== "undefined") {
+    const url = new URL(window.location.href);
+    url.searchParams.delete("identity_linked");
+    window.history.replaceState({}, "", url);
+  }
   try {
     await consoleApi<{ authenticated: boolean }>("/api/v1/auth/session");
     authenticated.value = true;
@@ -630,6 +688,12 @@ onMounted(async () => {
     await acceptInvitationIfPresent();
   } catch {
     // A missing session is the normal first-visit state.
+  }
+  if (linkedProvider) {
+    notice.value = t("console.notice.identity_linked", {
+      platform: platformLabel(linkedProvider),
+    });
+    activeConsoleSection.value = "connections";
   }
 });
 
@@ -831,6 +895,7 @@ async function refreshOrganizationWorkspace() {
   if (!activeOrganizationId.value) return;
   await Promise.all([
     loadConnections(),
+    loadConnectionCandidates(),
     loadOrganizationMembers(),
     loadOrganizationInvitations(),
   ]);
@@ -842,6 +907,11 @@ function persistActiveOrganization() {
 
 function resetOrganizationWorkspace() {
   connections.value = [];
+  connectionCandidates.value = [];
+  connectionCandidatesIdentityLinked.value = null;
+  connectionCandidatesLoading.value = false;
+  connectionCandidatesUnavailable.value = false;
+  selectedConnectionCandidateId.value = "";
   organizationMembers.value = [];
   organizationInvitations.value = [];
   platformHealth.value = null;
@@ -884,7 +954,10 @@ async function createOrganization() {
 }
 
 async function loadConnections() {
-  if (!activeOrganizationId.value) return;
+  if (!activeOrganizationId.value || !canReadPlatformConnections.value) {
+    connections.value = [];
+    return;
+  }
   busy.value = true;
   notice.value = "";
   try {
@@ -906,10 +979,60 @@ async function loadConnections() {
     auditEventsNextCursor.value = null;
     selectedConnectionId.value = usableConnections.value[0]?.id ?? "";
     selectedDiscordConnectionId.value = usableDiscordConnections.value[0]?.id ?? "";
+    syncSelectedConnectionCandidate();
   } catch (error) {
     notice.value = messageFor(error);
   } finally {
     busy.value = false;
+  }
+}
+
+async function loadConnectionCandidates() {
+  if (!activeOrganizationId.value || !canManagePlatformConnections.value) {
+    connectionCandidates.value = [];
+    connectionCandidatesIdentityLinked.value = null;
+    connectionCandidatesLoading.value = false;
+    connectionCandidatesUnavailable.value = false;
+    selectedConnectionCandidateId.value = "";
+    return;
+  }
+  const requestedPlatform = platform.value;
+  const requestedOrganizationId = activeOrganizationId.value;
+  connectionCandidatesLoading.value = true;
+  connectionCandidatesUnavailable.value = false;
+  try {
+    const payload = await consoleApi<PlatformConnectionCandidateCatalog>(
+      `/api/v1/organizations/${encodeURIComponent(requestedOrganizationId)}/platform-connection-candidates?platform=${encodeURIComponent(requestedPlatform)}`,
+    );
+    if (
+      requestedPlatform !== platform.value ||
+      requestedOrganizationId !== activeOrganizationId.value
+    ) {
+      return;
+    }
+    connectionCandidates.value = payload.items;
+    connectionCandidatesIdentityLinked.value = payload.identity_linked;
+    syncSelectedConnectionCandidate();
+  } catch (error) {
+    if (
+      requestedPlatform !== platform.value ||
+      requestedOrganizationId !== activeOrganizationId.value
+    ) {
+      return;
+    }
+    connectionCandidates.value = [];
+    connectionCandidatesIdentityLinked.value = null;
+    connectionCandidatesUnavailable.value = error instanceof ConsoleApiError && error.status === 503;
+    if (!(error instanceof ConsoleApiError && error.status === 503)) {
+      notice.value = messageFor(error);
+    }
+  } finally {
+    if (
+      requestedPlatform === platform.value &&
+      requestedOrganizationId === activeOrganizationId.value
+    ) {
+      connectionCandidatesLoading.value = false;
+    }
   }
 }
 
@@ -1253,9 +1376,27 @@ function connectionRiskyActionsBlocked(status: PlatformConnection["status"]): bo
   return ["degraded", "reauth_required", "disconnected"].includes(status);
 }
 
+function syncSelectedConnectionCandidate() {
+  if (
+    selectedConnectionCandidateId.value &&
+    selectableConnectionCandidates.value.some(
+      (candidate) =>
+        candidate.external_resource_id === selectedConnectionCandidateId.value,
+    )
+  ) {
+    return;
+  }
+  selectedConnectionCandidateId.value =
+    selectableConnectionCandidates.value[0]?.external_resource_id ?? "";
+}
+
 function selectConnectionWizard(nextPlatform: ConnectablePlatform) {
   platform.value = nextPlatform;
-  externalResourceId.value = "";
+  connectionCandidates.value = [];
+  connectionCandidatesIdentityLinked.value = null;
+  connectionCandidatesUnavailable.value = false;
+  selectedConnectionCandidateId.value = "";
+  void loadConnectionCandidates();
 }
 
 async function loadControlModules() {
@@ -1597,7 +1738,10 @@ async function loadPlatformHealth() {
 }
 
 async function registerConnection() {
-  if (!activeOrganizationId.value) return;
+  if (!activeOrganizationId.value || !selectedConnectionCandidate.value) {
+    notice.value = t("console.connections.select_candidate_required");
+    return;
+  }
   busy.value = true;
   notice.value = "";
   try {
@@ -1605,11 +1749,15 @@ async function registerConnection() {
       `/api/v1/organizations/${encodeURIComponent(activeOrganizationId.value)}/platform-connections`,
       {
         method: "POST",
-        body: JSON.stringify({ platform: platform.value, external_resource_id: externalResourceId.value }),
+        body: JSON.stringify({
+          platform: platform.value,
+          external_resource_id: selectedConnectionCandidate.value.external_resource_id,
+        }),
       },
     );
-    externalResourceId.value = "";
+    selectedConnectionCandidateId.value = "";
     connections.value = [connection, ...connections.value];
+    syncSelectedConnectionCandidate();
     notice.value = t("console.notice.connection_pending", {
       platform: platformLabel(connection.platform),
     });
@@ -2189,7 +2337,7 @@ function messageFor(error: unknown): string {
         <h3>{{ t("console.connections.empty_title") }}</h3>
         <p>{{ t("console.connections.empty_help") }}</p>
       </div>
-      <section v-if="activeOrganizationId" class="platform-dashboard" aria-labelledby="connection-wizard-heading">
+      <section v-if="activeOrganizationId && canManagePlatformConnections" class="platform-dashboard" aria-labelledby="connection-wizard-heading">
         <div class="section-heading">
           <div>
             <h3 id="connection-wizard-heading">{{ selectedConnectionWizard.title }}</h3>
@@ -2215,8 +2363,45 @@ function messageFor(error: unknown): string {
           </li>
         </ol>
         <form class="connection-form" @submit.prevent="registerConnection">
-          <label>{{ selectedConnectionWizard.resourceLabel }}<input v-model="externalResourceId" :placeholder="selectedConnectionWizard.resourcePlaceholder" required /></label>
-          <p>{{ selectedConnectionWizard.resourceHelp }}</p>
+          <label>
+            {{ selectedConnectionWizard.candidateLabel }}
+            <select
+              v-model="selectedConnectionCandidateId"
+              :disabled="busy || connectionCandidatesLoading || !selectableConnectionCandidates.length"
+              required
+            >
+              <option value="" disabled>
+                {{
+                  connectionCandidatesLoading
+                    ? t("console.connections.loading_candidates")
+                    : t("console.connections.select_candidate")
+                }}
+              </option>
+              <option
+                v-for="candidate in selectableConnectionCandidates"
+                :key="candidate.external_resource_id"
+                :value="candidate.external_resource_id"
+              >
+                {{ candidate.display_name }}
+              </option>
+            </select>
+          </label>
+          <p>{{ selectedConnectionWizard.candidateHelp }}</p>
+          <p v-if="connectionCandidatesLoading" class="connection-feedback" role="status">
+            {{ t("console.connections.loading_candidates") }}
+          </p>
+          <p v-else-if="connectionCandidatesUnavailable" class="connection-feedback" role="alert">
+            {{ t("console.connections.catalog_unavailable") }}
+            <button type="button" class="inline-action" :disabled="busy" @click="loadConnectionCandidates">
+              {{ t("console.connections.refresh_candidates") }}
+            </button>
+          </p>
+          <p v-else-if="connectionCandidatesIdentityLinked === false" class="connection-feedback">
+            {{ t("console.connections.identity_required") }}
+          </p>
+          <p v-else-if="!selectableConnectionCandidates.length" class="connection-feedback">
+            {{ t("console.connections.no_candidates") }}
+          </p>
           <p v-if="platform === 'discord'">
             {{ t("console.connections.ownership_discord") }}
             <button type="button" class="inline-action" :disabled="busy" @click="linkDiscord">
@@ -2229,10 +2414,15 @@ function messageFor(error: unknown): string {
               {{ t("console.connections.link_identity", { platform: "Twitch" }) }}
             </button>
           </p>
-          <button :disabled="busy">{{ busy ? t("console.members.loading") : selectedConnectionWizard.actionLabel }}</button>
+          <button :disabled="busy || connectionCandidatesLoading || !selectedConnectionCandidateId">
+            {{ busy ? t("console.members.loading") : selectedConnectionWizard.actionLabel }}
+          </button>
         </form>
         <p>{{ t("console.connections.security_note") }}</p>
       </section>
+      <p v-else-if="activeOrganizationId" class="connection-feedback" role="status">
+        {{ t("console.connections.permission_required") }}
+      </p>
       <ul v-if="connections.length" class="connections">
         <li v-for="connection in connections" :key="connection.id">
           <strong>{{ platformLabel(connection.platform) }}</strong>

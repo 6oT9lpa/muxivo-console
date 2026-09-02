@@ -5440,6 +5440,23 @@ input[type="checkbox"]:disabled { cursor: not-allowed; opacity: 0.46; }
   font-size: 0.86rem;
 }
 
+.connection-feedback {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  padding: 12px 14px;
+  color: var(--muted);
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+}
+
+.connection-feedback[role="alert"] {
+  color: var(--warning, #f6c453);
+  border-color: color-mix(in srgb, var(--warning, #f6c453) 42%, var(--border));
+}
+
 .platform-choice-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));

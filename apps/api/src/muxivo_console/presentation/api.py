@@ -110,6 +110,10 @@ from muxivo_console.application.list_organizations import (
     ListOrganizationsCommand,
     OrganizationListRejectedError,
 )
+from muxivo_console.application.list_platform_connection_candidates import (
+    ListPlatformConnectionCandidates,
+    ListPlatformConnectionCandidatesCommand,
+)
 from muxivo_console.application.list_platform_connection_channels import (
     ListPlatformConnectionChannels,
 )
@@ -241,6 +245,8 @@ from muxivo_console.contracts.v1.platform_channels import (
     PlatformChannelResponse,
 )
 from muxivo_console.contracts.v1.platform_connections import (
+    PlatformConnectionCandidateListResponse,
+    PlatformConnectionCandidateResponse,
     PlatformConnectionCreateRequest,
     PlatformConnectionGrantedScopeResponse,
     PlatformConnectionListResponse,
@@ -274,6 +280,9 @@ from muxivo_console.domain.organizations import (
     MembershipResourceScope,
     OrganizationMemberProfile,
     OrganizationMembership,
+)
+from muxivo_console.domain.platform_connection_candidate_catalog import (
+    PlatformConnectionCandidateCatalog,
 )
 from muxivo_console.domain.sessions import SessionAssuranceLevel
 from muxivo_console.domain.welcome import PlatformWelcomeSettings
@@ -446,6 +455,23 @@ def _scope_requests_to_domain(
     )
 
 
+def _platform_connection_candidate_response(
+    catalog: PlatformConnectionCandidateCatalog,
+) -> PlatformConnectionCandidateListResponse:
+    return PlatformConnectionCandidateListResponse(
+        platform=catalog.platform,
+        identity_linked=catalog.identity_linked,
+        items=[
+            PlatformConnectionCandidateResponse(
+                platform=candidate.platform,
+                external_resource_id=candidate.external_resource_id,
+                display_name=candidate.display_name,
+            )
+            for candidate in catalog.items
+        ],
+    )
+
+
 def _platform_connection_response(connection: PlatformConnection) -> PlatformConnectionResponse:
     return PlatformConnectionResponse(
         id=connection.id,
@@ -575,6 +601,7 @@ def create_app(
     organization_invitation_revoke_use_case: RevokeOrganizationInvitation | None = None,
     organization_invitation_accept_use_case: AcceptOrganizationInvitation | None = None,
     platform_connection_registration_use_case: RegisterPlatformConnection | None = None,
+    platform_connection_candidates_use_case: ListPlatformConnectionCandidates | None = None,
     platform_connection_lifecycle_use_case: ManagePlatformConnectionLifecycle | None = None,
     platform_connections_use_case: ListPlatformConnections | None = None,
     audit_events_use_case: ListOrganizationAuditEvents | None = None,
@@ -1406,13 +1433,15 @@ def create_app(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Discord identity linking failed",
             ) from error
-        return {"linked": True}
+        return RedirectResponse(
+            url="/?identity_linked=discord", status_code=status.HTTP_303_SEE_OTHER
+        )
 
     @app.get("/api/v1/auth/twitch/callback", tags=["identity-links"])
     @app.get("/api/v1/identity-links/twitch/callback", tags=["identity-links"])
     async def complete_twitch_identity_link_callback(
         code: str, state: str, request: Request
-    ) -> dict[str, bool]:
+    ) -> Response:
         await enforce_auth_rate_limit(request, scope="auth.oauth.callback")
         if twitch_identity_link_complete is None:
             raise HTTPException(
@@ -1447,7 +1476,9 @@ def create_app(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Twitch identity linking failed",
             ) from error
-        return {"linked": True}
+        return RedirectResponse(
+            url="/?identity_linked=twitch", status_code=status.HTTP_303_SEE_OTHER
+        )
 
     @app.get(
         "/api/v1/organizations",
@@ -1792,6 +1823,43 @@ def create_app(
                 detail="Organization invitation acceptance failed",
             ) from error
         return _membership_response(membership)
+
+    @app.get(
+        "/api/v1/organizations/{organization_id}/platform-connection-candidates",
+        response_model=PlatformConnectionCandidateListResponse,
+        tags=["platform-connections"],
+    )
+    async def list_platform_connection_candidates(
+        organization_id: UUID, platform: Platform, request: Request, response: Response
+    ) -> PlatformConnectionCandidateListResponse:
+        actor_id = getattr(request.state, "actor_id", None)
+        if not isinstance(actor_id, UUID):
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied")
+        response.headers["Cache-Control"] = "no-store"
+        if platform_connection_candidates_use_case is None:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Platform connection candidate discovery is unavailable",
+            )
+        try:
+            catalog = await platform_connection_candidates_use_case.execute(
+                ListPlatformConnectionCandidatesCommand(
+                    actor_id=actor_id,
+                    organization_id=organization_id,
+                    platform=platform,
+                    correlation_id=request.state.correlation_id,
+                )
+            )
+        except AccessDeniedError as error:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN, detail="Access denied"
+            ) from error
+        except PlatformControlUnavailableError as error:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Platform control service is unavailable",
+            ) from error
+        return _platform_connection_candidate_response(catalog)
 
     @app.post(
         "/api/v1/organizations/{organization_id}/platform-connections",

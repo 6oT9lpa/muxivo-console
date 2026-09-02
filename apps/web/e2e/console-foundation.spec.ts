@@ -122,7 +122,7 @@ test("sign-in, create organization, connect Discord, audit and revoke from the b
   await expect(connectionWizard).toContainText(
     "Verify Twitch broadcaster ownership through the Control API.",
   );
-  await expect(page.getByLabel("Twitch channel ID")).toBeVisible();
+  await expect(page.getByLabel("Available Twitch channels")).toBeVisible();
   await expect(
     connectionWizard.getByRole("button", { name: "Link Twitch identity" }),
   ).toBeVisible();
@@ -131,7 +131,9 @@ test("sign-in, create organization, connect Discord, audit and revoke from the b
   await expect(
     connectionWizard.getByRole("button", { name: "Link Discord identity" }),
   ).toBeVisible();
-  await page.getByLabel("Discord server ID").fill(externalResourceId);
+  const discordCandidateSelect = page.getByLabel("Available Discord servers");
+  await expect(discordCandidateSelect).toBeVisible();
+  await discordCandidateSelect.selectOption(externalResourceId);
   await page.getByRole("button", { name: "Connect Discord server" }).last().click();
 
   const connectionRow = page.locator("li").filter({ hasText: externalResourceId });
@@ -300,6 +302,24 @@ async function installConsoleApiMock(
         auditEvent("organization.member.invitation.revoked", "organization_invitation", invitationId),
       );
       return empty(route);
+    }
+    if (
+      method === "GET" &&
+      path === `/api/v1/organizations/${organizationId}/platform-connection-candidates`
+    ) {
+      const requestedPlatform = new URL(request.url()).searchParams.get("platform");
+      return json(route, {
+        platform: requestedPlatform,
+        identity_linked: true,
+        items: [
+          {
+            platform: requestedPlatform,
+            external_resource_id: externalResourceId,
+            display_name:
+              requestedPlatform === "discord" ? "Muxivo Discord Community" : "Muxivo Twitch channel",
+          },
+        ],
+      });
     }
     if (
       method === "GET" &&

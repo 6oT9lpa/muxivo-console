@@ -5,9 +5,8 @@ export type ConnectionWizardCopy = {
   title: string;
   summary: string;
   actionLabel: string;
-  resourceLabel: string;
-  resourcePlaceholder: string;
-  resourceHelp: string;
+  candidateLabel: string;
+  candidateHelp: string;
   preflightSteps: string[];
 };
 
@@ -17,10 +16,9 @@ export const connectionWizardOptions: ConnectionWizardCopy[] = [
     title: "Connect Discord server",
     summary: "Verify native server ownership before Console stores the connection.",
     actionLabel: "Connect Discord server",
-    resourceLabel: "Discord server ID",
-    resourcePlaceholder: "123456789012345678",
-    resourceHelp:
-      "Use the Discord guild/server ID for a server where your linked Discord identity can administer the bot.",
+    candidateLabel: "Available Discord servers",
+    candidateHelp:
+      "Choose a server discovered through the linked Discord identity. Console never asks you to paste a server ID.",
     preflightSteps: [
       "Confirm you are signed in to Console.",
       "Link the matching Discord identity.",
@@ -34,10 +32,9 @@ export const connectionWizardOptions: ConnectionWizardCopy[] = [
     title: "Connect Twitch channel",
     summary: "Verify broadcaster ownership before Console stores the connection.",
     actionLabel: "Connect Twitch channel",
-    resourceLabel: "Twitch channel ID",
-    resourcePlaceholder: "broadcaster-123",
-    resourceHelp:
-      "Use the Twitch broadcaster/channel ID for a channel your linked Twitch identity owns or can administer.",
+    candidateLabel: "Available Twitch channels",
+    candidateHelp:
+      "Choose a channel discovered through the linked Twitch identity. Console never asks you to paste a channel ID.",
     preflightSteps: [
       "Confirm you are signed in to Console.",
       "Link the matching Twitch identity.",

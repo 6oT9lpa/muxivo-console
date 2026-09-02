@@ -65,6 +65,47 @@ screenshots. `scripts/smtp_probe.py` checks TCP/TLS/authentication and never sen
 a message. A real recovery email is a separate delivery test and requires an
 explicit recipient.
 
+## Connection candidate Control API contract
+
+The normal Console connection wizard does not accept a manually pasted Discord
+guild ID or Twitch broadcaster ID. After Console authorization, it asks the
+selected platform Control API for a browser-safe candidate catalog:
+
+```text
+GET /control/v1/organizations/{organization_id}/connection-candidates?platform=discord
+GET /control/v1/organizations/{organization_id}/connection-candidates?platform=twitch
+Authorization: Bearer <short-lived Console service assertion>
+```
+
+The assertion is audience-bound to the platform service and contains the actor,
+organization, `console.platform_connections/manage`, correlation ID, expiration,
+and the linked platform subject. The Control API must repeat native ownership
+and bot-installation checks before returning candidates and before accepting the
+existing `/connections/verify` registration call.
+
+The response is deliberately limited to non-secret metadata:
+
+```json
+{
+  "items": [
+    {
+      "external_resource_id": "123456789012345678",
+      "display_name": "Muxivo Community"
+    }
+  ]
+}
+```
+
+No access token, refresh token, authorization code or provider secret may be
+returned by this endpoint. When the Console identity is not linked, the
+adapter returns an empty catalog with `identity_linked=false` without making an
+upstream request. When the Control API is missing or returns an invalid
+payload, Console fails closed with a generic `503` and the UI offers retry.
+
+This contract is additive and isolated from the existing Discord Activity. The
+Activity source, session model and runtime ports must not be repurposed as a
+candidate catalog without a separately reviewed Control API implementation.
+
 ## Safe rollout order
 
 ### 1. Back up the current host state

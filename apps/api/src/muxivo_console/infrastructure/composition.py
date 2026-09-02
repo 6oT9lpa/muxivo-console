@@ -38,6 +38,9 @@ from muxivo_console.application.list_organization_audit_events import (
 )
 from muxivo_console.application.list_organization_invitations import ListOrganizationInvitations
 from muxivo_console.application.list_organizations import ListOrganizations
+from muxivo_console.application.list_platform_connection_candidates import (
+    ListPlatformConnectionCandidates,
+)
 from muxivo_console.application.list_platform_connection_channels import (
     ListPlatformConnectionChannels,
 )
@@ -56,6 +59,9 @@ from muxivo_console.application.manage_platform_connection_lifecycle import (
     ManagePlatformConnectionLifecycle,
 )
 from muxivo_console.application.organization_authorizer import MembershipOrganizationAuthorizer
+from muxivo_console.application.platform_connection_candidate_catalog_router import (
+    PlatformConnectionCandidateCatalogRouter,
+)
 from muxivo_console.application.reauthenticate_browser_session import ReauthenticateBrowserSession
 from muxivo_console.application.reconcile_platform_connections import ReconcilePlatformConnections
 from muxivo_console.application.register_email_password import RegisterEmailPassword
@@ -81,6 +87,9 @@ from muxivo_console.application.update_platform_welcome_settings import (
     UpdatePlatformWelcomeSettings,
 )
 from muxivo_console.domain.activity import Platform
+from muxivo_console.infrastructure.discord_connection_candidate_catalog import (
+    DiscordPlatformConnectionCandidateCatalog,
+)
 from muxivo_console.infrastructure.discord_control_api import (
     DiscordControlApiCatalog,
     DiscordPlatformConnectionReconciliationProbe,
@@ -177,6 +186,9 @@ from muxivo_console.infrastructure.security_cleanup_worker import (
     PeriodicSecurityCleanupWorkerSettings,
 )
 from muxivo_console.infrastructure.settings import ConsoleSettings
+from muxivo_console.infrastructure.twitch_connection_candidate_catalog import (
+    TwitchPlatformConnectionCandidateCatalog,
+)
 from muxivo_console.infrastructure.twitch_control_api import (
     TwitchPlatformConnectionReconciliationProbe,
     TwitchPlatformConnectionVerifier,
@@ -407,6 +419,29 @@ def create_production_app(
             SqlAlchemyLoginIdentityReader(sessions),
             allow_insecure_http=settings.allow_insecure_twitch_control_http,
         )
+    platform_connection_candidate_catalogs = {
+        Platform.DISCORD: DiscordPlatformConnectionCandidateCatalog(
+            settings.discord_control_base_url,
+            assertions,
+            SqlAlchemyLoginIdentityReader(sessions),
+            allow_insecure_http=settings.allow_insecure_discord_control_http,
+        )
+    }
+    if settings.twitch_control is not None and twitch_control_assertions is not None:
+        platform_connection_candidate_catalogs[Platform.TWITCH] = (
+            TwitchPlatformConnectionCandidateCatalog(
+                settings.twitch_control.base_url,
+                twitch_control_assertions,
+                SqlAlchemyLoginIdentityReader(sessions),
+                allow_insecure_http=settings.allow_insecure_twitch_control_http,
+            )
+        )
+    platform_connection_candidates = ListPlatformConnectionCandidates(
+        authorizer=MembershipOrganizationAuthorizer(membership_reader),
+        candidates=PlatformConnectionCandidateCatalogRouter(
+            platform_connection_candidate_catalogs
+        ),
+    )
     platform_connections = RegisterPlatformConnection(
         authorizer=MembershipOrganizationAuthorizer(membership_reader),
         verifier=PlatformConnectionVerifierRouter(platform_connection_verifiers),
@@ -689,6 +724,7 @@ def create_production_app(
         organization_invitation_revoke_use_case=organization_invitation_revoke,
         organization_invitation_accept_use_case=organization_invitation_accept,
         platform_connection_registration_use_case=platform_connections,
+        platform_connection_candidates_use_case=platform_connection_candidates,
         platform_connection_lifecycle_use_case=platform_connection_lifecycle,
         platform_connections_use_case=listed_platform_connections,
         audit_events_use_case=audit_events,
