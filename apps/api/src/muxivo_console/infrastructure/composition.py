@@ -148,6 +148,9 @@ from muxivo_console.infrastructure.persistence.registration_writer import (
 from muxivo_console.infrastructure.persistence.security_cleanup_repository import (
     SqlAlchemySecurityRecordCleaner,
 )
+from muxivo_console.infrastructure.persistence.session_last_seen_repository import (
+    SqlAlchemyAuthSessionLastSeenUpdater,
+)
 from muxivo_console.infrastructure.persistence.session_repository import (
     SqlAlchemyAuthSessionListingReader,
     SqlAlchemyAuthSessionReader,
@@ -762,6 +765,7 @@ def create_production_app(
             token_hasher=session_hasher,
             sessions=SqlAlchemyAuthSessionReader(sessions),
             user_statuses=user_statuses,
+            last_seen_updater=SqlAlchemyAuthSessionLastSeenUpdater(sessions),
         ),
         session_revoker=RevokeBrowserSession(
             identifiers=identifiers,

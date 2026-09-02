@@ -1,5 +1,6 @@
 from collections.abc import Sequence
 from dataclasses import dataclass
+from datetime import datetime
 from typing import Protocol
 from uuid import UUID
 
@@ -739,6 +740,14 @@ class AuthSessionReader(Protocol):
     """Looks up a stored Console session by a keyed hash, never raw bearer data."""
 
     async def find_by_token_hash(self, *, token_hash: str) -> AuthSession | None: ...
+
+
+class AuthSessionLastSeenUpdater(Protocol):
+    """Refreshes session activity without accepting raw browser credentials."""
+
+    async def touch_last_seen(
+        self, *, session_id: UUID, user_id: UUID, last_seen_at: datetime
+    ) -> bool: ...
 
 
 class AuthSessionRevoker(Protocol):
