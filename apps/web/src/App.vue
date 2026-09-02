@@ -26,12 +26,19 @@ import {
   chooseActiveOrganizationId,
   persistActiveOrganizationId,
 } from "./utils/organizations";
-import { supportedMemberScopesForRole } from "./utils/memberScopes";
+import {
+  canEditOrganizationMember as canEditOrganizationMemberForActor,
+  canManageOrganizationMembers as canManageOrganizationMembersForRole,
+  memberHasScope,
+  memberRoleOptionsForActor,
+  membershipAllows,
+  scopesEqual,
+  supportedScopesForRole,
+} from "./features/console/access";
 import {
   nextConsoleTheme,
   persistConsoleTheme,
   readConsoleTheme,
-  type ConsoleTheme,
 } from "./utils/theme";
 import {
   formatSecurityTimestamp,
@@ -42,10 +49,43 @@ import {
 } from "./utils/connectionWizard";
 import GetToKnowUs from "./views/GetToKnowUs.vue";
 import MuxivoLanding from "./views/MuxivoLanding.vue";
+import type {
+  AiModerationAction,
+  AiModerationLabelRule,
+  AiModerationPolicy,
+  AuditEvent,
+  AuditEventPage,
+  BrowserSession,
+  ConsoleSection,
+  ControlModule,
+  LoginIdentity,
+  MembershipScopeInput,
+  Organization,
+  OrganizationInvitation,
+  OrganizationListItem,
+  OrganizationMembership,
+  OrganizationRole,
+  PlatformAiModerationPolicyState,
+  PlatformAiModerationSummary,
+  PlatformAuditTimeline,
+  PlatformBotSettings,
+  PlatformChannel,
+  PlatformChannelCatalog,
+  PlatformChannelPurposes,
+  PlatformConnection,
+  PlatformConnectionGrantedScope,
+  PlatformConnectionCandidate,
+  PlatformConnectionCandidateCatalog,
+  PlatformDashboardSummary,
+  PlatformHealth,
+  PlatformHealthSignal,
+  PlatformIntegrations,
+  PlatformServerStatistics,
+  PlatformWelcomeSettings,
+  Theme,
+} from "./features/console/types";
 
 const { t } = useI18n();
-type Theme = ConsoleTheme;
-type ConsoleSection = "overview" | "connections" | "members" | "security" | "discord" | "audit";
 
 const initialTheme: Theme = readConsoleTheme(
   typeof window !== "undefined" ? window.localStorage : null,
@@ -231,207 +271,6 @@ function navLetters(label: string): string[] {
   return Array.from(label);
 }
 
-type Organization = { id: string; name: string; slug: string };
-type BrowserSession = {
-  id: string;
-  is_current: boolean;
-  assurance_level: "password" | "recent_authentication";
-  authenticated_at: string | null;
-  last_seen_at: string | null;
-  expires_at: string;
-  device_label: string;
-  ip_fingerprint: string | null;
-  user_agent_fingerprint: string | null;
-};
-type LoginIdentity = {
-  id: string;
-  provider: "email" | "discord" | "twitch" | "google" | "yandex";
-  linked_at: string;
-  last_used_at: string | null;
-  can_unlink: boolean;
-};
-type OrganizationRole = "owner" | "admin" | "moderator" | "analyst" | "viewer";
-type AuthorizationResource =
-  | "console.control_modules"
-  | "console.platform_connections"
-  | "console.audit_events"
-  | "console.organization_members";
-type AuthorizationAction = "read" | "manage";
-type MembershipScopeInput = { resource: AuthorizationResource; action: AuthorizationAction };
-type OrganizationMembership = {
-  id: string | null;
-  organization_id: string;
-  user_id: string;
-  display_name: string | null;
-  role: OrganizationRole;
-  resource_scopes: { id: string | null; resource: AuthorizationResource; action: AuthorizationAction }[];
-};
-type OrganizationListItem = {
-  organization: Organization;
-  membership: OrganizationMembership;
-};
-type OrganizationInvitation = {
-  id: string;
-  organization_id: string;
-  email_hint: string;
-  role: OrganizationRole;
-  resource_scopes: {
-    id: string | null;
-    resource: AuthorizationResource;
-    action: AuthorizationAction;
-  }[];
-  status: "pending" | "accepted" | "revoked" | "expired";
-  expires_at: string;
-  created_at: string;
-  accepted_at: string | null;
-  revoked_at: string | null;
-  delivery_status: "sent" | "unavailable" | "failed" | null;
-};
-type PlatformConnectionGrantedScope = {
-  key: string;
-  display_name: string;
-  description: string;
-  status: "pending" | "granted" | "requires_reauthorization" | "revoked";
-};
-type PlatformConnection = {
-  id: string;
-  organization_id: string;
-  platform: "discord" | "twitch" | "telegram";
-  external_resource_id: string;
-  status: "pending" | "active" | "degraded" | "reauth_required" | "disconnected";
-  granted_scopes: PlatformConnectionGrantedScope[];
-};
-type PlatformConnectionCandidate = {
-  platform: "discord" | "twitch";
-  external_resource_id: string;
-  display_name: string;
-};
-type PlatformConnectionCandidateCatalog = {
-  platform: "discord" | "twitch";
-  identity_linked: boolean;
-  items: PlatformConnectionCandidate[];
-};
-type PlatformHealthSignal = {
-  key: string;
-  display_name: string;
-  value: string;
-  status: "operational" | "degraded";
-  latency_ms: number | null;
-};
-type PlatformHealth = {
-  organization_id: string;
-  platform: "discord" | "twitch" | "telegram";
-  signals: PlatformHealthSignal[];
-};
-type ControlModule = {
-  key: string;
-  display_name: string;
-  platform: "discord" | "twitch" | "telegram";
-  capability: "view" | "manage";
-  status: "available" | "unavailable" | "requires_reauthorization";
-};
-type PlatformDashboardSummary = {
-  organization_id: string;
-  connection_id: string;
-  platform: "discord" | "twitch" | "telegram";
-  messages_today: number;
-  ai_flagged_today: number;
-  creator_sources: number;
-  bot_latency_ms: number | null;
-};
-type PlatformChannel = {
-  id: string;
-  name: string;
-  kind: "text" | "voice" | "announcement";
-};
-type PlatformChannelCatalog = {
-  organization_id: string;
-  connection_id: string;
-  platform: "discord" | "twitch" | "telegram";
-  items: PlatformChannel[];
-};
-type PlatformBotSettings = {
-  organization_id: string;
-  connection_id: string;
-  platform: "discord" | "twitch" | "telegram";
-  subscription_tier: string;
-  activity_rotation_enabled: boolean;
-  activity_rotation_interval_seconds: number;
-  retention_days: Record<string, number>;
-};
-type PlatformIntegrations = {
-  discord_bot_status: string;
-  creator_platforms_status: string;
-  creator_poll_interval_seconds: number;
-  creator_sources: { platform: string; total: number; active: number }[];
-  muxivo_core_status: string;
-  database_status: string;
-};
-type PlatformServerStatistics = {
-  organization_id: string;
-  connection_id: string;
-  platform: "discord" | "twitch" | "telegram";
-  period_days: number;
-  total_messages: number;
-  active_users: number;
-  active_channels: number;
-  current_member_count: number;
-  total_voice_minutes: number;
-  joins: number;
-  leaves: number;
-  net_member_growth: number;
-  moderation_events: number;
-};
-type PlatformAuditTimeline = {
-  organization_id: string;
-  connection_id: string;
-  platform: "discord" | "twitch" | "telegram";
-  items: { event_type: string; occurred_at: string }[];
-  limit: number;
-};
-type PlatformWelcomeSettings = {
-  organization_id: string;
-  connection_id: string;
-  platform: "discord";
-  title: string;
-  description: string;
-  thumbnail_url: string | null;
-  footer_text: string | null;
-  footer_icon_url: string | null;
-  color: number;
-  is_enabled: boolean;
-  rules_channel_id: string | null;
-  roles_channel_id: string | null;
-};
-type PlatformChannelPurposes = { items: { purpose: string; channel_id: string }[] };
-type PlatformAiModerationSummary = {
-  enforcement_mode: string; test_mode: boolean; is_default_policy: boolean;
-  covered_channel_count: number; log_channel_configured: boolean; label_count: number;
-  blacklist_word_count: number; allowed_domain_count: number;
-  automated_timeout_enabled: boolean; automated_kick_enabled: boolean; automated_ban_enabled: boolean;
-};
-type AiModerationAction = "IGNORE" | "LOG" | "REVIEW" | "WARN" | "DELETE" | "DELETE_WARN" | "TIMEOUT" | "KICK" | "BAN";
-type AiModerationLabelRule = { risk_threshold: number; min_action: AiModerationAction; max_action: AiModerationAction };
-type AiModerationPolicy = {
-  blacklist_words: string[]; allowed_domains: string[]; labels: Record<string, AiModerationLabelRule>;
-  blacklist_action: AiModerationAction; unapproved_domain_action: AiModerationAction;
-  context_window_days: number; repeat_offender_threshold: number; repeat_offender_action: AiModerationAction;
-  escalation_enabled: boolean; escalation_score_threshold: number; escalation_half_life_days: number;
-  excluded_user_ids: string[]; excluded_role_ids: string[]; excluded_channel_ids: string[]; exclude_bots: boolean;
-  ocr_enabled: boolean; ocr_failure_mode: "SKIP" | "REVIEW"; ocr_max_gif_frames: number; ocr_process_empty_result: boolean;
-  test_mode: boolean; enforcement_mode: "SHADOW" | "LIMITED" | "ELEVATED"; limited_min_confidence: number;
-  limited_hard_rule_labels: string[]; beta_enforcement_acknowledged: boolean;
-  allow_automated_timeout: boolean; allow_automated_kick: boolean; allow_automated_ban: boolean;
-};
-type PlatformAiModerationPolicyState = {
-  organization_id: string; connection_id: string; policy: AiModerationPolicy; is_default_policy: boolean;
-};
-type AuditEvent = {
-  id: string; correlation_id: string; actor_id: string | null; action: string;
-  resource_type: string; resource_id: string | null; result: string; created_at: string;
-};
-type AuditEventPage = { items: AuditEvent[]; next_cursor: string | null };
-
 const usableConnections = computed(() =>
   connections.value.filter(
     (connection) =>
@@ -465,24 +304,22 @@ const activeOrganization = computed(
     ) ?? null,
 );
 const activeOrganizationId = computed(() => activeOrganization.value?.organization.id ?? "");
-function activeMembershipAllows(resource: AuthorizationResource, action: AuthorizationAction) {
-  const membership = activeOrganization.value?.membership;
-  if (!membership) return false;
-  if (membership.role === "owner") return true;
-  return membership.resource_scopes.some(
-    (scope) => scope.resource === resource && scope.action === action,
-  );
-}
 const canManageOrganizationMembers = computed(
-  () =>
-    activeOrganization.value?.membership.role === "owner" ||
-    activeOrganization.value?.membership.role === "admin",
+  () => canManageOrganizationMembersForRole(activeOrganization.value?.membership.role),
 );
 const canReadPlatformConnections = computed(() =>
-  activeMembershipAllows("console.platform_connections", "read"),
+  membershipAllows(
+    activeOrganization.value?.membership,
+    "console.platform_connections",
+    "read",
+  ),
 );
 const canManagePlatformConnections = computed(() =>
-  activeMembershipAllows("console.platform_connections", "manage"),
+  membershipAllows(
+    activeOrganization.value?.membership,
+    "console.platform_connections",
+    "manage",
+  ),
 );
 const selectableConnectionCandidates = computed(() =>
   connectionCandidates.value.filter(
@@ -506,11 +343,8 @@ const currentBrowserSession = computed(
 const canRevokeAllBrowserSessions = computed(
   () => currentBrowserSession.value?.assurance_level === "recent_authentication",
 );
-const memberRoleOptions: OrganizationRole[] = ["admin", "moderator", "analyst", "viewer"];
 const availableMemberRoleOptions = computed<OrganizationRole[]>(() =>
-  activeOrganization.value?.membership.role === "owner"
-    ? memberRoleOptions
-    : ["moderator", "analyst", "viewer"],
+  memberRoleOptionsForActor(activeOrganization.value?.membership.role),
 );
 const memberScopeOptions: MembershipScopeInput[] = [
   { resource: "console.control_modules", action: "read" },
@@ -520,7 +354,7 @@ const memberScopeOptions: MembershipScopeInput[] = [
   { resource: "console.organization_members", action: "manage" },
 ];
 const availableNewMemberScopeOptions = computed(() =>
-  supportedMemberScopesForRole(newMemberRole.value, memberScopeOptions),
+  supportedScopesForRole(newMemberRole.value, memberScopeOptions),
 );
 
 async function signIn() {
@@ -1181,49 +1015,42 @@ async function removeOrganizationMember(member: OrganizationMembership) {
 }
 
 function isNewMemberScopeSelected(scope: MembershipScopeInput): boolean {
-  return newMemberScopes.value.some((item) => sameScope(item, scope));
+  return newMemberScopes.value.some((item) => scopesEqual(item, scope));
 }
 
 function toggleNewMemberScope(scope: MembershipScopeInput) {
   newMemberScopes.value = isNewMemberScopeSelected(scope)
-    ? newMemberScopes.value.filter((item) => !sameScope(item, scope))
+    ? newMemberScopes.value.filter((item) => !scopesEqual(item, scope))
     : [...newMemberScopes.value, scope];
 }
 
 function normalizeNewMemberScopes() {
-  newMemberScopes.value = supportedMemberScopesForRole(
+  newMemberScopes.value = supportedScopesForRole(
     newMemberRole.value,
     newMemberScopes.value,
   );
 }
 
-function memberHasScope(member: OrganizationMembership, scope: MembershipScopeInput): boolean {
-  return member.resource_scopes.some((item) => sameScope(item, scope));
-}
-
 function memberScopeOptionsForRole(role: OrganizationRole): MembershipScopeInput[] {
-  return supportedMemberScopesForRole(role, memberScopeOptions);
+  return supportedScopesForRole(role, memberScopeOptions);
 }
 
 function normalizeMemberScopes(member: OrganizationMembership) {
-  member.resource_scopes = supportedMemberScopesForRole(member.role, member.resource_scopes);
+  member.resource_scopes = supportedScopesForRole(member.role, member.resource_scopes);
 }
 
 function canEditOrganizationMember(member: OrganizationMembership): boolean {
-  if (member.role === "owner") return false;
-  if (activeOrganization.value?.membership.role === "owner") return true;
-  return ["moderator", "analyst", "viewer"].includes(member.role);
+  return canEditOrganizationMemberForActor(
+    activeOrganization.value?.membership.role,
+    member.role,
+  );
 }
 
 async function toggleMemberScope(member: OrganizationMembership, scope: MembershipScopeInput) {
   member.resource_scopes = memberHasScope(member, scope)
-    ? member.resource_scopes.filter((item) => !sameScope(item, scope))
+    ? member.resource_scopes.filter((item) => !scopesEqual(item, scope))
     : [...member.resource_scopes, { id: null, ...scope }];
   await saveOrganizationMember(member);
-}
-
-function sameScope(left: MembershipScopeInput, right: MembershipScopeInput): boolean {
-  return left.resource === right.resource && left.action === right.action;
 }
 
 function scopeLabel(scope: MembershipScopeInput): string {
