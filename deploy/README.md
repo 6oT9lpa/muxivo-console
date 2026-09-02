@@ -24,6 +24,8 @@ credential path used by `muxivo-console-api.service`.
 - `nginx-console.conf.example` is the final HTTPS virtual host.
 - `nginx-console-beget.conf.example` is the temporary HTTPS staging host for
   `beget.ame-life.com`; it must not replace the existing Activity host.
+- `console.env.beget.example` contains the staging URL and callback paths for
+  `beget.ame-life.com`, with placeholders for all secret-manager values.
 - `console.env.example` documents the required production variable names without
   containing usable secrets.
 - `prometheus-console.yml.example` is a same-host scrape fragment for the

@@ -41,6 +41,7 @@ def test_deployment_proxies_readiness_without_exposing_metrics() -> None:
     bootstrap = Path("deploy/nginx-console-bootstrap.conf.example").read_text()
     final = Path("deploy/nginx-console.conf.example").read_text()
     staging = Path("deploy/nginx-console-beget.conf.example").read_text()
+    staging_environment = Path("deploy/console.env.beget.example").read_text()
 
     assert "location = /readyz" in bootstrap
     assert "location = /readyz" in final
@@ -49,6 +50,17 @@ def test_deployment_proxies_readiness_without_exposing_metrics() -> None:
     assert "return 301 https://$host$request_uri" in staging
     assert "ssl_protocols TLSv1.2 TLSv1.3" not in staging
     assert "ssl_protocols TLSv1.2 TLSv1.3" not in final
+    assert "MUXIVO_CONSOLE_PUBLIC_BASE_URL=https://beget.ame-life.com" in staging_environment
+    assert "MUXIVO_CONSOLE_CORS_ALLOWED_ORIGINS=https://beget.ame-life.com" in staging_environment
+    assert (
+        "MUXIVO_DISCORD_OAUTH_REDIRECT_URI=https://beget.ame-life.com/"
+        "api/v1/auth/discord/callback" in staging_environment
+    )
+    assert (
+        "MUXIVO_TWITCH_OAUTH_REDIRECT_URI=https://beget.ame-life.com/"
+        "api/v1/auth/twitch/callback" in staging_environment
+    )
+    assert "<smtp.bz-password>" in staging_environment
     assert "proxy_pass http://127.0.0.1:18081/readyz" in final
     assert "proxy_pass http://127.0.0.1:18081/readyz" in staging
     assert "location = /metrics" in final
