@@ -27,7 +27,7 @@ completed.
 
 | Area | Gate | Status |
 | --- | --- | --- |
-| Identity | Password recovery SMTP delivery adapter configured outside logs | Implemented; credentials pending |
+| Identity | Password recovery SMTP delivery adapter configured outside logs | SMTP.BZ domain verified and STARTTLS/AUTH probe passed; secret-manager wiring and delivery test pending |
 | Security | Shared rate limits enabled for login, registration, reauthentication, OAuth callback and recovery | Implemented; Redis URL pending |
 | Security | CORS allowlist configured for staging/prod origins | Enforced in settings; values pending |
 | Security | CSP, HSTS and browser hardening headers enabled | Implemented |
@@ -101,7 +101,7 @@ Before staging, fill in actual subprocessors:
 
 - Hosting provider: TBD.
 - Database provider: TBD.
-- Email delivery provider for verification/recovery: SMTP adapter implemented; provider/credentials TBD.
+- Email delivery provider for verification/recovery: SMTP.BZ domain verification and non-delivery authentication probe passed; production secret-manager wiring and approved delivery test pending.
 - Error/metrics/logging provider: TBD.
 - KMS/secret manager provider: TBD.
 
@@ -344,7 +344,7 @@ Minimum documented drill before production:
   Control API and validate it against the contract in the Console deployment
   runbook.
 - Configure Twitch Control API service URL and signing key in staging/prod.
-- Provision real SMTP credentials for staging and production.
+- Store the verified SMTP.BZ credential in the staging/prod secret manager and run one explicitly approved recovery delivery test.
 - Load `docs/operations/prometheus-alerts.yml` into the selected metrics backend.
 - Expand Discord/Twitch contract tests against live sandbox Control API fixtures
   once those services expose staging endpoints.
