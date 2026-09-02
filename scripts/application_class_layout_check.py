@@ -8,6 +8,7 @@ from pathlib import Path
 
 APPLICATION_RELATIVE_PATH = Path("apps/api/src/muxivo_console/application")
 SETTINGS_RELATIVE_PATH = Path("apps/api/src/muxivo_console/infrastructure/settings.py")
+SECURITY_RELATIVE_PATH = Path("apps/api/src/muxivo_console/infrastructure/security.py")
 INTENTIONAL_REGISTRY_FILES = frozenset({"ports.py"})
 
 
@@ -46,15 +47,31 @@ def check_settings_class_layout(root: Path = Path(".")) -> tuple[ClassLayoutIssu
     return (ClassLayoutIssue(path=settings_path, classes=classes),)
 
 
+def check_security_class_layout(root: Path = Path(".")) -> tuple[ClassLayoutIssue, ...]:
+    """Return the security adapter facade if it defines multiple classes."""
+    security_path = root / SECURITY_RELATIVE_PATH
+    if not security_path.exists():
+        return ()
+    tree = ast.parse(security_path.read_text(encoding="utf-8"), filename=str(security_path))
+    classes = tuple(node.name for node in tree.body if isinstance(node, ast.ClassDef))
+    if len(classes) <= 1:
+        return ()
+    return (ClassLayoutIssue(path=security_path, classes=classes),)
+
+
 def main() -> int:
     """Run the check and print actionable violations for local and CI users."""
 
-    issues = check_application_class_layout() + check_settings_class_layout()
+    issues = (
+        check_application_class_layout()
+        + check_settings_class_layout()
+        + check_security_class_layout()
+    )
     if issues:
         for issue in issues:
             print(f"{issue.path}: {', '.join(issue.classes)}")
         return 1
-    print("Application and settings class layout check passed.")
+    print("Application, settings and security class layout check passed.")
     return 0
 
 

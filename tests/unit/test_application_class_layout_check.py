@@ -4,6 +4,7 @@ from pathlib import Path
 
 from scripts.application_class_layout_check import (
     check_application_class_layout,
+    check_security_class_layout,
     check_settings_class_layout,
 )
 
@@ -61,4 +62,27 @@ def test_settings_class_layout_check_reports_multiple_configuration_classes(
 
     assert len(issues) == 1
     assert issues[0].path == settings_path
+    assert issues[0].classes == ("First", "Second")
+
+
+def test_security_class_layout_check_allows_the_security_facade() -> None:
+    assert check_security_class_layout() == ()
+
+
+def test_security_class_layout_check_reports_multiple_security_classes(
+    tmp_path: Path,
+) -> None:
+    security_path = (
+        tmp_path / "apps" / "api" / "src" / "muxivo_console" / "infrastructure" / "security.py"
+    )
+    security_path.parent.mkdir(parents=True)
+    security_path.write_text(
+        "class First:\n    pass\nclass Second:\n    pass\n",
+        encoding="utf-8",
+    )
+
+    issues = check_security_class_layout(tmp_path)
+
+    assert len(issues) == 1
+    assert issues[0].path == security_path
     assert issues[0].classes == ("First", "Second")
