@@ -182,6 +182,26 @@ test("landing page and sign-in dialog fit a narrow viewport", async ({ page }) =
   ).toBe(false);
 });
 
+test("language switcher updates the public document and persists the locale", async ({ page }) => {
+  await page.goto("/");
+
+  const languageTrigger = page.getByTestId("language-menu-trigger").first();
+  await languageTrigger.click();
+  await expect(page.getByTestId("language-menu")).toBeVisible();
+  await page.locator("[role='menuitemradio'][lang='ru']").click();
+
+  await expect(page.locator("html")).toHaveAttribute("lang", "ru");
+  await expect(page.getByRole("button", { name: "Открыть панель" })).toBeVisible();
+  await expect
+    .poll(() => page.evaluate(() => localStorage.getItem("muxivo-discord.activity.locale")))
+    .toBe("ru");
+
+  await languageTrigger.click();
+  await page.locator("[role='menuitemradio'][lang='en']").click();
+  await expect(page.locator("html")).toHaveAttribute("lang", "en");
+  await expect(page.getByRole("button", { name: "See Panel" })).toBeVisible();
+});
+
 async function installConsoleApiMock(
   page: Page,
   state: {
