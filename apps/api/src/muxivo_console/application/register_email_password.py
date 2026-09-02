@@ -1,4 +1,4 @@
-"""Use case for a pending first-party Muxivo email/password account."""
+"""Use case for a first-party Muxivo email/password account."""
 
 from dataclasses import dataclass
 from uuid import UUID
@@ -51,7 +51,7 @@ class RegisterEmailPassword:
         registration = EmailPasswordRegistration(
             user=User(
                 id=user_id,
-                status=UserStatus.PENDING_VERIFICATION,
+                status=UserStatus.ACTIVE,
                 display_name=command.display_name,
             ),
             identity=LoginIdentity(

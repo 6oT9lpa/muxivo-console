@@ -14,8 +14,26 @@ def environment() -> dict[str, str]:
         "MUXIVO_CONSOLE_EMAIL_LOOKUP_KEY": key,
         "MUXIVO_CONSOLE_EMAIL_ENCRYPTION_KEY": Fernet.generate_key().decode(),
         "MUXIVO_CONSOLE_SESSION_TOKEN_PEPPER": key,
+        "MUXIVO_CONSOLE_PUBLIC_BASE_URL": "https://console.muxivo.test",
+        "MUXIVO_CONSOLE_CORS_ALLOWED_ORIGINS": "https://console.muxivo.test",
+        "MUXIVO_CONSOLE_SECRET_SOURCE": "hashicorp-vault",
         "MUXIVO_DISCORD_CONTROL_BASE_URL": "https://discord-control.internal",
         "MUXIVO_DISCORD_CONTROL_SIGNING_KEY": key,
+        "MUXIVO_DISCORD_OAUTH_CLIENT_ID": "discord-client-id",
+        "MUXIVO_DISCORD_OAUTH_CLIENT_SECRET": "discord-client-secret",
+        "MUXIVO_DISCORD_OAUTH_REDIRECT_URI": (
+            "https://console.muxivo.test/api/v1/auth/discord/callback"
+        ),
+        "MUXIVO_TWITCH_OAUTH_CLIENT_ID": "twitch-client-id",
+        "MUXIVO_TWITCH_OAUTH_CLIENT_SECRET": "twitch-client-secret",
+        "MUXIVO_TWITCH_OAUTH_REDIRECT_URI": (
+            "https://console.muxivo.test/api/v1/auth/twitch/callback"
+        ),
+        "MUXIVO_CONSOLE_RATE_LIMIT_REDIS_URL": "redis://rate-limit.internal:6379/0",
+        "MUXIVO_CONSOLE_PASSWORD_RECOVERY_SMTP_HOST": "smtp.internal",
+        "MUXIVO_CONSOLE_PASSWORD_RECOVERY_SMTP_PORT": "587",
+        "MUXIVO_CONSOLE_PASSWORD_RECOVERY_FROM_EMAIL": "security@muxivo.test",
+        "MUXIVO_CONSOLE_PASSWORD_RECOVERY_RESET_URL_BASE": "https://console.muxivo.test/recover",
     }
 
 

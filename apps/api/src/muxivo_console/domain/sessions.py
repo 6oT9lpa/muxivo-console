@@ -20,6 +20,9 @@ class AuthSession:
     assurance_level: SessionAssuranceLevel
     revoked_at: datetime | None = None
     authenticated_at: datetime | None = None
+    last_seen_at: datetime | None = None
+    ip_hash: str | None = None
+    user_agent_hash: str | None = None
 
     def __post_init__(self) -> None:
         if len(self.token_hash) != 64:
@@ -30,6 +33,12 @@ class AuthSession:
             raise ValueError("Session revocation time must be timezone-aware.")
         if self.authenticated_at is not None and self.authenticated_at.tzinfo is None:
             raise ValueError("Session authentication time must be timezone-aware.")
+        if self.last_seen_at is not None and self.last_seen_at.tzinfo is None:
+            raise ValueError("Session last-seen time must be timezone-aware.")
+        if self.ip_hash is not None and len(self.ip_hash) != 64:
+            raise ValueError("Session IP hash must be a SHA-256-sized hex digest.")
+        if self.user_agent_hash is not None and len(self.user_agent_hash) != 64:
+            raise ValueError("Session user-agent hash must be a SHA-256-sized hex digest.")
 
     def is_active_at(self, instant: datetime) -> bool:
         if instant.tzinfo is None:

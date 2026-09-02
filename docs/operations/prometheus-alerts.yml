@@ -1,0 +1,79 @@
+groups:
+  - name: muxivo-console-api
+    rules:
+      - alert: MuxivoConsoleHigh5xxRate
+        expr: |
+          (
+            sum(rate(muxivo_console_http_requests_total{status_code=~"5.."}[5m]))
+            /
+            clamp_min(sum(rate(muxivo_console_http_requests_total[5m])), 1)
+          ) > 0.02
+        for: 10m
+        labels:
+          severity: page
+          service: muxivo-console
+        annotations:
+          summary: Muxivo Console has an elevated 5xx response rate.
+          description: More than 2% of Console API responses are 5xx for 10 minutes.
+
+      - alert: MuxivoConsoleHighAuthFailureRate
+        expr: |
+          sum(
+            rate(
+              muxivo_console_http_requests_total{
+                route=~"/api/v1/auth/(email-password/(registrations|sessions)|password-recovery/(requests|completions)|discord/.*)",
+                status_code=~"401|403|429"
+              }[5m]
+            )
+          ) > 0.5
+        for: 10m
+        labels:
+          severity: page
+          service: muxivo-console
+        annotations:
+          summary: Muxivo Console authentication failures or denials spiked.
+          description: Auth-sensitive routes are returning many 401/403/429 responses.
+
+      - alert: MuxivoConsoleHighP95Latency
+        expr: |
+          histogram_quantile(
+            0.95,
+            sum by (le) (
+              rate(muxivo_console_http_request_duration_seconds_bucket[5m])
+            )
+          ) > 1
+        for: 15m
+        labels:
+          severity: ticket
+          service: muxivo-console
+        annotations:
+          summary: Muxivo Console p95 request latency is high.
+          description: p95 API latency is above 1 second for 15 minutes.
+
+      - alert: MuxivoConsoleConnectionLifecycleFailures
+        expr: |
+          sum(
+            rate(
+              muxivo_console_http_requests_total{
+                route=~"/api/v1/organizations/.*/platform-connections/.*/(reauthorizations|revocations)",
+                status_code=~"403|5.."
+              }[5m]
+            )
+          ) > 0.1
+        for: 10m
+        labels:
+          severity: ticket
+          service: muxivo-console
+        annotations:
+          summary: Muxivo Console connection lifecycle actions are failing.
+          description: Reauthorize/revoke routes are returning repeated failures.
+
+      - alert: MuxivoConsoleMetricsScrapeMissing
+        expr: up{job="muxivo-console"} == 0
+        for: 5m
+        labels:
+          severity: page
+          service: muxivo-console
+        annotations:
+          summary: Muxivo Console metrics are not being scraped.
+          description: Prometheus cannot scrape the muxivo-console job for 5 minutes.

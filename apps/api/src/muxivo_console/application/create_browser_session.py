@@ -62,6 +62,7 @@ class CreateBrowserSession:
             expires_at=now + self.lifetime,
             assurance_level=command.assurance_level,
             authenticated_at=now,
+            last_seen_at=now,
         )
         created = await self.sessions.create(
             session=session,

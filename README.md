@@ -22,6 +22,7 @@ service and Muxivo Core.
 - [Service boundaries](docs/architecture/service-boundaries.md)
 - [Implementation roadmap](docs/architecture/implementation-roadmap.md)
 - [Discord Activity extraction: first migration slice](docs/architecture/discord-activity-extraction.md)
+- [Production readiness checklist](docs/operations/production-readiness.md)
 
 ## First implementation slice
 

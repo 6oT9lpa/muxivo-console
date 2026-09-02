@@ -52,7 +52,7 @@ class UpdatePlatformWelcomeSettings:
             connection is None
             or connection.platform is not Platform.DISCORD
             or settings.platform is not connection.platform
-            or connection.status not in {ConnectionStatus.ACTIVE, ConnectionStatus.DEGRADED}
+            or connection.status is not ConnectionStatus.ACTIVE
         ):
             raise PlatformHealthUnavailableError("No usable platform connection exists.")
         return await self.welcome_settings.update_welcome_settings_for_connection(

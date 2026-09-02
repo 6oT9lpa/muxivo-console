@@ -90,7 +90,6 @@ try {
 
     $demoPayload = @{ email = "demo@example.com"; password = "muxivo-demo-password"; display_name = "Muxivo demo" } | ConvertTo-Json
     Invoke-WebRequest -UseBasicParsing "http://127.0.0.1:8000/api/v1/auth/email-password/registrations" -Method Post -ContentType "application/json" -Body $demoPayload | Out-Null
-    docker compose -f docker-compose.dev.yml exec -T postgres psql -U muxivo -d muxivo_console -c "UPDATE users SET status = 'active' WHERE status = 'pending_verification';" | Out-Null
 
     if (-not (Test-ProcessRunning $webPidFile)) {
         $web = Start-Process -FilePath "npm.cmd" -ArgumentList @("run", "dev", "--", "--host", "127.0.0.1") -WorkingDirectory $webDirectory -WindowStyle Hidden -RedirectStandardOutput $webLog -RedirectStandardError $webErrorLog -PassThru

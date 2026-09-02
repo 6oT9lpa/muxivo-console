@@ -80,6 +80,22 @@ class IdentityLinkTransactionRecord(Base):
     user_id: Mapped[UUID] = mapped_column(
         PostgreSQLUUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False
     )
+    provider: Mapped[str] = mapped_column(String(32), nullable=False)
+    state_hash: Mapped[str] = mapped_column(String(64), nullable=False, unique=True)
+    code_verifier_ciphertext: Mapped[bytes] = mapped_column(LargeBinary, nullable=False)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    consumed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+
+    __table_args__ = (
+        CheckConstraint(
+            "provider IN ('discord', 'twitch', 'google', 'yandex')",
+            name="ck_identity_link_transactions_provider",
+        ),
+        Index("ix_identity_link_transactions_state_expires", "state_hash", "expires_at"),
+    )
 
 
 class OAuthLoginTransactionRecord(Base):
@@ -102,9 +118,16 @@ class OAuthLoginTransactionRecord(Base):
         ),
         Index("ix_oauth_login_transactions_state_expires", "state_hash", "expires_at"),
     )
-    provider: Mapped[str] = mapped_column(String(32), nullable=False)
-    state_hash: Mapped[str] = mapped_column(String(64), nullable=False, unique=True)
-    code_verifier_ciphertext: Mapped[bytes] = mapped_column(LargeBinary, nullable=False)
+
+
+class PasswordRecoveryTransactionRecord(Base):
+    __tablename__ = "password_recovery_transactions"
+
+    id: Mapped[UUID] = mapped_column(PostgreSQLUUID(as_uuid=True), primary_key=True)
+    user_id: Mapped[UUID] = mapped_column(
+        PostgreSQLUUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False
+    )
+    token_hash: Mapped[str] = mapped_column(String(64), nullable=False, unique=True)
     expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     consumed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     created_at: Mapped[datetime] = mapped_column(
@@ -112,11 +135,8 @@ class OAuthLoginTransactionRecord(Base):
     )
 
     __table_args__ = (
-        CheckConstraint(
-            "provider IN ('discord', 'twitch', 'google', 'yandex')",
-            name="ck_identity_link_transactions_provider",
-        ),
-        Index("ix_identity_link_transactions_state_expires", "state_hash", "expires_at"),
+        Index("ix_password_recovery_transactions_token_expires", "token_hash", "expires_at"),
+        Index("ix_password_recovery_transactions_user_id", "user_id"),
     )
 
 
@@ -263,6 +283,42 @@ class PlatformConnectionRecord(Base):
             name="ck_platform_connections_status",
         ),
         Index("ix_platform_connections_organization_id", "organization_id"),
+    )
+
+
+class PlatformConnectionLifecycleIdempotencyRecord(Base):
+    __tablename__ = "platform_connection_lifecycle_idempotency"
+
+    organization_id: Mapped[UUID] = mapped_column(
+        PostgreSQLUUID(as_uuid=True),
+        ForeignKey("organizations.id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    idempotency_key: Mapped[str] = mapped_column(String(128), primary_key=True)
+    connection_id: Mapped[UUID] = mapped_column(
+        PostgreSQLUUID(as_uuid=True),
+        ForeignKey("platform_connections.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    action: Mapped[str] = mapped_column(String(32), nullable=False)
+    result_status: Mapped[str] = mapped_column(String(32), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+
+    __table_args__ = (
+        CheckConstraint(
+            "action IN ('reauthorize', 'revoke', 'disconnect')",
+            name="ck_platform_connection_lifecycle_idempotency_action",
+        ),
+        CheckConstraint(
+            "result_status IN ('pending', 'active', 'degraded', 'reauth_required', 'disconnected')",
+            name="ck_platform_connection_lifecycle_idempotency_result_status",
+        ),
+        Index(
+            "ix_platform_connection_lifecycle_idempotency_connection_id",
+            "connection_id",
+        ),
     )
 
 

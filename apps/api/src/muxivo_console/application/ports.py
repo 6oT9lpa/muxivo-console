@@ -1,4 +1,5 @@
 from collections.abc import Sequence
+from dataclasses import dataclass
 from typing import Protocol
 from uuid import UUID
 
@@ -14,20 +15,32 @@ from muxivo_console.domain.authorization import AuthorizationDecision, Authoriza
 from muxivo_console.domain.bot_settings import PlatformBotSettings
 from muxivo_console.domain.channel_purposes import ChannelPurpose, PlatformChannelPurposes
 from muxivo_console.domain.channels import PlatformChannelCatalog
-from muxivo_console.domain.connections import PlatformConnection
+from muxivo_console.domain.connection_reconciliation import ConnectionReconciliationDecision
+from muxivo_console.domain.connections import (
+    PlatformConnection,
+    PlatformConnectionLifecycleIdempotencyResult,
+)
 from muxivo_console.domain.dashboard import PlatformDashboardSummary
 from muxivo_console.domain.health import PlatformHealth
 from muxivo_console.domain.identity import (
     EmailPasswordAccount,
     EmailPasswordRegistration,
     LoginIdentity,
+    LoginIdentityProfile,
     LoginIdentityProvider,
+    PasswordCredential,
     UserStatus,
 )
 from muxivo_console.domain.identity_linking import IdentityLinkTransaction
 from muxivo_console.domain.integrations import PlatformIntegrations
 from muxivo_console.domain.oauth_login import OAuthLoginTransaction
-from muxivo_console.domain.organizations import Organization, OrganizationMembership
+from muxivo_console.domain.organizations import (
+    Organization,
+    OrganizationMembership,
+    OrganizationMembershipProfile,
+)
+from muxivo_console.domain.password_recovery import PasswordRecoveryTransaction
+from muxivo_console.domain.role_purposes import PlatformRolePurposes
 from muxivo_console.domain.server_statistics import (
     PlatformServerStatistics,
 )
@@ -138,6 +151,17 @@ class PlatformChannelPurposesReader(Protocol):
     ) -> PlatformChannelPurposes: ...
 
 
+class PlatformRolePurposesReader(Protocol):
+    async def get_role_purposes_for_connection(
+        self,
+        *,
+        organization_id: UUID,
+        actor_id: UUID,
+        external_resource_id: str,
+        correlation_id: UUID,
+    ) -> PlatformRolePurposes: ...
+
+
 class PlatformChannelPurposesWriter(Protocol):
     async def update_channel_purpose_for_connection(
         self,
@@ -244,6 +268,36 @@ class OrganizationMembershipReader(Protocol):
     ) -> OrganizationMembership | None: ...
 
 
+class OrganizationListingReader(Protocol):
+    """Reads organizations where the current actor already has a membership."""
+
+    async def list_for_actor(
+        self, *, actor_id: UUID
+    ) -> Sequence[OrganizationMembershipProfile]: ...
+
+
+class OrganizationMemberReader(Protocol):
+    """Reads members for one Console-owned organization."""
+
+    async def list_for_organization(
+        self, organization_id: UUID
+    ) -> Sequence[OrganizationMembership]: ...
+
+
+class OrganizationMemberWriter(Protocol):
+    """Writes organization membership changes with mandatory audit events."""
+
+    async def add_member(
+        self, *, membership: OrganizationMembership, audit_event: AuditEvent
+    ) -> bool: ...
+
+    async def update_member(
+        self, *, membership: OrganizationMembership, audit_event: AuditEvent
+    ) -> bool: ...
+
+    async def remove_member(self, *, membership_id: UUID, audit_event: AuditEvent) -> bool: ...
+
+
 class IdentifierGenerator(Protocol):
     """Generates server-side UUIDv7 identifiers; clients never supply entity IDs."""
 
@@ -262,6 +316,14 @@ class EmailLookupHasher(Protocol):
     def lookup_hash(self, normalized_email: str) -> str: ...
 
 
+class UserEmailLookupReader(Protocol):
+    """Resolves a normalized email lookup hash to an active first-party user."""
+
+    async def find_active_user_id_by_email_lookup_hash(
+        self, *, email_lookup_hash: str
+    ) -> UUID | None: ...
+
+
 class EmailProtector(EmailLookupHasher, Protocol):
     """Encrypts an email; it also provides the keyed lookup derivation."""
 
@@ -274,6 +336,106 @@ class PasswordHasher(Protocol):
     def hash(self, plaintext_password: str) -> str: ...
 
     def verify(self, encoded_hash: str, plaintext_password: str) -> bool: ...
+
+
+class PasswordCredentialReader(Protocol):
+    """Reads one password credential for the authenticated user account."""
+
+    async def find_for_user(self, *, user_id: UUID) -> PasswordCredential | None: ...
+
+
+class PasswordCredentialWriter(Protocol):
+    """Atomically updates one password credential and records a security audit fact."""
+
+    async def change_password(
+        self, *, user_id: UUID, password_hash: str, changed_at, audit_event: AuditEvent
+    ) -> bool: ...
+
+
+class BrowserSessionReauthenticationWriter(Protocol):
+    """Atomically marks one active browser session recently authenticated."""
+
+    async def reauthenticate(
+        self,
+        *,
+        session_id: UUID,
+        user_id: UUID,
+        authenticated_at,
+        audit_event: AuditEvent,
+    ) -> bool: ...
+
+
+class PasswordRecoveryTransactionWriter(Protocol):
+    """Stores a one-time recovery token hash and audit fact."""
+
+    async def create(
+        self, *, transaction: PasswordRecoveryTransaction, audit_event: AuditEvent
+    ) -> bool: ...
+
+
+class PasswordRecoveryCompletionWriter(Protocol):
+    """Consumes recovery token, rotates password, revokes sessions and audits atomically."""
+
+    async def complete(
+        self,
+        *,
+        token_hash: str,
+        password_hash: str,
+        completed_at,
+        audit_id: UUID,
+        correlation_id: UUID,
+    ) -> bool: ...
+
+
+class SecurityRecordCleaner(Protocol):
+    """Deletes expired security records after their retention window has elapsed."""
+
+    async def delete_expired_or_revoked_sessions(self, *, before) -> int: ...
+
+    async def delete_consumed_or_expired_password_recovery_transactions(
+        self, *, before
+    ) -> int: ...
+
+
+class PasswordRecoveryNotifier(Protocol):
+    """Delivers a raw recovery token through a configured out-of-band channel."""
+
+    async def send(
+        self,
+        *,
+        user_id: UUID,
+        recipient_email: str,
+        raw_token: str,
+        expires_at,
+        correlation_id: UUID,
+    ) -> None: ...
+
+
+@dataclass(frozen=True, slots=True)
+class RateLimitDecision:
+    allowed: bool
+    retry_after_seconds: int = 0
+
+
+class RateLimiter(Protocol):
+    """Limits abuse-prone browser flows before they reach application use cases."""
+
+    async def check(self, *, scope: str, key: str) -> RateLimitDecision: ...
+
+
+class HttpMetricsRecorder(Protocol):
+    """Records process-local HTTP metrics for monitoring and alerting adapters."""
+
+    def record_http_request(
+        self,
+        *,
+        method: str,
+        route: str,
+        status_code: int,
+        duration_seconds: float,
+    ) -> None: ...
+
+    def render_prometheus(self) -> str: ...
 
 
 class EmailPasswordRegistrationWriter(Protocol):
@@ -296,6 +458,20 @@ class LoginIdentityReader(Protocol):
     async def find_provider_subject(
         self, *, user_id: UUID, provider: "LoginIdentityProvider"
     ) -> str | None: ...
+
+
+class LoginIdentityManagementReader(Protocol):
+    """Reads browser-safe login identity projections for account management."""
+
+    async def list_for_user(self, *, user_id: UUID) -> Sequence[LoginIdentityProfile]: ...
+
+
+class LoginIdentityUnlinkWriter(Protocol):
+    """Atomically removes one login identity and records a security audit fact."""
+
+    async def unlink(
+        self, *, identity_id: UUID, user_id: UUID, audit_event: AuditEvent
+    ) -> bool: ...
 
 
 class ProviderIdentityUserReader(Protocol):
@@ -388,6 +564,23 @@ class PlatformConnectionWriter(Protocol):
     async def create(self, *, connection: PlatformConnection, audit_event: AuditEvent) -> bool: ...
 
 
+class PlatformConnectionLifecycleWriter(Protocol):
+    """Atomically changes connection lifecycle state and records its audit event."""
+
+    async def update_status(
+        self,
+        *,
+        connection: PlatformConnection,
+        audit_event: AuditEvent,
+        idempotency_key: str | None = None,
+        idempotency_action: str | None = None,
+    ) -> bool: ...
+
+    async def find_idempotent_lifecycle_result(
+        self, *, organization_id: UUID, idempotency_key: str
+    ) -> PlatformConnectionLifecycleIdempotencyResult | None: ...
+
+
 class PlatformConnectionReader(Protocol):
     """Lists Console-owned non-secret connection metadata with keyset pagination."""
 
@@ -398,6 +591,20 @@ class PlatformConnectionReader(Protocol):
     async def find_for_organization(
         self, *, organization_id: UUID, connection_id: UUID
     ) -> PlatformConnection | None: ...
+
+
+class PlatformConnectionReconciliationReader(Protocol):
+    """Reads non-disconnected connection records for periodic reconciliation."""
+
+    async def list_reconcilable(self, *, limit: int) -> Sequence[PlatformConnection]: ...
+
+
+class PlatformConnectionReconciliationProbe(Protocol):
+    """Asks a platform adapter which Console lifecycle status should be visible."""
+
+    async def inspect_connection(
+        self, *, connection: PlatformConnection, correlation_id: UUID
+    ) -> ConnectionReconciliationDecision: ...
 
 
 class Clock(Protocol):
@@ -436,6 +643,20 @@ class AuthSessionRevoker(Protocol):
     async def revoke(
         self, *, session_id: UUID, user_id: UUID, revoked_at, audit_event: AuditEvent
     ) -> bool: ...
+
+
+class AuthSessionListingReader(Protocol):
+    """Reads active first-party browser sessions for the authenticated user."""
+
+    async def list_active_for_user(self, *, user_id: UUID, active_at) -> Sequence[AuthSession]: ...
+
+
+class AuthSessionBulkRevoker(Protocol):
+    """Atomically revokes all active first-party browser sessions for one user."""
+
+    async def revoke_all_for_user(
+        self, *, user_id: UUID, revoked_at, audit_event: AuditEvent
+    ) -> int: ...
 
 
 class EmailPasswordAccountReader(Protocol):

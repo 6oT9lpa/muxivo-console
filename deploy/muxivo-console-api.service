@@ -1,0 +1,42 @@
+[Unit]
+Description=Muxivo Console API
+Documentation=https://console.muxivo.pro/healthz
+Wants=network-online.target
+After=network-online.target postgresql.service
+
+[Service]
+Type=simple
+User=muxivo-console
+Group=muxivo-console
+WorkingDirectory=/opt/muxivo-console
+Environment=PYTHONUNBUFFERED=1
+LoadCredential=console_env:/etc/muxivo-console/console.env
+EnvironmentFile=/run/credentials/%N/console_env
+ExecStartPre=/opt/muxivo-console/venv/bin/python -m alembic -c /opt/muxivo-console/alembic.ini upgrade head
+ExecStart=/opt/muxivo-console/venv/bin/python -m uvicorn muxivo_console.asgi:app --app-dir /opt/muxivo-console/apps/api/src --host 127.0.0.1 --port 8010 --proxy-headers --forwarded-allow-ips=127.0.0.1
+Restart=on-failure
+RestartSec=5s
+TimeoutStartSec=180s
+TimeoutStopSec=30s
+UMask=0077
+
+# The API is a network client and does not need local device or privilege access.
+NoNewPrivileges=true
+PrivateDevices=true
+PrivateTmp=true
+ProtectHome=true
+ProtectSystem=strict
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+ProtectClock=true
+LockPersonality=true
+RestrictRealtime=true
+RestrictSUIDSGID=true
+RestrictNamespaces=true
+CapabilityBoundingSet=
+AmbientCapabilities=
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+
+[Install]
+WantedBy=multi-user.target

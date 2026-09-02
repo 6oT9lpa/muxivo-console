@@ -1,0 +1,143 @@
+name: Console Quality Gates
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+      - master
+
+permissions:
+  contents: read
+
+jobs:
+  backend:
+    name: Backend lint and tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install backend dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e ".[dev]"
+
+      - name: Lint backend
+        run: python -m ruff check apps/api/src tests
+
+      - name: Scan for committed secrets
+        run: python scripts/secret_scan.py
+
+      - name: Scan browser-facing contracts for platform tokens
+        run: python scripts/browser_token_exposure_scan.py
+
+      - name: Review audit coverage
+        run: python scripts/audit_coverage.py
+
+      - name: Validate production readiness artifacts
+        run: python scripts/readiness_artifact_check.py
+
+      - name: Smoke production composition
+        run: python scripts/production_composition_smoke.py
+
+      - name: Test backend
+        run: python -m pytest
+
+  frontend:
+    name: Frontend tests and build
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    defaults:
+      run:
+        working-directory: apps/web
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: apps/web/package-lock.json
+
+      - name: Install frontend dependencies
+        run: npm ci
+
+      - name: Test frontend
+        run: npm test
+
+      - name: Install browser test runtime
+        run: npx playwright install --with-deps chromium
+
+      - name: Test frontend E2E
+        run: npm run test:e2e
+
+      - name: Build frontend
+        run: npm run build
+
+  migration-rollback:
+    name: Migration rollback smoke
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: muxivo_console
+          POSTGRES_USER: muxivo
+          POSTGRES_PASSWORD: muxivo
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U muxivo -d muxivo_console"
+          --health-interval 2s
+          --health-timeout 3s
+          --health-retries 30
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install backend dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e ".[dev]"
+
+      - name: Upgrade, rollback and re-upgrade migrations
+        env:
+          MUXIVO_CONSOLE_DATABASE_URL: postgresql+asyncpg://muxivo:muxivo@127.0.0.1:5432/muxivo_console
+        run: |
+          python -m alembic upgrade head
+          python -m alembic downgrade base
+          python -m alembic upgrade head
+
+  composition-smoke:
+    name: Development Docker Compose smoke
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Validate Docker Compose configuration
+        run: docker compose -f docker-compose.dev.yml config

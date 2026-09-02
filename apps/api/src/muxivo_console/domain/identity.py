@@ -6,6 +6,7 @@ connection or a platform-role grant.
 """
 
 from dataclasses import dataclass
+from datetime import datetime
 from enum import StrEnum
 from uuid import UUID
 
@@ -46,6 +47,23 @@ class LoginIdentity:
     def __post_init__(self) -> None:
         if not self.provider_subject or len(self.provider_subject) > 255:
             raise ValueError("Provider subject must contain 1 to 255 characters.")
+
+
+@dataclass(frozen=True, slots=True)
+class LoginIdentityProfile:
+    """Safe browser projection for an already linked login identity."""
+
+    id: UUID
+    user_id: UUID
+    provider: LoginIdentityProvider
+    linked_at: datetime
+    last_used_at: datetime | None = None
+
+    def __post_init__(self) -> None:
+        if self.linked_at.tzinfo is None:
+            raise ValueError("Identity link time must be timezone-aware.")
+        if self.last_used_at is not None and self.last_used_at.tzinfo is None:
+            raise ValueError("Identity last-used time must be timezone-aware.")
 
 
 @dataclass(frozen=True, slots=True)

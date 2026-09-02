@@ -1,3 +1,4 @@
+import logging
 from uuid import UUID
 
 from fastapi.testclient import TestClient
@@ -32,7 +33,7 @@ def test_registration_endpoint_uses_versioned_enumeration_safe_contract() -> Non
     response = client.post("/api/v1/auth/email-password/registrations", json=payload())
 
     assert response.status_code == 202
-    assert response.json() == {"status": "verification_required"}
+    assert response.json() == {"status": "accepted"}
     assert UUID(response.headers["X-Correlation-ID"]).version == 4
     assert registration.command.email == "creator@example.com"
     assert registration.command.password == "a-long-enough-password"
@@ -40,13 +41,17 @@ def test_registration_endpoint_uses_versioned_enumeration_safe_contract() -> Non
     assert registration.command.correlation_id == UUID(response.headers["X-Correlation-ID"])
 
 
-def test_registration_conflict_has_the_same_public_response() -> None:
+def test_registration_conflict_has_the_same_public_response(caplog) -> None:
     client = TestClient(create_app(registration_use_case=RecordingRegistrationUseCase(True)))
 
+    caplog.set_level(logging.INFO, logger="muxivo_console.presentation.api")
     response = client.post("/api/v1/auth/email-password/registrations", json=payload())
 
     assert response.status_code == 202
-    assert response.json() == {"status": "verification_required"}
+    assert response.json() == {"status": "accepted"}
+    assert "auth.email_password_registration.rejected" in caplog.text
+    assert "creator@example.com" not in caplog.text
+    assert "a-long-enough-password" not in caplog.text
 
 
 def test_registration_is_unavailable_without_explicit_secure_runtime_wiring() -> None:

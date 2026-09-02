@@ -79,7 +79,7 @@ class FakeSession(AbstractAsyncContextManager[Self]):
 def registration() -> EmailPasswordRegistration:
     user_id = uuid4()
     return EmailPasswordRegistration(
-        user=User(user_id, UserStatus.PENDING_VERIFICATION, "Creator"),
+        user=User(user_id, UserStatus.ACTIVE, "Creator"),
         identity=LoginIdentity(uuid4(), user_id, LoginIdentityProvider.EMAIL, "a" * 64),
         email=UserEmail(uuid4(), user_id, b"ciphertext", "a" * 64),
         password_credential=PasswordCredential(user_id, "$argon2id$test-hash"),
@@ -119,7 +119,7 @@ async def test_writes_all_registration_rows_and_audit_event_in_one_transaction()
     )
     user_record = session.records[0]
     email_record = session.records[2]
-    assert user_record.status == "pending_verification"
+    assert user_record.status == "active"
     assert email_record.email_ciphertext == b"ciphertext"
 
 

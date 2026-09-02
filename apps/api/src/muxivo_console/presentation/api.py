@@ -1,10 +1,14 @@
-from collections.abc import AsyncIterator, Callable
+import logging
+from collections.abc import AsyncIterator, Callable, Sequence
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from hmac import compare_digest
+from time import perf_counter
+from typing import Protocol
 from uuid import UUID, uuid4
 
 from fastapi import FastAPI, HTTPException, Request, status
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, RedirectResponse, Response
 
 from muxivo_console.application.authenticate_email_password import (
@@ -21,6 +25,11 @@ from muxivo_console.application.begin_oauth_login import (
     BeginOAuthLogin,
     OAuthLoginStartRejectedError,
 )
+from muxivo_console.application.change_email_password import (
+    ChangeEmailPassword,
+    ChangeEmailPasswordCommand,
+    PasswordChangeRejectedError,
+)
 from muxivo_console.application.complete_identity_link import (
     CompleteIdentityLink,
     CompleteIdentityLinkCommand,
@@ -29,6 +38,11 @@ from muxivo_console.application.complete_identity_link import (
 from muxivo_console.application.complete_oauth_login import (
     CompleteOAuthLogin,
     OAuthLoginCompletionRejectedError,
+)
+from muxivo_console.application.complete_password_recovery import (
+    CompletePasswordRecovery,
+    CompletePasswordRecoveryCommand,
+    PasswordRecoveryCompletionRejectedError,
 )
 from muxivo_console.application.create_browser_session import IssuedBrowserSession
 from muxivo_console.application.create_organization import (
@@ -61,6 +75,12 @@ from muxivo_console.application.get_platform_server_statistics import (
 from muxivo_console.application.get_platform_welcome_settings import (
     GetPlatformWelcomeSettings,
 )
+from muxivo_console.application.list_browser_sessions import (
+    BrowserSessionListRejectedError,
+    BrowserSessionSecurityView,
+    ListBrowserSessions,
+    ListBrowserSessionsCommand,
+)
 from muxivo_console.application.list_control_modules import (
     AccessDeniedError,
     ListControlModules,
@@ -69,10 +89,45 @@ from muxivo_console.application.list_control_modules import (
 from muxivo_console.application.list_organization_audit_events import (
     ListOrganizationAuditEvents,
 )
+from muxivo_console.application.list_organizations import (
+    ListOrganizations,
+    ListOrganizationsCommand,
+    OrganizationListRejectedError,
+)
 from muxivo_console.application.list_platform_connection_channels import (
     ListPlatformConnectionChannels,
 )
 from muxivo_console.application.list_platform_connections import ListPlatformConnections
+from muxivo_console.application.manage_login_identities import (
+    ListLoginIdentities,
+    ListLoginIdentitiesCommand,
+    LoginIdentityManagementRejectedError,
+    UnlinkLoginIdentity,
+    UnlinkLoginIdentityCommand,
+)
+from muxivo_console.application.manage_organization_members import (
+    AddOrganizationMember,
+    AddOrganizationMemberCommand,
+    ListOrganizationMembers,
+    ListOrganizationMembersCommand,
+    OrganizationMemberManagementRejectedError,
+    RemoveOrganizationMember,
+    RemoveOrganizationMemberCommand,
+    UpdateOrganizationMember,
+    UpdateOrganizationMemberCommand,
+)
+from muxivo_console.application.manage_platform_connection_lifecycle import (
+    ManagePlatformConnectionLifecycle,
+    ManagePlatformConnectionLifecycleCommand,
+    PlatformConnectionLifecycleAction,
+    PlatformConnectionLifecycleRejectedError,
+)
+from muxivo_console.application.ports import HttpMetricsRecorder, RateLimiter
+from muxivo_console.application.reauthenticate_browser_session import (
+    BrowserSessionReauthenticationRejectedError,
+    ReauthenticateBrowserSession,
+    ReauthenticateBrowserSessionCommand,
+)
 from muxivo_console.application.register_email_password import (
     RegisterEmailPassword,
     RegisterEmailPasswordCommand,
@@ -83,12 +138,21 @@ from muxivo_console.application.register_platform_connection import (
     RegisterPlatformConnection,
     RegisterPlatformConnectionCommand,
 )
+from muxivo_console.application.request_password_recovery import (
+    RequestPasswordRecovery,
+    RequestPasswordRecoveryCommand,
+)
 from muxivo_console.application.require_recent_authentication import (
     RecentAuthenticationRequiredError,
 )
 from muxivo_console.application.resolve_browser_session import (
     BrowserSessionPrincipal,
     ResolveBrowserSession,
+)
+from muxivo_console.application.revoke_all_browser_sessions import (
+    BrowserSessionBulkRevocationRejectedError,
+    RevokeAllBrowserSessions,
+    RevokeAllBrowserSessionsCommand,
 )
 from muxivo_console.application.revoke_browser_session import RevokeBrowserSession
 from muxivo_console.application.update_platform_ai_moderation_policy import (
@@ -106,16 +170,33 @@ from muxivo_console.contracts.v1.ai_moderation_policy import (
 )
 from muxivo_console.contracts.v1.audit_events import AuditEventListResponse, AuditEventResponse
 from muxivo_console.contracts.v1.authentication import (
+    BrowserSessionReauthenticationRequest,
     EmailPasswordLoginRequest,
     EmailPasswordRegistrationRequest,
     EmailPasswordRegistrationResponse,
+    PasswordChangeRequest,
+    PasswordRecoveryCompletionRequest,
+    PasswordRecoveryRequest,
+    PasswordRecoveryRequestResponse,
 )
 from muxivo_console.contracts.v1.control_modules import (
     ControlModuleListResponse,
     ControlModuleResponse,
 )
+from muxivo_console.contracts.v1.identities import (
+    LoginIdentityListResponse,
+    LoginIdentityResponse,
+)
 from muxivo_console.contracts.v1.organizations import (
     OrganizationCreateRequest,
+    OrganizationListItemResponse,
+    OrganizationListResponse,
+    OrganizationMemberCreateRequest,
+    OrganizationMemberListResponse,
+    OrganizationMembershipResponse,
+    OrganizationMembershipScopeRequest,
+    OrganizationMembershipScopeResponse,
+    OrganizationMemberUpdateRequest,
     OrganizationResponse,
 )
 from muxivo_console.contracts.v1.platform_ai_moderation import (
@@ -136,6 +217,7 @@ from muxivo_console.contracts.v1.platform_channels import (
 )
 from muxivo_console.contracts.v1.platform_connections import (
     PlatformConnectionCreateRequest,
+    PlatformConnectionGrantedScopeResponse,
     PlatformConnectionListResponse,
     PlatformConnectionResponse,
 )
@@ -152,8 +234,15 @@ from muxivo_console.contracts.v1.platform_welcome import (
     PlatformWelcomeSettingsResponse,
     PlatformWelcomeSettingsUpdateRequest,
 )
+from muxivo_console.contracts.v1.sessions import (
+    BrowserSessionBulkRevocationResponse,
+    BrowserSessionListResponse,
+    BrowserSessionResponse,
+)
 from muxivo_console.domain.activity import Platform
-from muxivo_console.domain.identity import LoginIdentityProvider
+from muxivo_console.domain.connections import ConnectionStatus, PlatformConnection
+from muxivo_console.domain.identity import LoginIdentityProfile, LoginIdentityProvider
+from muxivo_console.domain.organizations import MembershipResourceScope, OrganizationMembership
 from muxivo_console.domain.sessions import SessionAssuranceLevel
 from muxivo_console.domain.welcome import PlatformWelcomeSettings
 from muxivo_console.infrastructure.development import (
@@ -169,9 +258,28 @@ CSRF_EXEMPT_PATHS = frozenset(
         "/api/v1/auth/email-password/registrations",
         "/api/v1/auth/email-password/sessions",
         "/api/v1/auth/discord/authorizations",
+        "/api/v1/auth/password-recovery/requests",
+        "/api/v1/auth/password-recovery/completions",
     }
 )
 SAFE_HTTP_METHODS = frozenset({"GET", "HEAD", "OPTIONS"})
+logger = logging.getLogger(__name__)
+DEFAULT_CONTENT_SECURITY_POLICY = (
+    "default-src 'self'; "
+    "base-uri 'self'; "
+    "frame-ancestors 'none'; "
+    "object-src 'none'; "
+    "script-src 'self'; "
+    "style-src 'self' 'unsafe-inline'; "
+    "img-src 'self' data:; "
+    "connect-src 'self'"
+)
+
+
+class BackgroundService(Protocol):
+    async def start(self) -> None: ...
+
+    async def stop(self) -> None: ...
 
 
 @dataclass(frozen=True, slots=True)
@@ -190,6 +298,20 @@ class BrowserSessionCookieSettings:
             csrf_name="muxivo_console_dev_csrf",
             secure=False,
         )
+
+
+@dataclass(frozen=True, slots=True)
+class BrowserSecurityPolicy:
+    """Browser-facing security policy controlled by the composition root."""
+
+    cors_allowed_origins: tuple[str, ...] = ()
+    content_security_policy: str = DEFAULT_CONTENT_SECURITY_POLICY
+    hsts_enabled: bool = True
+    hsts_value: str = "max-age=31536000; includeSubDomains"
+
+    @classmethod
+    def development(cls, *, cors_allowed_origins: tuple[str, ...] = ()) -> "BrowserSecurityPolicy":
+        return cls(cors_allowed_origins=cors_allowed_origins, hsts_enabled=False)
 
 
 def _set_browser_session_cookies(
@@ -217,12 +339,160 @@ def _set_browser_session_cookies(
     )
 
 
+def _membership_response(membership: OrganizationMembership) -> OrganizationMembershipResponse:
+    return OrganizationMembershipResponse(
+        id=membership.id,
+        organization_id=membership.organization_id,
+        user_id=membership.actor_id,
+        role=membership.role,
+        resource_scopes=[
+            OrganizationMembershipScopeResponse(
+                id=scope.id,
+                resource=scope.resource,
+                action=scope.action,
+            )
+            for scope in sorted(
+                membership.resource_scopes,
+                key=lambda item: (item.resource.value, item.action.value, str(item.id)),
+            )
+        ],
+    )
+
+
+def _scope_requests_to_domain(
+    scopes: list[OrganizationMembershipScopeRequest],
+) -> tuple[MembershipResourceScope, ...]:
+    return tuple(
+        MembershipResourceScope(resource=scope.resource, action=scope.action) for scope in scopes
+    )
+
+
+def _platform_connection_response(connection: PlatformConnection) -> PlatformConnectionResponse:
+    return PlatformConnectionResponse(
+        id=connection.id,
+        organization_id=connection.organization_id,
+        platform=connection.platform,
+        external_resource_id=connection.external_resource_id,
+        status=connection.status,
+        granted_scopes=[
+            PlatformConnectionGrantedScopeResponse(
+                key=key,
+                display_name=display_name,
+                description=description,
+                status=_scope_status_for_connection(connection.status),
+            )
+            for key, display_name, description in _scope_catalog_for_platform(
+                connection.platform
+            )
+        ],
+    )
+
+
+def _scope_status_for_connection(
+    status: ConnectionStatus,
+) -> str:
+    if status is ConnectionStatus.PENDING:
+        return "pending"
+    if status in {ConnectionStatus.ACTIVE, ConnectionStatus.DEGRADED}:
+        return "granted"
+    if status is ConnectionStatus.REAUTH_REQUIRED:
+        return "requires_reauthorization"
+    return "revoked"
+
+
+def _scope_catalog_for_platform(platform: Platform) -> tuple[tuple[str, str, str], ...]:
+    if platform is Platform.DISCORD:
+        return (
+            (
+                "discord.guild.read",
+                "Read Discord server metadata",
+                "Lets Console show safe aggregate server, channel and health information.",
+            ),
+            (
+                "discord.guild.manage",
+                "Manage Discord server settings",
+                "Lets Console request server-side Control API changes after native admin checks.",
+            ),
+        )
+    if platform is Platform.TWITCH:
+        return (
+            (
+                "twitch.channel.read",
+                "Read Twitch channel metadata",
+                "Lets Console show safe aggregate channel and connection health information.",
+            ),
+            (
+                "twitch.channel.manage",
+                "Manage Twitch channel controls",
+                "Lets Console request server-side Control API changes after native owner checks.",
+            ),
+        )
+    return (
+        (
+            "telegram.chat.read",
+            "Read Telegram chat metadata",
+            "Lets Console show safe aggregate chat and connection health information.",
+        ),
+        (
+            "telegram.chat.manage",
+            "Manage Telegram chat controls",
+            "Lets Console request server-side Control API changes after native owner checks.",
+        ),
+    )
+
+
+def _browser_session_response(view: BrowserSessionSecurityView) -> BrowserSessionResponse:
+    session = view.session
+    return BrowserSessionResponse(
+        id=session.id,
+        is_current=view.is_current,
+        assurance_level=session.assurance_level,
+        authenticated_at=session.authenticated_at,
+        last_seen_at=session.last_seen_at or session.authenticated_at,
+        expires_at=session.expires_at,
+        device_label=_fingerprint_label("Browser", session.user_agent_hash),
+        ip_fingerprint=_fingerprint_label("ip", session.ip_hash),
+        user_agent_fingerprint=_fingerprint_label("ua", session.user_agent_hash),
+    )
+
+
+def _fingerprint_label(prefix: str, value: str | None) -> str | None:
+    if value is None:
+        return None if prefix != "Browser" else "Unknown browser"
+    return f"{prefix}:{value[:12]}"
+
+
+def _login_identity_response(
+    identity: LoginIdentityProfile, *, total_identity_count: int
+) -> LoginIdentityResponse:
+    return LoginIdentityResponse(
+        id=identity.id,
+        provider=identity.provider,
+        linked_at=identity.linked_at,
+        last_used_at=identity.last_used_at,
+        can_unlink=(
+            identity.provider is not LoginIdentityProvider.EMAIL and total_identity_count > 1
+        ),
+    )
+
+
 def create_app(
     control_modules_use_case: ListControlModules | None = None,
     registration_use_case: RegisterEmailPassword | None = None,
     authentication_use_case: AuthenticateEmailPassword | None = None,
+    password_change_use_case: ChangeEmailPassword | None = None,
+    password_recovery_request_use_case: RequestPasswordRecovery | None = None,
+    password_recovery_completion_use_case: CompletePasswordRecovery | None = None,
+    rate_limiter: RateLimiter | None = None,
+    metrics_recorder: HttpMetricsRecorder | None = None,
     organization_creation_use_case: CreateOrganization | None = None,
+    organization_list_use_case: ListOrganizations | None = None,
+    organization_members_use_case: ListOrganizationMembers | None = None,
+    organization_member_add_use_case: AddOrganizationMember | None = None,
+    organization_member_update_use_case: UpdateOrganizationMember | None = None,
+    organization_member_remove_use_case: RemoveOrganizationMember | None = None,
     platform_connection_registration_use_case: RegisterPlatformConnection | None = None,
+    platform_connection_lifecycle_use_case: ManagePlatformConnectionLifecycle | None = None,
     platform_connections_use_case: ListPlatformConnections | None = None,
     audit_events_use_case: ListOrganizationAuditEvents | None = None,
     platform_health_use_case: GetPlatformHealth | None = None,
@@ -241,15 +511,26 @@ def create_app(
     platform_welcome_settings_update_use_case: UpdatePlatformWelcomeSettings | None = None,
     discord_identity_link_start: BeginIdentityLink | None = None,
     discord_identity_link_complete: CompleteIdentityLink | None = None,
+    twitch_identity_link_start: BeginIdentityLink | None = None,
+    twitch_identity_link_complete: CompleteIdentityLink | None = None,
     discord_login_start: BeginOAuthLogin | None = None,
     discord_login_complete: CompleteOAuthLogin | None = None,
     discord_authorization_url: Callable[..., str] | None = None,
+    twitch_authorization_url: Callable[..., str] | None = None,
     session_resolver: ResolveBrowserSession | None = None,
     session_revoker: RevokeBrowserSession | None = None,
+    session_list_use_case: ListBrowserSessions | None = None,
+    session_bulk_revoker: RevokeAllBrowserSessions | None = None,
+    session_reauthentication_use_case: ReauthenticateBrowserSession | None = None,
+    login_identity_list_use_case: ListLoginIdentities | None = None,
+    login_identity_unlink_use_case: UnlinkLoginIdentity | None = None,
     browser_session_cookies: BrowserSessionCookieSettings | None = None,
+    browser_security_policy: BrowserSecurityPolicy | None = None,
+    background_services: Sequence[BackgroundService] = (),
 ) -> FastAPI:
     """Create the Console BFF without coupling application code to FastAPI."""
     cookies = browser_session_cookies or BrowserSessionCookieSettings()
+    security_policy = browser_security_policy or BrowserSecurityPolicy()
     control_modules = control_modules_use_case or ListControlModules(
         authorizer=DenyByDefaultOrganizationAuthorizer(),
         catalog=StaticModuleCatalog(),
@@ -257,15 +538,90 @@ def create_app(
 
     @asynccontextmanager
     async def lifespan(_: FastAPI) -> AsyncIterator[None]:
-        yield
+        started_services: list[BackgroundService] = []
+        logger.info(
+            "application.starting",
+            extra={"background_service_count": len(background_services)},
+        )
+        try:
+            for service in background_services:
+                logger.info(
+                    "background_service.starting",
+                    extra={"service_type": type(service).__name__},
+                )
+                await service.start()
+                started_services.append(service)
+                logger.info(
+                    "background_service.started",
+                    extra={"service_type": type(service).__name__},
+                )
+            logger.info("application.started")
+            yield
+        finally:
+            for service in reversed(started_services):
+                logger.info(
+                    "background_service.stopping",
+                    extra={"service_type": type(service).__name__},
+                )
+                await service.stop()
+                logger.info(
+                    "background_service.stopped",
+                    extra={"service_type": type(service).__name__},
+                )
+            logger.info("application.stopped")
 
     app = FastAPI(title="Muxivo Console API", version="1.0.0", lifespan=lifespan)
+    if security_policy.cors_allowed_origins:
+        app.add_middleware(
+            CORSMiddleware,
+            allow_origins=list(security_policy.cors_allowed_origins),
+            allow_credentials=True,
+            allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+            allow_headers=[CSRF_HEADER_NAME, "Content-Type", "Idempotency-Key"],
+        )
+
+    def apply_browser_security_headers(response: Response) -> Response:
+        response.headers.setdefault(
+            "Content-Security-Policy",
+            security_policy.content_security_policy,
+        )
+        response.headers.setdefault("X-Content-Type-Options", "nosniff")
+        response.headers.setdefault("X-Frame-Options", "DENY")
+        response.headers.setdefault("Referrer-Policy", "no-referrer")
+        response.headers.setdefault(
+            "Permissions-Policy",
+            "camera=(), microphone=(), geolocation=()",
+        )
+        if security_policy.hsts_enabled:
+            response.headers.setdefault("Strict-Transport-Security", security_policy.hsts_value)
+        return response
+
+    @app.middleware("http")
+    async def attach_browser_security_headers(request: Request, call_next) -> Response:
+        response = await call_next(request)
+        return apply_browser_security_headers(response)
 
     @app.middleware("http")
     async def attach_correlation_id(request: Request, call_next) -> Response:
         correlation_id = uuid4()
         request.state.correlation_id = correlation_id
-        response = await call_next(request)
+        try:
+            response = await call_next(request)
+        except Exception as error:
+            logger.error(
+                "http.unhandled_error",
+                extra={
+                    "correlation_id": str(correlation_id),
+                    "method": request.method,
+                    "path": request.url.path,
+                    "error_type": type(error).__name__,
+                },
+            )
+            response = JSONResponse(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                content={"detail": "Internal server error"},
+            )
+            response = apply_browser_security_headers(response)
         response.headers["X-Correlation-ID"] = str(correlation_id)
         return response
 
@@ -276,7 +632,14 @@ def create_app(
             if raw_token is not None:
                 try:
                     principal = await session_resolver.execute(raw_token)
-                except Exception:
+                except Exception as error:
+                    logger.warning(
+                        "auth.session.resolve_failed",
+                        extra={
+                            "correlation_id": str(request.state.correlation_id),
+                            "error_type": type(error).__name__,
+                        },
+                    )
                     principal = None
                 if principal is not None:
                     request.state.actor_id = principal.user_id
@@ -298,9 +661,105 @@ def create_app(
                 )
         return await call_next(request)
 
+    @app.middleware("http")
+    async def record_http_metrics(request: Request, call_next) -> Response:
+        started_at = perf_counter()
+        correlation_id = str(getattr(request.state, "correlation_id", "")) or None
+        logger.info(
+            "http.request.started",
+            extra={
+                "method": request.method,
+                "path": request.url.path,
+                "correlation_id": correlation_id,
+            },
+        )
+        try:
+            response = await call_next(request)
+        except Exception as error:
+            logger.error(
+                "http.request.failed",
+                extra={
+                    "method": request.method,
+                    "path": request.url.path,
+                    "error_type": type(error).__name__,
+                    "duration_seconds": perf_counter() - started_at,
+                    "correlation_id": str(getattr(request.state, "correlation_id", "")) or None,
+                },
+            )
+            raise
+        duration_seconds = perf_counter() - started_at
+        route = request.scope.get("route")
+        route_path = getattr(route, "path", "unmatched")
+        if metrics_recorder is not None:
+            metrics_recorder.record_http_request(
+                method=request.method,
+                route=route_path,
+                status_code=response.status_code,
+                duration_seconds=duration_seconds,
+            )
+        logger.info(
+            "http.request.completed",
+            extra={
+                "method": request.method,
+                "path": request.url.path,
+                "route": route_path,
+                "status_code": response.status_code,
+                "duration_seconds": round(duration_seconds, 6),
+                "correlation_id": str(getattr(request.state, "correlation_id", "")) or None,
+            },
+        )
+        return response
+
+    async def enforce_auth_rate_limit(request: Request, *, scope: str) -> None:
+        if rate_limiter is None:
+            return
+        client_host = request.client.host if request.client is not None else "unknown"
+        decision = await rate_limiter.check(scope=scope, key=client_host)
+        if decision.allowed:
+            logger.info(
+                "auth.rate_limit.allowed",
+                extra={
+                    "scope": scope,
+                    "client_host": client_host,
+                    "correlation_id": str(request.state.correlation_id),
+                },
+            )
+            return
+        logger.warning(
+            "auth.rate_limit.denied",
+            extra={
+                "scope": scope,
+                "client_host": client_host,
+                "retry_after_seconds": decision.retry_after_seconds,
+                "correlation_id": str(request.state.correlation_id),
+            },
+        )
+        headers = {"Retry-After": str(max(1, decision.retry_after_seconds))}
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail="Too many requests",
+            headers=headers,
+        )
+
     @app.get("/healthz", tags=["operations"])
     async def healthz() -> dict[str, str]:
         return {"status": "ok"}
+
+    @app.get("/metrics", tags=["operations"])
+    async def metrics(request: Request) -> Response:
+        if metrics_recorder is None:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Metrics are unavailable",
+            )
+        logger.info(
+            "operations.metrics.rendered",
+            extra={"correlation_id": str(request.state.correlation_id)},
+        )
+        return Response(
+            content=metrics_recorder.render_prometheus(),
+            media_type="text/plain; version=0.0.4; charset=utf-8",
+        )
 
     @app.get("/api/v1/auth/session", tags=["authentication"])
     async def get_browser_session(request: Request) -> dict[str, bool]:
@@ -346,6 +805,376 @@ def create_app(
             samesite="lax",
         )
         return response
+
+    @app.get(
+        "/api/v1/auth/sessions",
+        response_model=BrowserSessionListResponse,
+        tags=["authentication"],
+    )
+    async def list_browser_sessions(request: Request) -> BrowserSessionListResponse:
+        actor_id = getattr(request.state, "actor_id", None)
+        session_id = getattr(request.state, "session_id", None)
+        if not isinstance(actor_id, UUID) or not isinstance(session_id, UUID):
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied")
+        if session_list_use_case is None:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Session listing is unavailable",
+            )
+        try:
+            sessions = await session_list_use_case.execute(
+                ListBrowserSessionsCommand(
+                    actor_id=actor_id,
+                    current_session_id=session_id,
+                    correlation_id=request.state.correlation_id,
+                )
+            )
+        except BrowserSessionListRejectedError as error:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN, detail="Access denied"
+            ) from error
+        return BrowserSessionListResponse(
+            items=[_browser_session_response(session) for session in sessions]
+        )
+
+    @app.delete(
+        "/api/v1/auth/sessions",
+        response_model=BrowserSessionBulkRevocationResponse,
+        tags=["authentication"],
+    )
+    async def revoke_all_browser_sessions(request: Request) -> Response:
+        actor_id = getattr(request.state, "actor_id", None)
+        session_id = getattr(request.state, "session_id", None)
+        assurance_level = getattr(request.state, "assurance_level", None)
+        authenticated_at = getattr(request.state, "authenticated_at", None)
+        if (
+            not isinstance(actor_id, UUID)
+            or not isinstance(session_id, UUID)
+            or not isinstance(assurance_level, SessionAssuranceLevel)
+        ):
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied")
+        if session_bulk_revoker is None:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Session bulk revocation is unavailable",
+            )
+        try:
+            revoked_count = await session_bulk_revoker.execute(
+                RevokeAllBrowserSessionsCommand(
+                    principal=BrowserSessionPrincipal(
+                        user_id=actor_id,
+                        session_id=session_id,
+                        assurance_level=assurance_level,
+                        authenticated_at=authenticated_at,
+                    ),
+                    correlation_id=request.state.correlation_id,
+                )
+            )
+        except RecentAuthenticationRequiredError as error:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Recent authentication required",
+            ) from error
+        except BrowserSessionBulkRevocationRejectedError as error:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN, detail="Access denied"
+            ) from error
+        response = JSONResponse(
+            status_code=status.HTTP_200_OK,
+            content=BrowserSessionBulkRevocationResponse(
+                revoked_count=revoked_count
+            ).model_dump(),
+        )
+        response.delete_cookie(
+            key=cookies.session_name,
+            path="/",
+            secure=cookies.secure,
+            httponly=True,
+            samesite="lax",
+        )
+        response.delete_cookie(
+            key=cookies.csrf_name,
+            path="/",
+            secure=cookies.secure,
+            httponly=False,
+            samesite="lax",
+        )
+        return response
+
+    @app.post(
+        "/api/v1/auth/session/reauthentications",
+        status_code=status.HTTP_204_NO_CONTENT,
+        tags=["authentication"],
+    )
+    async def reauthenticate_browser_session(
+        payload: BrowserSessionReauthenticationRequest, request: Request
+    ) -> Response:
+        await enforce_auth_rate_limit(request, scope="auth.reauthentication")
+        actor_id = getattr(request.state, "actor_id", None)
+        session_id = getattr(request.state, "session_id", None)
+        assurance_level = getattr(request.state, "assurance_level", None)
+        authenticated_at = getattr(request.state, "authenticated_at", None)
+        if (
+            not isinstance(actor_id, UUID)
+            or not isinstance(session_id, UUID)
+            or not isinstance(assurance_level, SessionAssuranceLevel)
+        ):
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied")
+        if session_reauthentication_use_case is None:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Session reauthentication is unavailable",
+            )
+        try:
+            await session_reauthentication_use_case.execute(
+                ReauthenticateBrowserSessionCommand(
+                    principal=BrowserSessionPrincipal(
+                        user_id=actor_id,
+                        session_id=session_id,
+                        assurance_level=assurance_level,
+                        authenticated_at=authenticated_at,
+                    ),
+                    current_password=payload.current_password.get_secret_value(),
+                    correlation_id=request.state.correlation_id,
+                )
+            )
+        except BrowserSessionReauthenticationRejectedError as error:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Session reauthentication failed",
+            ) from error
+        return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+    @app.get(
+        "/api/v1/auth/identities",
+        response_model=LoginIdentityListResponse,
+        tags=["authentication"],
+    )
+    async def list_login_identities(request: Request) -> LoginIdentityListResponse:
+        actor_id = getattr(request.state, "actor_id", None)
+        if not isinstance(actor_id, UUID):
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied")
+        if login_identity_list_use_case is None:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Login identity listing is unavailable",
+            )
+        try:
+            identities = await login_identity_list_use_case.execute(
+                ListLoginIdentitiesCommand(
+                    actor_id=actor_id,
+                    correlation_id=request.state.correlation_id,
+                )
+            )
+        except LoginIdentityManagementRejectedError as error:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN, detail="Access denied"
+            ) from error
+        return LoginIdentityListResponse(
+            items=[
+                _login_identity_response(identity, total_identity_count=len(identities))
+                for identity in identities
+            ]
+        )
+
+    @app.delete(
+        "/api/v1/auth/identities/{identity_id}",
+        response_model=LoginIdentityResponse,
+        tags=["authentication"],
+    )
+    async def unlink_login_identity(identity_id: UUID, request: Request) -> LoginIdentityResponse:
+        actor_id = getattr(request.state, "actor_id", None)
+        session_id = getattr(request.state, "session_id", None)
+        assurance_level = getattr(request.state, "assurance_level", None)
+        authenticated_at = getattr(request.state, "authenticated_at", None)
+        if (
+            not isinstance(actor_id, UUID)
+            or not isinstance(session_id, UUID)
+            or not isinstance(assurance_level, SessionAssuranceLevel)
+        ):
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied")
+        if login_identity_unlink_use_case is None:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Login identity unlink is unavailable",
+            )
+        try:
+            identity = await login_identity_unlink_use_case.execute(
+                UnlinkLoginIdentityCommand(
+                    principal=BrowserSessionPrincipal(
+                        user_id=actor_id,
+                        session_id=session_id,
+                        assurance_level=assurance_level,
+                        authenticated_at=authenticated_at,
+                    ),
+                    identity_id=identity_id,
+                    correlation_id=request.state.correlation_id,
+                )
+            )
+        except RecentAuthenticationRequiredError as error:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Recent authentication is required",
+            ) from error
+        except LoginIdentityManagementRejectedError as error:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Login identity unlink failed",
+            ) from error
+        return _login_identity_response(identity, total_identity_count=0)
+
+    @app.put(
+        "/api/v1/auth/password",
+        status_code=status.HTTP_204_NO_CONTENT,
+        tags=["authentication"],
+    )
+    async def change_email_password(
+        payload: PasswordChangeRequest, request: Request
+    ) -> Response:
+        actor_id = getattr(request.state, "actor_id", None)
+        session_id = getattr(request.state, "session_id", None)
+        assurance_level = getattr(request.state, "assurance_level", None)
+        authenticated_at = getattr(request.state, "authenticated_at", None)
+        if (
+            not isinstance(actor_id, UUID)
+            or not isinstance(session_id, UUID)
+            or not isinstance(assurance_level, SessionAssuranceLevel)
+        ):
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied")
+        if password_change_use_case is None:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Password change is unavailable",
+            )
+        try:
+            await password_change_use_case.execute(
+                ChangeEmailPasswordCommand(
+                    principal=BrowserSessionPrincipal(
+                        user_id=actor_id,
+                        session_id=session_id,
+                        assurance_level=assurance_level,
+                        authenticated_at=authenticated_at,
+                    ),
+                    current_password=payload.current_password.get_secret_value(),
+                    new_password=payload.new_password.get_secret_value(),
+                    correlation_id=request.state.correlation_id,
+                )
+            )
+        except RecentAuthenticationRequiredError as error:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Recent authentication is required",
+            ) from error
+        except PasswordChangeRejectedError as error:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Password change failed",
+            ) from error
+        return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+    @app.post(
+        "/api/v1/auth/password-recovery/requests",
+        response_model=PasswordRecoveryRequestResponse,
+        status_code=status.HTTP_202_ACCEPTED,
+        tags=["authentication"],
+    )
+    async def request_password_recovery(
+        payload: PasswordRecoveryRequest, request: Request
+    ) -> PasswordRecoveryRequestResponse:
+        await enforce_auth_rate_limit(request, scope="auth.password_recovery.request")
+        if password_recovery_request_use_case is None:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Password recovery is unavailable",
+            )
+        await password_recovery_request_use_case.execute(
+            RequestPasswordRecoveryCommand(
+                email=str(payload.email),
+                correlation_id=request.state.correlation_id,
+            )
+        )
+        return PasswordRecoveryRequestResponse()
+
+    async def begin_external_identity_link(
+        *,
+        request: Request,
+        provider: LoginIdentityProvider,
+        start_use_case: BeginIdentityLink | None,
+        authorization_url: Callable[..., str] | None,
+        provider_label: str,
+    ) -> dict[str, str | int]:
+        actor_id = getattr(request.state, "actor_id", None)
+        if not isinstance(actor_id, UUID):
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied")
+        if start_use_case is None or authorization_url is None:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail=f"{provider_label} identity linking is unavailable",
+            )
+        try:
+            started = await start_use_case.execute(
+                BeginIdentityLinkCommand(
+                    actor_id=actor_id,
+                    provider=provider,
+                    correlation_id=request.state.correlation_id,
+                )
+            )
+            logger.info(
+                "identity.link.authorization_started",
+                extra={
+                    "provider": provider.value,
+                    "actor_id": str(actor_id),
+                    "correlation_id": str(request.state.correlation_id),
+                },
+            )
+            return {
+                "authorization_url": authorization_url(
+                    state=started.state, code_challenge=started.code_challenge
+                ),
+                "expires_in_seconds": started.expires_in_seconds,
+            }
+        except IdentityLinkStartRejectedError as error:
+            logger.warning(
+                "identity.link.authorization_rejected",
+                extra={
+                    "provider": provider.value,
+                    "actor_id": str(actor_id),
+                    "correlation_id": str(request.state.correlation_id),
+                },
+            )
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=f"{provider_label} identity linking failed",
+            ) from error
+
+    @app.post(
+        "/api/v1/auth/password-recovery/completions",
+        status_code=status.HTTP_204_NO_CONTENT,
+        tags=["authentication"],
+    )
+    async def complete_password_recovery(
+        payload: PasswordRecoveryCompletionRequest, request: Request
+    ) -> Response:
+        await enforce_auth_rate_limit(request, scope="auth.password_recovery.complete")
+        if password_recovery_completion_use_case is None:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Password recovery is unavailable",
+            )
+        try:
+            await password_recovery_completion_use_case.execute(
+                CompletePasswordRecoveryCommand(
+                    token=payload.token.get_secret_value(),
+                    new_password=payload.new_password.get_secret_value(),
+                    correlation_id=request.state.correlation_id,
+                )
+            )
+        except PasswordRecoveryCompletionRejectedError as error:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Password recovery failed",
+            ) from error
+        return Response(status_code=status.HTTP_204_NO_CONTENT)
 
     @app.get(
         "/api/v1/organizations/{organization_id}/audit-events",
@@ -397,35 +1226,30 @@ def create_app(
         tags=["identity-links"],
     )
     async def begin_discord_identity_link(request: Request) -> dict[str, str | int]:
-        actor_id = getattr(request.state, "actor_id", None)
-        if not isinstance(actor_id, UUID):
-            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied")
-        if discord_identity_link_start is None or discord_authorization_url is None:
-            raise HTTPException(
-                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-                detail="Discord identity linking is unavailable",
-            )
-        try:
-            started = await discord_identity_link_start.execute(
-                BeginIdentityLinkCommand(
-                    actor_id=actor_id,
-                    provider=LoginIdentityProvider.DISCORD,
-                    correlation_id=request.state.correlation_id,
-                )
-            )
-            return {
-                "authorization_url": discord_authorization_url(
-                    state=started.state, code_challenge=started.code_challenge
-                ),
-                "expires_in_seconds": started.expires_in_seconds,
-            }
-        except IdentityLinkStartRejectedError as error:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN, detail="Discord identity linking failed"
-            ) from error
+        return await begin_external_identity_link(
+            request=request,
+            provider=LoginIdentityProvider.DISCORD,
+            start_use_case=discord_identity_link_start,
+            authorization_url=discord_authorization_url,
+            provider_label="Discord",
+        )
+
+    @app.post(
+        "/api/v1/identity-links/twitch/authorizations",
+        tags=["identity-links"],
+    )
+    async def begin_twitch_identity_link(request: Request) -> dict[str, str | int]:
+        return await begin_external_identity_link(
+            request=request,
+            provider=LoginIdentityProvider.TWITCH,
+            start_use_case=twitch_identity_link_start,
+            authorization_url=twitch_authorization_url,
+            provider_label="Twitch",
+        )
 
     @app.post("/api/v1/auth/discord/authorizations", tags=["authentication"])
     async def begin_discord_oauth_login(request: Request) -> dict[str, str | int]:
+        await enforce_auth_rate_limit(request, scope="auth.oauth.start")
         if discord_login_start is None or discord_authorization_url is None:
             raise HTTPException(
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
@@ -448,11 +1272,10 @@ def create_app(
             "expires_in_seconds": started.expires_in_seconds,
         }
 
-    @app.get(
-        "/api/v1/identity-links/discord/callback",
-        tags=["identity-links"],
-    )
-    async def complete_discord_identity_link(code: str, state: str, request: Request) -> Response:
+    @app.get("/api/v1/auth/discord/callback", tags=["authentication"])
+    @app.get("/api/v1/identity-links/discord/callback", tags=["identity-links"])
+    async def complete_discord_oauth_callback(code: str, state: str, request: Request) -> Response:
+        await enforce_auth_rate_limit(request, scope="auth.oauth.callback")
         if discord_login_complete is not None:
             try:
                 issued_session = await discord_login_complete.execute(
@@ -481,12 +1304,104 @@ def create_app(
                     correlation_id=request.state.correlation_id,
                 )
             )
+            logger.info(
+                "identity.link.callback_completed",
+                extra={
+                    "provider": LoginIdentityProvider.DISCORD.value,
+                    "correlation_id": str(request.state.correlation_id),
+                },
+            )
         except IdentityLinkCompletionRejectedError as error:
+            logger.warning(
+                "identity.link.callback_rejected",
+                extra={
+                    "provider": LoginIdentityProvider.DISCORD.value,
+                    "correlation_id": str(request.state.correlation_id),
+                },
+            )
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Discord identity linking failed",
             ) from error
         return {"linked": True}
+
+    @app.get("/api/v1/auth/twitch/callback", tags=["identity-links"])
+    @app.get("/api/v1/identity-links/twitch/callback", tags=["identity-links"])
+    async def complete_twitch_identity_link_callback(
+        code: str, state: str, request: Request
+    ) -> dict[str, bool]:
+        await enforce_auth_rate_limit(request, scope="auth.oauth.callback")
+        if twitch_identity_link_complete is None:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Twitch identity linking is unavailable",
+            )
+        try:
+            await twitch_identity_link_complete.execute(
+                CompleteIdentityLinkCommand(
+                    provider=LoginIdentityProvider.TWITCH,
+                    state=state,
+                    authorization_code=code,
+                    correlation_id=request.state.correlation_id,
+                )
+            )
+            logger.info(
+                "identity.link.callback_completed",
+                extra={
+                    "provider": LoginIdentityProvider.TWITCH.value,
+                    "correlation_id": str(request.state.correlation_id),
+                },
+            )
+        except IdentityLinkCompletionRejectedError as error:
+            logger.warning(
+                "identity.link.callback_rejected",
+                extra={
+                    "provider": LoginIdentityProvider.TWITCH.value,
+                    "correlation_id": str(request.state.correlation_id),
+                },
+            )
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Twitch identity linking failed",
+            ) from error
+        return {"linked": True}
+
+    @app.get(
+        "/api/v1/organizations",
+        response_model=OrganizationListResponse,
+        tags=["organizations"],
+    )
+    async def list_organizations(request: Request) -> OrganizationListResponse:
+        actor_id = getattr(request.state, "actor_id", None)
+        if not isinstance(actor_id, UUID):
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied")
+        if organization_list_use_case is None:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Organization listing is unavailable",
+            )
+        try:
+            profiles = await organization_list_use_case.execute(
+                ListOrganizationsCommand(
+                    actor_id=actor_id,
+                    correlation_id=request.state.correlation_id,
+                )
+            )
+        except OrganizationListRejectedError as error:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN, detail="Access denied"
+            ) from error
+        return OrganizationListResponse(
+            items=[
+                OrganizationListItemResponse(
+                    organization=OrganizationResponse.model_validate(
+                        profile.organization, from_attributes=True
+                    ),
+                    membership=_membership_response(profile.membership),
+                )
+                for profile in profiles
+            ]
+        )
 
     @app.post(
         "/api/v1/organizations",
@@ -518,6 +1433,142 @@ def create_app(
                 status_code=status.HTTP_403_FORBIDDEN, detail="Organization creation failed"
             ) from error
         return OrganizationResponse.model_validate(organization, from_attributes=True)
+
+    @app.get(
+        "/api/v1/organizations/{organization_id}/members",
+        response_model=OrganizationMemberListResponse,
+        tags=["organization-members"],
+    )
+    async def list_organization_members(
+        organization_id: UUID, request: Request
+    ) -> OrganizationMemberListResponse:
+        actor_id = getattr(request.state, "actor_id", None)
+        if not isinstance(actor_id, UUID):
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied")
+        if organization_members_use_case is None:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Organization members are unavailable",
+            )
+        try:
+            members = await organization_members_use_case.execute(
+                ListOrganizationMembersCommand(
+                    actor_id=actor_id,
+                    organization_id=organization_id,
+                    correlation_id=request.state.correlation_id,
+                )
+            )
+        except OrganizationMemberManagementRejectedError as error:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN, detail="Access denied"
+            ) from error
+        return OrganizationMemberListResponse(
+            items=[_membership_response(member) for member in members]
+        )
+
+    @app.post(
+        "/api/v1/organizations/{organization_id}/members",
+        response_model=OrganizationMembershipResponse,
+        status_code=status.HTTP_201_CREATED,
+        tags=["organization-members"],
+    )
+    async def add_organization_member(
+        organization_id: UUID, payload: OrganizationMemberCreateRequest, request: Request
+    ) -> OrganizationMembershipResponse:
+        actor_id = getattr(request.state, "actor_id", None)
+        if not isinstance(actor_id, UUID):
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied")
+        if organization_member_add_use_case is None:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Organization member creation is unavailable",
+            )
+        try:
+            membership = await organization_member_add_use_case.execute(
+                AddOrganizationMemberCommand(
+                    actor_id=actor_id,
+                    organization_id=organization_id,
+                    email=str(payload.email),
+                    role=payload.role,
+                    resource_scopes=_scope_requests_to_domain(payload.resource_scopes),
+                    correlation_id=request.state.correlation_id,
+                )
+            )
+        except OrganizationMemberManagementRejectedError as error:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Organization member creation failed",
+            ) from error
+        return _membership_response(membership)
+
+    @app.put(
+        "/api/v1/organizations/{organization_id}/members/{user_id}",
+        response_model=OrganizationMembershipResponse,
+        tags=["organization-members"],
+    )
+    async def update_organization_member(
+        organization_id: UUID,
+        user_id: UUID,
+        payload: OrganizationMemberUpdateRequest,
+        request: Request,
+    ) -> OrganizationMembershipResponse:
+        actor_id = getattr(request.state, "actor_id", None)
+        if not isinstance(actor_id, UUID):
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied")
+        if organization_member_update_use_case is None:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Organization member update is unavailable",
+            )
+        try:
+            membership = await organization_member_update_use_case.execute(
+                UpdateOrganizationMemberCommand(
+                    actor_id=actor_id,
+                    organization_id=organization_id,
+                    user_id=user_id,
+                    role=payload.role,
+                    resource_scopes=_scope_requests_to_domain(payload.resource_scopes),
+                    correlation_id=request.state.correlation_id,
+                )
+            )
+        except OrganizationMemberManagementRejectedError as error:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Organization member update failed",
+            ) from error
+        return _membership_response(membership)
+
+    @app.delete(
+        "/api/v1/organizations/{organization_id}/members/{user_id}",
+        status_code=status.HTTP_204_NO_CONTENT,
+        tags=["organization-members"],
+    )
+    async def remove_organization_member(
+        organization_id: UUID, user_id: UUID, request: Request
+    ) -> Response:
+        actor_id = getattr(request.state, "actor_id", None)
+        if not isinstance(actor_id, UUID):
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied")
+        if organization_member_remove_use_case is None:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Organization member removal is unavailable",
+            )
+        try:
+            await organization_member_remove_use_case.execute(
+                RemoveOrganizationMemberCommand(
+                    actor_id=actor_id,
+                    organization_id=organization_id,
+                    user_id=user_id,
+                    correlation_id=request.state.correlation_id,
+                )
+            )
+        except OrganizationMemberManagementRejectedError as error:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Organization member removal failed",
+            ) from error
+        return Response(status_code=status.HTTP_204_NO_CONTENT)
 
     @app.post(
         "/api/v1/organizations/{organization_id}/platform-connections",
@@ -556,7 +1607,7 @@ def create_app(
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
                 detail="Platform control service is unavailable",
             ) from error
-        return PlatformConnectionResponse.model_validate(connection, from_attributes=True)
+        return _platform_connection_response(connection)
 
     @app.get(
         "/api/v1/organizations/{organization_id}/platform-connections",
@@ -590,10 +1641,88 @@ def create_app(
             ) from error
         return PlatformConnectionListResponse(
             items=[
-                PlatformConnectionResponse.model_validate(connection, from_attributes=True)
+                _platform_connection_response(connection)
                 for connection in page.items
             ],
             next_cursor=page.next_cursor,
+        )
+
+    async def run_platform_connection_lifecycle(
+        *,
+        organization_id: UUID,
+        connection_id: UUID,
+        action: PlatformConnectionLifecycleAction,
+        request: Request,
+    ) -> PlatformConnectionResponse:
+        actor_id = getattr(request.state, "actor_id", None)
+        if not isinstance(actor_id, UUID):
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied")
+        if platform_connection_lifecycle_use_case is None:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Platform connection lifecycle is unavailable",
+            )
+        try:
+            connection = await platform_connection_lifecycle_use_case.execute(
+                ManagePlatformConnectionLifecycleCommand(
+                    actor_id=actor_id,
+                    organization_id=organization_id,
+                    connection_id=connection_id,
+                    action=action,
+                    correlation_id=request.state.correlation_id,
+                    idempotency_key=request.headers.get("Idempotency-Key"),
+                )
+            )
+        except PlatformConnectionLifecycleRejectedError as error:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Platform connection lifecycle action failed",
+            ) from error
+        return _platform_connection_response(connection)
+
+    @app.post(
+        "/api/v1/organizations/{organization_id}/platform-connections/{connection_id}/reauthorizations",
+        response_model=PlatformConnectionResponse,
+        tags=["platform-connections"],
+    )
+    async def reauthorize_platform_connection(
+        organization_id: UUID, connection_id: UUID, request: Request
+    ) -> PlatformConnectionResponse:
+        return await run_platform_connection_lifecycle(
+            organization_id=organization_id,
+            connection_id=connection_id,
+            action=PlatformConnectionLifecycleAction.REAUTHORIZE,
+            request=request,
+        )
+
+    @app.post(
+        "/api/v1/organizations/{organization_id}/platform-connections/{connection_id}/revocations",
+        response_model=PlatformConnectionResponse,
+        tags=["platform-connections"],
+    )
+    async def revoke_platform_connection(
+        organization_id: UUID, connection_id: UUID, request: Request
+    ) -> PlatformConnectionResponse:
+        return await run_platform_connection_lifecycle(
+            organization_id=organization_id,
+            connection_id=connection_id,
+            action=PlatformConnectionLifecycleAction.REVOKE,
+            request=request,
+        )
+
+    @app.delete(
+        "/api/v1/organizations/{organization_id}/platform-connections/{connection_id}",
+        response_model=PlatformConnectionResponse,
+        tags=["platform-connections"],
+    )
+    async def disconnect_platform_connection(
+        organization_id: UUID, connection_id: UUID, request: Request
+    ) -> PlatformConnectionResponse:
+        return await run_platform_connection_lifecycle(
+            organization_id=organization_id,
+            connection_id=connection_id,
+            action=PlatformConnectionLifecycleAction.DISCONNECT,
+            request=request,
         )
 
     @app.post(
@@ -605,6 +1734,7 @@ def create_app(
     async def register_email_password(
         payload: EmailPasswordRegistrationRequest, request: Request
     ) -> EmailPasswordRegistrationResponse:
+        await enforce_auth_rate_limit(request, scope="auth.registration")
         if registration_use_case is None:
             raise HTTPException(
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
@@ -619,8 +1749,14 @@ def create_app(
                     correlation_id=request.state.correlation_id,
                 )
             )
-        except RegistrationRejectedError:
-            pass
+        except RegistrationRejectedError as error:
+            logger.info(
+                "auth.email_password_registration.rejected",
+                extra={
+                    "correlation_id": str(request.state.correlation_id),
+                    "error_type": type(error).__name__,
+                },
+            )
         return EmailPasswordRegistrationResponse()
 
     @app.post(
@@ -631,6 +1767,7 @@ def create_app(
     async def authenticate_email_password(
         payload: EmailPasswordLoginRequest, request: Request
     ) -> Response:
+        await enforce_auth_rate_limit(request, scope="auth.login")
         if authentication_use_case is None:
             raise HTTPException(
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE,

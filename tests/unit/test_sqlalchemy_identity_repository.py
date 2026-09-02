@@ -7,6 +7,7 @@ import pytest
 from muxivo_console.domain.identity import UserStatus
 from muxivo_console.infrastructure.persistence.identity_repository import (
     SqlAlchemyEmailPasswordAccountReader,
+    SqlAlchemyUserEmailLookupReader,
 )
 
 
@@ -16,6 +17,11 @@ class FakeResult:
 
     def one_or_none(self) -> tuple[object, object, object] | None:
         return self.row
+
+    def scalar_one_or_none(self) -> object | None:
+        if self.row is None:
+            return None
+        return self.row[0]
 
 
 class FakeSession(AbstractAsyncContextManager[Self]):
@@ -69,3 +75,16 @@ async def test_missing_or_corrupt_projection_is_rejected_fail_closed() -> None:
     assert missing is None
     assert corrupt_status is None
     assert corrupt_hash is None
+
+
+@pytest.mark.asyncio
+async def test_resolves_active_user_id_by_email_lookup_hash() -> None:
+    user_id = uuid4()
+    database_session = FakeSession((user_id, "active", "$argon2id$stored-hash"))
+
+    resolved_user_id = await SqlAlchemyUserEmailLookupReader(
+        lambda: database_session
+    ).find_active_user_id_by_email_lookup_hash(email_lookup_hash="a" * 64)
+
+    assert resolved_user_id == user_id
+    assert database_session.statement is not None

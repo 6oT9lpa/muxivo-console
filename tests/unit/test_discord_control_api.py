@@ -12,9 +12,12 @@ from muxivo_console.domain.ai_moderation_policy import (
 )
 from muxivo_console.domain.authorization import AuthorizationAction, AuthorizationResource
 from muxivo_console.domain.channel_purposes import ChannelPurpose
+from muxivo_console.domain.connection_reconciliation import ConnectionReconciliationReason
+from muxivo_console.domain.connections import ConnectionStatus, PlatformConnection
 from muxivo_console.domain.welcome import PlatformWelcomeSettings
 from muxivo_console.infrastructure.discord_control_api import (
     DiscordControlApiCatalog,
+    DiscordPlatformConnectionReconciliationProbe,
     DiscordPlatformConnectionVerifier,
     HmacControlAssertionIssuer,
 )
@@ -852,3 +855,83 @@ async def test_discord_verifier_rejects_unlinked_console_user_without_http_call(
     )
 
     assert verified is False
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("reason", "target_status"),
+    (
+        ("token_expired", "reauth_required"),
+        ("scopes_missing", "reauth_required"),
+        ("preflight_failed", "degraded"),
+    ),
+)
+async def test_discord_reconciliation_probe_maps_control_decision(
+    reason: str,
+    target_status: str,
+) -> None:
+    system_actor_id, organization_id, correlation_id = uuid4(), uuid4(), uuid4()
+    received_authorization: str | None = None
+    connection = PlatformConnection(
+        id=uuid4(),
+        organization_id=organization_id,
+        platform=Platform.DISCORD,
+        external_resource_id="123456789012345678",
+        status=ConnectionStatus.ACTIVE,
+    )
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        nonlocal received_authorization
+        received_authorization = request.headers["Authorization"]
+        assert request.url.path == (
+            f"/control/v1/organizations/{organization_id}/connections/"
+            "123456789012345678/reconciliation"
+        )
+        return httpx.Response(200, json={"target_status": target_status, "reason": reason})
+
+    probe = DiscordPlatformConnectionReconciliationProbe(
+        "http://discord-control.test",
+        assertion_issuer(),
+        system_actor_id=system_actor_id,
+        transport=httpx.MockTransport(handler),
+        allow_insecure_http=True,
+    )
+
+    decision = await probe.inspect_connection(
+        connection=connection,
+        correlation_id=correlation_id,
+    )
+
+    assert decision.target_status is ConnectionStatus(target_status)
+    assert decision.reason is ConnectionReconciliationReason(reason)
+    assert received_authorization is not None
+    claims = decode_claims(received_authorization.removeprefix("Bearer "))
+    assert claims["resource"] == "console.platform_connections"
+    assert claims["action"] == "read"
+    assert claims["sub"] == str(system_actor_id)
+    assert claims["platform_resource_id"] == "123456789012345678"
+
+
+@pytest.mark.asyncio
+async def test_discord_reconciliation_probe_rejects_invalid_control_payload() -> None:
+    probe = DiscordPlatformConnectionReconciliationProbe(
+        "http://discord-control.test",
+        assertion_issuer(),
+        system_actor_id=uuid4(),
+        transport=httpx.MockTransport(
+            lambda _: httpx.Response(200, json={"target_status": "active"})
+        ),
+        allow_insecure_http=True,
+    )
+
+    with pytest.raises(PlatformControlUnavailableError, match="reconciliation decision"):
+        await probe.inspect_connection(
+            connection=PlatformConnection(
+                id=uuid4(),
+                organization_id=uuid4(),
+                platform=Platform.DISCORD,
+                external_resource_id="123456789012345678",
+                status=ConnectionStatus.ACTIVE,
+            ),
+            correlation_id=uuid4(),
+        )

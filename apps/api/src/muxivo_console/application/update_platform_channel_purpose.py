@@ -52,7 +52,7 @@ class UpdatePlatformChannelPurpose:
         if (
             connection is None
             or connection.platform is not Platform.DISCORD
-            or connection.status not in {ConnectionStatus.ACTIVE, ConnectionStatus.DEGRADED}
+            or connection.status is not ConnectionStatus.ACTIVE
         ):
             raise PlatformHealthUnavailableError("No usable platform connection exists.")
         return await self.purposes.update_channel_purpose_for_connection(

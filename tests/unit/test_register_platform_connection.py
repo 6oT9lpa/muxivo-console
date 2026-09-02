@@ -4,6 +4,7 @@ from uuid import UUID, uuid4
 import pytest
 from muxivo_console.application.register_platform_connection import (
     PlatformConnectionRegistrationRejectedError,
+    PlatformConnectionVerifierRouter,
     RegisterPlatformConnection,
     RegisterPlatformConnectionCommand,
 )
@@ -35,9 +36,11 @@ class Verifier:
     def __init__(self, verified: bool) -> None:
         self.verified = verified
         self.arguments = None
+        self.call_count = 0
 
     async def verify_registration(self, **arguments) -> bool:
         self.arguments = arguments
+        self.call_count += 1
         return self.verified
 
 
@@ -117,3 +120,45 @@ async def test_does_not_write_connection_without_platform_native_verification() 
         await use_case.execute(command())
 
     assert writer.connection is None
+
+
+@pytest.mark.asyncio
+async def test_verifier_router_dispatches_to_the_requested_platform_verifier() -> None:
+    requested = command()
+    discord_verifier = Verifier(True)
+    twitch_verifier = Verifier(True)
+    router = PlatformConnectionVerifierRouter(
+        {Platform.DISCORD: discord_verifier, Platform.TWITCH: twitch_verifier}
+    )
+
+    verified = await router.verify_registration(
+        actor_id=requested.actor_id,
+        organization_id=requested.organization_id,
+        platform=Platform.TWITCH,
+        external_resource_id="broadcaster-123",
+        correlation_id=requested.correlation_id,
+    )
+
+    assert verified is True
+    assert twitch_verifier.call_count == 1
+    assert twitch_verifier.arguments["platform"] is Platform.TWITCH
+    assert twitch_verifier.arguments["external_resource_id"] == "broadcaster-123"
+    assert discord_verifier.call_count == 0
+
+
+@pytest.mark.asyncio
+async def test_verifier_router_rejects_platforms_without_configured_verifier() -> None:
+    requested = command()
+    discord_verifier = Verifier(True)
+    router = PlatformConnectionVerifierRouter({Platform.DISCORD: discord_verifier})
+
+    verified = await router.verify_registration(
+        actor_id=requested.actor_id,
+        organization_id=requested.organization_id,
+        platform=Platform.TELEGRAM,
+        external_resource_id="telegram-resource",
+        correlation_id=requested.correlation_id,
+    )
+
+    assert verified is False
+    assert discord_verifier.call_count == 0

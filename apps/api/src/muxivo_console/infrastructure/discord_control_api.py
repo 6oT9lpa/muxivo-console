@@ -36,6 +36,11 @@ from muxivo_console.domain.authorization import AuthorizationAction, Authorizati
 from muxivo_console.domain.bot_settings import PlatformBotSettings
 from muxivo_console.domain.channel_purposes import ChannelPurpose, PlatformChannelPurposes
 from muxivo_console.domain.channels import ChannelKind, PlatformChannel, PlatformChannelCatalog
+from muxivo_console.domain.connection_reconciliation import (
+    ConnectionReconciliationDecision,
+    ConnectionReconciliationReason,
+)
+from muxivo_console.domain.connections import ConnectionStatus, PlatformConnection
 from muxivo_console.domain.dashboard import PlatformDashboardSummary
 from muxivo_console.domain.health import HealthSignal, HealthStatus, PlatformHealth
 from muxivo_console.domain.identity import LoginIdentityProvider
@@ -731,6 +736,57 @@ class DiscordPlatformConnectionVerifier:
         return payload["verified"]
 
 
+@dataclass(frozen=True, slots=True)
+class DiscordPlatformConnectionReconciliationProbe:
+    """Ask Discord Control API for a secret-free lifecycle reconciliation decision."""
+
+    base_url: str
+    assertions: HmacControlAssertionIssuer
+    system_actor_id: UUID
+    timeout: float = 5.0
+    transport: httpx.AsyncBaseTransport | None = None
+    allow_insecure_http: bool = False
+
+    def __post_init__(self) -> None:
+        _validate_control_base_url(self.base_url, self.allow_insecure_http)
+
+    async def inspect_connection(
+        self, *, connection: PlatformConnection, correlation_id: UUID
+    ) -> ConnectionReconciliationDecision:
+        if connection.platform is not Platform.DISCORD:
+            return ConnectionReconciliationDecision(
+                target_status=connection.status,
+                reason=ConnectionReconciliationReason.HEALTHY,
+            )
+        assertion = self.assertions.issue(
+            actor_id=self.system_actor_id,
+            organization_id=connection.organization_id,
+            resource=AuthorizationResource.PLATFORM_CONNECTIONS,
+            action=AuthorizationAction.READ,
+            correlation_id=correlation_id,
+            platform_resource_id=connection.external_resource_id,
+        )
+        try:
+            async with httpx.AsyncClient(
+                base_url=self.base_url,
+                timeout=self.timeout,
+                transport=self.transport,
+            ) as client:
+                response = await client.get(
+                    "/control/v1/organizations/"
+                    f"{connection.organization_id}/connections/"
+                    f"{connection.external_resource_id}/reconciliation",
+                    headers={"Authorization": f"Bearer {assertion}"},
+                )
+                response.raise_for_status()
+                payload = response.json()
+        except (httpx.HTTPError, ValueError, json.JSONDecodeError) as error:
+            raise PlatformControlUnavailableError(
+                "Discord Control API connection reconciliation request failed."
+            ) from error
+        return _parse_connection_reconciliation_decision(payload)
+
+
 def _parse_discord_modules(payload: Any) -> tuple[ControlModule, ...]:
     if not isinstance(payload, dict) or not isinstance(payload.get("items"), list):
         raise PlatformControlUnavailableError(
@@ -799,6 +855,28 @@ def _parse_discord_health(payload: Any) -> PlatformHealth:
             "Discord Control API returned an invalid health signal."
         ) from error
     return PlatformHealth(platform=Platform.DISCORD, signals=tuple(signals))
+
+
+def _parse_connection_reconciliation_decision(
+    payload: Any,
+) -> ConnectionReconciliationDecision:
+    if not isinstance(payload, dict):
+        raise PlatformControlUnavailableError(
+            "Discord Control API returned an invalid connection reconciliation payload."
+        )
+    try:
+        target_status = payload["target_status"]
+        reason = payload["reason"]
+        if not isinstance(target_status, str) or not isinstance(reason, str):
+            raise ValueError("Connection reconciliation fields must be strings.")
+        return ConnectionReconciliationDecision(
+            target_status=ConnectionStatus(target_status),
+            reason=ConnectionReconciliationReason(reason),
+        )
+    except (KeyError, TypeError, ValueError) as error:
+        raise PlatformControlUnavailableError(
+            "Discord Control API returned an invalid connection reconciliation decision."
+        ) from error
 
 
 def _parse_discord_dashboard(payload: Any) -> PlatformDashboardSummary:

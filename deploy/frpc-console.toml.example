@@ -1,0 +1,11 @@
+# Merge this proxy block into the existing /etc/frp/frpc.toml.
+# Keep the existing serverAddr, serverPort, TLS and authentication settings.
+# The block is intentionally separate so the Discord Activity tunnel is not
+# replaced or reconfigured.
+
+[[proxies]]
+name = "muxivo-console-api"
+type = "tcp"
+localIP = "127.0.0.1"
+localPort = 8010
+remotePort = 18081

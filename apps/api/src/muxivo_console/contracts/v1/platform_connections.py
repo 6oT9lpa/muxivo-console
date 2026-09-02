@@ -1,3 +1,4 @@
+from typing import Literal
 from uuid import UUID
 
 from pydantic import BaseModel, Field, field_validator
@@ -19,12 +20,20 @@ class PlatformConnectionCreateRequest(BaseModel):
         return normalized
 
 
+class PlatformConnectionGrantedScopeResponse(BaseModel):
+    key: str
+    display_name: str
+    description: str
+    status: Literal["pending", "granted", "requires_reauthorization", "revoked"]
+
+
 class PlatformConnectionResponse(BaseModel):
     id: UUID
     organization_id: UUID
     platform: Platform
     external_resource_id: str
     status: ConnectionStatus
+    granted_scopes: list[PlatformConnectionGrantedScopeResponse] = Field(default_factory=list)
 
 
 class PlatformConnectionListResponse(BaseModel):

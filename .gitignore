@@ -1,9 +1,11 @@
 .venv/
 .dev/
+.codegraph/
 __pycache__/
 .pytest_cache/
 *.py[cod]
 *.egg-info/
 .tmp-*.sql
+.tmp-*.tgz
 node_modules/
 dist/

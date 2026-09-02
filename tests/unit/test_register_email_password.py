@@ -64,7 +64,7 @@ def command() -> RegisterEmailPasswordCommand:
 
 
 @pytest.mark.asyncio
-async def test_registration_creates_pending_user_identity_and_secret_free_audit_event() -> None:
+async def test_registration_creates_active_user_identity_and_secret_free_audit_event() -> None:
     ids = [uuid4() for _ in range(5)]
     writer = RegistrationWriter(result=True)
     use_case = RegisterEmailPassword(
@@ -74,7 +74,7 @@ async def test_registration_creates_pending_user_identity_and_secret_free_audit_
     user_id = await use_case.execute(command())
 
     assert user_id == writer.registration.user.id
-    assert writer.registration.user.status is UserStatus.PENDING_VERIFICATION
+    assert writer.registration.user.status is UserStatus.ACTIVE
     assert writer.registration.identity.provider_subject == "a" * 64
     assert writer.registration.email.ciphertext == b"encrypted:creator@example.com"
     assert writer.registration.password_credential.password_hash == "$argon2id$test-hash"

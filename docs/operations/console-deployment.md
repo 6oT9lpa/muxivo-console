@@ -1,0 +1,180 @@
+# Muxivo Console deployment runbook
+
+This runbook is for the first isolated deployment of Muxivo Console on the
+existing Muxivo host pair. It deliberately leaves the current Discord Activity
+and its runtime logic untouched.
+
+## Target topology
+
+```text
+Browser
+  -> https://console.muxivo.pro
+  -> VPS Nginx (138.124.119.238)
+  -> FRP remote port 18081
+  -> local FRP client
+  -> 127.0.0.1:8010 Muxivo Console API
+  -> 127.0.0.1:5432 dedicated muxivo_console database
+```
+
+The existing public `muxivo.pro` Activity remains on its current Nginx route and
+FRP mapping. Console must not reuse its port or its deployment directory.
+
+## Prerequisites before a public rollout
+
+- Add `console.muxivo.pro A 138.124.119.238` in the REG.RU hosting DNS panel.
+- Do not change the existing `muxivo.pro` or `www` records and do not change
+  the existing REG.RU MX records.
+- Issue a separate Let's Encrypt certificate for `console.muxivo.pro`.
+- Choose and provision one approved secret manager. The production settings
+  reject `.env`, `dotenv`, local files and in-memory rate limiting as a source
+  of truth outside development.
+- Provision Redis for the shared rate-limit backend.
+- Provision the real Discord and Twitch OAuth applications and the signed
+  Discord/Twitch Control API endpoints.
+- Decide whether `security@muxivo.pro` is the approved recovery sender.
+
+The DNS and certificate changes are external mutations. Confirm the exact DNS
+record immediately before applying it, because the current root site must remain
+unchanged.
+
+## SMTP.BZ configuration
+
+The `muxivo.pro` domain is already verified in the SMTP.BZ panel: DKIM, SPF and
+the statistics CNAME are present. Keep the existing root SPF policy intact and
+do not replace the REG.RU MX records. SMTP.BZ's connection profile for this
+domain uses:
+
+- host: `connect.smtp.bz`;
+- STARTTLS port: `587` (the provider also documents `2525` and SSL alternatives);
+- authenticated SMTP login from the SMTP.BZ panel;
+- sender address inside the verified `muxivo.pro` domain.
+
+References: [SMTP.BZ quick start](https://docs.smtp.bz/), [SMTP.BZ FAQ](https://smtp.bz/faq).
+
+The password is entered only into the secret manager or the root-protected
+credential file during an approved deployment action. It must not appear in Git,
+PowerShell history, shell command arguments, CI output, application logs or
+screenshots. `scripts/smtp_probe.py` checks TCP/TLS/authentication and never sends
+a message. A real recovery email is a separate delivery test and requires an
+explicit recipient.
+
+## Safe rollout order
+
+### 1. Back up the current host state
+
+On the local host, create a timestamped, root-only backup containing the
+PostgreSQL metadata needed for the Console database, the current FRP config and
+the current service files. On the VPS, back up the Nginx site files, the FRP
+server config and the Let's Encrypt renewal metadata. Never overwrite the
+existing Activity files.
+
+Record the backup path and the current service versions in the deployment log.
+
+### 2. Provision isolated local resources
+
+Create a dedicated Linux user and group named `muxivo-console`, a root-owned
+application directory `/opt/muxivo-console` and a root-only configuration
+directory `/etc/muxivo-console`. Create a dedicated PostgreSQL role and database
+named `muxivo_console`; grant that role only the privileges needed for that
+database. Do not use the existing `omnibot`, `ai-moder` or platform database
+roles.
+
+Install Python 3.12 dependencies into `/opt/muxivo-console/venv`. Copy only the
+API source, migrations, `pyproject.toml` and `alembic.ini` needed by the service.
+Install the built Vue output at `/srv/muxivo-console/web`.
+
+### 3. Load production configuration securely
+
+Use `deploy/console.env.example` as the variable checklist. The real values
+must be supplied by the selected secret manager, including the database URL,
+encryption keys, session pepper, Control API signing keys, OAuth credentials,
+Redis URL and SMTP password. The systemd unit consumes a root-owned credential
+file through `LoadCredential`; the unit does not make the file part of the
+repository or the frontend bundle.
+
+Set `MUXIVO_CONSOLE_SECRET_SOURCE` to the actual approved manager, not to a
+placeholder. If no manager has been selected, the public service must remain
+stopped rather than weakening the production guard.
+
+### 4. Apply the API service
+
+Install `deploy/muxivo-console-api.service` as a systemd unit. Its pre-start
+step runs `alembic upgrade head`; only after migrations succeed does Uvicorn
+listen on `127.0.0.1:8010`. Enable the service after configuration validation,
+then inspect its structured journal entries for:
+
+- `application.starting` and `application.started`;
+- each `background_service.started`;
+- migration success from the service pre-start command;
+- `http.request.started` and `http.request.completed` without secret fields.
+
+Check `http://127.0.0.1:8010/healthz` locally before exposing the route through
+FRP.
+
+### 5. Add only the new FRP proxy
+
+Merge the `[[proxies]]` block from
+`deploy/frpc-console.toml.example` into the existing local `/etc/frp/frpc.toml`.
+Keep all existing server, TLS and authentication values and the existing
+`omnibot-activity` proxy. Validate the complete TOML before restarting the
+existing `frpc.service`; then verify that the new remote port is listening on
+the VPS. A failed validation must not trigger a restart.
+
+### 6. Provision the Console virtual host
+
+Install `nginx-console-bootstrap.conf.example` as a temporary site, validate with
+`nginx -t`, and reload Nginx. After the DNS record resolves, issue the separate
+certificate with the webroot `/srv/muxivo-console/web`. Replace the temporary
+site with `nginx-console.conf.example`, validate again and reload. Verify that
+the original `muxivo.pro` server still serves the Discord Activity.
+
+The final host serves static frontend assets from
+`/srv/muxivo-console/web`, proxies only `/api/` and `/healthz` to FRP `18081`,
+and does not expose `/metrics` publicly.
+
+### 7. Verify end to end
+
+Run the checks in this order:
+
+1. `nginx -t` and HTTPS certificate hostname validation.
+2. `curl -fsS https://console.muxivo.pro/healthz` and security headers.
+3. Browser sign-in, organization creation, organization switcher and empty
+   state.
+4. Organization member invite, allowed role/scope changes, forbidden
+   privilege escalation and removal audit event.
+5. Session list, recent authentication, current/all-session revoke, password
+   change and identity unlink protection.
+6. Discord connection preflight/status/revoke flow without exposing a platform
+   token in browser responses or logs.
+7. SMTP non-delivery probe using `scripts/smtp_probe.py`.
+8. One password-recovery request to the explicitly approved test mailbox, then
+   verify that the message arrives and that no token appears in logs.
+9. `/metrics` from the monitoring network only, followed by the drafted alert
+   rules.
+
+If a check fails, stop at the failed boundary, preserve the journal and browser
+correlation ID, and do not roll back unrelated Activity services.
+
+## Rollback
+
+For an API-only failure, stop and disable only `muxivo-console-api.service`,
+remove only the new `muxivo-console-api` FRP proxy and restore the new Nginx site
+from its timestamped backup. Do not remove the existing Activity proxy or root
+Nginx virtual host. Database rollback requires the documented backup/restore
+drill and a reviewed migration rollback; it is not an ad-hoc destructive SQL
+operation.
+
+## Current deployment blockers
+
+The repository-side implementation and local UI checks are ready, but a truthful
+public deployment still requires external values and services:
+
+- the `console.muxivo.pro` DNS record and certificate;
+- a selected secret manager;
+- a dedicated production database credential;
+- Redis;
+- real Discord/Twitch OAuth credentials;
+- a reachable signed Discord Control API and Twitch Control API;
+- SMTP.BZ login/password and an explicitly approved delivery mailbox;
+- monitoring backend, backup/restore drill and legal approval of the policy and
+  terms drafts.

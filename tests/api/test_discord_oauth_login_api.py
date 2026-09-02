@@ -56,7 +56,7 @@ def test_discord_oauth_callback_sets_first_party_cookies_and_redirects_to_consol
     client = TestClient(create_app(discord_login_complete=complete))
 
     response = client.get(
-        "/api/v1/identity-links/discord/callback?code=oauth-code&state=oauth-state",
+        "/api/v1/auth/discord/callback?code=oauth-code&state=oauth-state",
         follow_redirects=False,
     )
 

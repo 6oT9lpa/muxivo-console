@@ -13,6 +13,7 @@ from muxivo_console.infrastructure.persistence.connection_repository import (
 )
 from muxivo_console.infrastructure.persistence.models import (
     AuditEventRecord,
+    PlatformConnectionLifecycleIdempotencyRecord,
     PlatformConnectionRecord,
 )
 from sqlalchemy.exc import IntegrityError
@@ -36,8 +37,9 @@ class FakeTransaction(AbstractAsyncContextManager[None]):
 
 
 class FakeSession(AbstractAsyncContextManager[Self]):
-    def __init__(self, integrity_error: bool = False) -> None:
+    def __init__(self, integrity_error: bool = False, rowcount: int = 1) -> None:
         self.integrity_error = integrity_error
+        self.rowcount = rowcount
         self.records: tuple[object, ...] = ()
         self.transaction = FakeTransaction()
 
@@ -53,9 +55,20 @@ class FakeSession(AbstractAsyncContextManager[Self]):
     def add_all(self, records: tuple[object, ...]) -> None:
         self.records = records
 
+    def add(self, record: object) -> None:
+        self.records = (*self.records, record)
+
+    async def execute(self, _) -> object:
+        return FakeExecuteResult(self.rowcount)
+
     async def flush(self) -> None:
         if self.integrity_error:
             raise IntegrityError("INSERT", {}, Exception("duplicate"))
+
+
+@dataclass(frozen=True, slots=True)
+class FakeExecuteResult:
+    rowcount: int
 
 
 def connection() -> PlatformConnection:
@@ -113,3 +126,28 @@ async def test_conflict_becomes_safe_non_partial_failure() -> None:
 
     assert created is False
     assert database_session.transaction.exc_type is IntegrityError
+
+
+@pytest.mark.asyncio
+async def test_status_update_persists_idempotency_result_and_audit_atomically() -> None:
+    database_session = FakeSession()
+    stored = connection().transition_to(ConnectionStatus.ACTIVE)
+
+    saved = await SqlAlchemyPlatformConnectionWriter(lambda: database_session).update_status(
+        connection=stored,
+        audit_event=audit_event(stored),
+        idempotency_key="retry-1",
+        idempotency_action="reauthorize",
+    )
+
+    assert saved is True
+    assert tuple(type(record) for record in database_session.records) == (
+        PlatformConnectionLifecycleIdempotencyRecord,
+        AuditEventRecord,
+    )
+    idempotency_record = database_session.records[0]
+    assert idempotency_record.organization_id == stored.organization_id
+    assert idempotency_record.connection_id == stored.id
+    assert idempotency_record.idempotency_key == "retry-1"
+    assert idempotency_record.action == "reauthorize"
+    assert idempotency_record.result_status == "active"

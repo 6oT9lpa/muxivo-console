@@ -48,8 +48,9 @@ Examples:
 
 ### Supported identity providers
 
-1. Email: password plus verified-email flow, or passwordless magic link if the
-   product chooses that experience.
+1. Email: password plus recovery/session safety in the Foundation scope.
+   Verified-email UX is a later account-trust milestone, not a prerequisite for
+   first-party Console sign-in.
 2. OIDC/OAuth providers: Twitch, Discord, Google and Yandex ID.
 3. Future enterprise OIDC/SAML providers without changing the user model.
 
@@ -68,8 +69,9 @@ platform refresh tokens.
 - Linking a new login identity requires an already authenticated Muxivo session
   and a fresh authentication challenge for the provider being linked.
 - Removing the final usable login identity is forbidden.
-- Email changes, recovery and sensitive account changes require recent
-  authentication and verified-email confirmation.
+- Recovery and sensitive account changes require recent authentication; future
+  email-address changes should add verified-email confirmation when that
+  account-trust milestone is implemented.
 - A user may link several identities of the same provider only if that becomes
   a product requirement; the initial UI should expose one primary identity per
   provider to reduce confusion.

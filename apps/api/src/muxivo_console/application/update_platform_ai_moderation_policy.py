@@ -64,7 +64,7 @@ class UpdatePlatformAiModerationPolicy:
             connection is None
             or connection.platform is not Platform.DISCORD
             or policy.platform is not connection.platform
-            or connection.status not in {ConnectionStatus.ACTIVE, ConnectionStatus.DEGRADED}
+            or connection.status is not ConnectionStatus.ACTIVE
         ):
             raise PlatformHealthUnavailableError("No usable platform connection exists.")
         try:

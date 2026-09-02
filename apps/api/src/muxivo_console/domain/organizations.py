@@ -24,6 +24,10 @@ class OrganizationRole(StrEnum):
         """Return whether this role can grant a strictly less privileged role."""
         return _ROLE_RANK[self] < _ROLE_RANK[target]
 
+    def supports_scope(self, scope: "MembershipResourceScope") -> bool:
+        """Return whether this role can ever use a resource scope grant."""
+        return _role_supports_pair(self, scope.resource, scope.action)
+
 
 _ROLE_RANK = {
     OrganizationRole.OWNER: 0,
@@ -55,6 +59,7 @@ class MembershipResourceScope:
 
     resource: AuthorizationResource
     action: AuthorizationAction
+    id: UUID | None = None
 
     def allows(self, request: AuthorizationRequest) -> bool:
         return self.resource is request.resource and self.action is request.action
@@ -81,17 +86,33 @@ class OrganizationMembership:
         return any(scope.allows(request) for scope in self.resource_scopes)
 
 
+@dataclass(frozen=True, slots=True)
+class OrganizationMembershipProfile:
+    """Organization plus the current actor's membership, used by the Console switcher."""
+
+    organization: Organization
+    membership: OrganizationMembership
+
+
 def _role_supports(role: OrganizationRole, request: AuthorizationRequest) -> bool:
     """Return the maximum capability of a role before its scopes narrow it."""
-    if request.resource is AuthorizationResource.CONTROL_MODULES:
-        return request.action is AuthorizationAction.READ
-    if request.resource is AuthorizationResource.PLATFORM_CONNECTIONS:
-        return role is OrganizationRole.ADMIN and request.action in {
+    return _role_supports_pair(role, request.resource, request.action)
+
+
+def _role_supports_pair(
+    role: OrganizationRole, resource: AuthorizationResource, action: AuthorizationAction
+) -> bool:
+    if resource is AuthorizationResource.ORGANIZATION_MEMBERS:
+        return role in {OrganizationRole.OWNER, OrganizationRole.ADMIN}
+    if resource is AuthorizationResource.CONTROL_MODULES:
+        return action is AuthorizationAction.READ
+    if resource is AuthorizationResource.PLATFORM_CONNECTIONS:
+        return role is OrganizationRole.ADMIN and action in {
             AuthorizationAction.READ,
             AuthorizationAction.MANAGE,
         }
-    if request.resource is AuthorizationResource.AUDIT_EVENTS:
+    if resource is AuthorizationResource.AUDIT_EVENTS:
         return role in {OrganizationRole.ADMIN, OrganizationRole.ANALYST} and (
-            request.action is AuthorizationAction.READ
+            action is AuthorizationAction.READ
         )
     return False

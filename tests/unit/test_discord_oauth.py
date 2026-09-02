@@ -12,7 +12,7 @@ def client(transport: httpx.AsyncBaseTransport | None = None) -> DiscordOAuthCli
     return DiscordOAuthClient(
         client_id="client-id",
         client_secret="client-secret",
-        redirect_uri="https://console.muxivo.example/api/v1/identity-links/discord/callback",
+        redirect_uri="https://console.muxivo.example/api/v1/auth/discord/callback",
         api_base_url="https://discord.test",
         authorize_url="https://discord.test/oauth2/authorize",
         transport=transport,
@@ -26,7 +26,7 @@ def test_authorization_url_requires_pkce_state_and_only_required_discord_scopes(
 
     assert query == {
         "client_id": ["client-id"],
-        "redirect_uri": ["https://console.muxivo.example/api/v1/identity-links/discord/callback"],
+        "redirect_uri": ["https://console.muxivo.example/api/v1/auth/discord/callback"],
         "response_type": ["code"],
         "scope": ["identify guilds"],
         "state": ["opaque-state"],

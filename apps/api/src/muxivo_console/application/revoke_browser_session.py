@@ -19,9 +19,14 @@ class RevokeBrowserSession:
             user_id=user_id,
             revoked_at=self.clock.now(),
             audit_event=AuditEvent(
-                id=self.identifiers.new(), correlation_id=correlation_id, actor_id=user_id,
-                organization_id=None, action="auth.session_revoked", resource_type="auth_session",
-                resource_id=str(session_id), result="succeeded",
+                id=self.identifiers.new(),
+                correlation_id=correlation_id,
+                actor_id=user_id,
+                organization_id=None,
+                action="auth.session_revoked",
+                resource_type="auth_session",
+                resource_id=str(session_id),
+                result="succeeded",
             ),
         )
         if not revoked:

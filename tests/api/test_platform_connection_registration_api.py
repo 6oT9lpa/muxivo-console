@@ -2,6 +2,9 @@ from uuid import UUID, uuid4
 
 from fastapi.testclient import TestClient
 from muxivo_console.application.list_platform_connections import PlatformConnectionPage
+from muxivo_console.application.manage_platform_connection_lifecycle import (
+    PlatformConnectionLifecycleRejectedError,
+)
 from muxivo_console.application.register_platform_connection import (
     PlatformConnectionRegistrationRejectedError,
 )
@@ -46,6 +49,19 @@ class ConnectionListUseCase:
     async def execute(self, **arguments) -> PlatformConnectionPage:
         self.arguments = arguments
         return self.page
+
+
+class ConnectionLifecycleUseCase:
+    def __init__(self, connection: PlatformConnection, rejects: bool = False) -> None:
+        self.connection = connection
+        self.rejects = rejects
+        self.command = None
+
+    async def execute(self, command):
+        self.command = command
+        if self.rejects:
+            raise PlatformConnectionLifecycleRejectedError("Lifecycle denied.")
+        return self.connection
 
 
 def headers() -> dict[str, str]:
@@ -107,6 +123,25 @@ def test_connection_registration_uses_session_actor_and_neutral_contract() -> No
         "platform": "discord",
         "external_resource_id": "123456789012345678",
         "status": "pending",
+        "granted_scopes": [
+            {
+                "key": "discord.guild.read",
+                "display_name": "Read Discord server metadata",
+                "description": (
+                    "Lets Console show safe aggregate server, channel and health information."
+                ),
+                "status": "pending",
+            },
+            {
+                "key": "discord.guild.manage",
+                "display_name": "Manage Discord server settings",
+                "description": (
+                    "Lets Console request server-side Control API changes after native "
+                    "admin checks."
+                ),
+                "status": "pending",
+            },
+        ],
     }
     assert use_case.command.actor_id == actor_id
     assert use_case.command.organization_id == organization_id
@@ -168,6 +203,26 @@ def test_connection_list_returns_cursor_paginated_neutral_contract() -> None:
                 "platform": "discord",
                 "external_resource_id": "123",
                 "status": "active",
+                "granted_scopes": [
+                    {
+                        "key": "discord.guild.read",
+                        "display_name": "Read Discord server metadata",
+                        "description": (
+                            "Lets Console show safe aggregate server, channel and health "
+                            "information."
+                        ),
+                        "status": "granted",
+                    },
+                    {
+                        "key": "discord.guild.manage",
+                        "display_name": "Manage Discord server settings",
+                        "description": (
+                            "Lets Console request server-side Control API changes after native "
+                            "admin checks."
+                        ),
+                        "status": "granted",
+                    },
+                ],
             }
         ],
         "next_cursor": str(next_cursor),
@@ -178,3 +233,68 @@ def test_connection_list_returns_cursor_paginated_neutral_contract() -> None:
         "after_id": first.id,
         "limit": 20,
     }
+
+
+def test_connection_lifecycle_uses_session_actor_and_idempotency_key() -> None:
+    actor_id, organization_id, connection_id = uuid4(), uuid4(), uuid4()
+    updated = PlatformConnection(
+        id=connection_id,
+        organization_id=organization_id,
+        platform=Platform.DISCORD,
+        external_resource_id="123",
+        status=ConnectionStatus.REAUTH_REQUIRED,
+    )
+    use_case = ConnectionLifecycleUseCase(updated)
+    client = TestClient(
+        create_app(
+            platform_connection_lifecycle_use_case=use_case,
+            session_resolver=SessionResolver(
+                BrowserSessionPrincipal(actor_id, uuid4(), SessionAssuranceLevel.PASSWORD)
+            ),
+        )
+    )
+
+    response = client.post(
+        f"/api/v1/organizations/{organization_id}/platform-connections/{connection_id}/revocations",
+        headers={**headers(), "Idempotency-Key": "retry-1"},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["status"] == "reauth_required"
+    assert response.json()["granted_scopes"][0]["status"] == "requires_reauthorization"
+    assert "access_token" not in response.text
+    assert "refresh_token" not in response.text
+    assert use_case.command.actor_id == actor_id
+    assert use_case.command.organization_id == organization_id
+    assert use_case.command.connection_id == connection_id
+    assert use_case.command.action.value == "revoke"
+    assert use_case.command.idempotency_key == "retry-1"
+
+
+def test_connection_lifecycle_hides_rejection_reason() -> None:
+    actor_id, organization_id, connection_id = uuid4(), uuid4(), uuid4()
+    updated = PlatformConnection(
+        id=connection_id,
+        organization_id=organization_id,
+        platform=Platform.DISCORD,
+        external_resource_id="123",
+        status=ConnectionStatus.DISCONNECTED,
+    )
+    client = TestClient(
+        create_app(
+            platform_connection_lifecycle_use_case=ConnectionLifecycleUseCase(
+                updated, rejects=True
+            ),
+            session_resolver=SessionResolver(
+                BrowserSessionPrincipal(actor_id, uuid4(), SessionAssuranceLevel.PASSWORD)
+            ),
+        )
+    )
+
+    response = client.delete(
+        f"/api/v1/organizations/{organization_id}/platform-connections/{connection_id}",
+        headers=headers(),
+    )
+
+    assert response.status_code == 403
+    assert response.json() == {"detail": "Platform connection lifecycle action failed"}

@@ -11,6 +11,7 @@ from muxivo_console.domain.sessions import AuthSession, SessionAssuranceLevel
 from muxivo_console.infrastructure.persistence.models import AuditEventRecord, AuthSessionRecord
 from muxivo_console.infrastructure.persistence.session_repository import (
     SqlAlchemyAuthSessionReader,
+    SqlAlchemyAuthSessionReauthenticationWriter,
     SqlAlchemyAuthSessionWriter,
 )
 from sqlalchemy.exc import IntegrityError
@@ -34,8 +35,9 @@ class FakeTransaction(AbstractAsyncContextManager[None]):
 
 
 class FakeResult:
-    def __init__(self, record: AuthSessionRecord | None) -> None:
+    def __init__(self, record: AuthSessionRecord | None, rowcount: int = 0) -> None:
         self.record = record
+        self.rowcount = rowcount
 
     def scalar_one_or_none(self) -> AuthSessionRecord | None:
         return self.record
@@ -43,11 +45,17 @@ class FakeResult:
 
 class FakeSession(AbstractAsyncContextManager[Self]):
     def __init__(
-        self, *, record: AuthSessionRecord | None = None, integrity_error: bool = False
+        self,
+        *,
+        record: AuthSessionRecord | None = None,
+        integrity_error: bool = False,
+        rowcount: int = 0,
     ) -> None:
         self.record = record
         self.integrity_error = integrity_error
+        self.rowcount = rowcount
         self.records: tuple[object, ...] = ()
+        self.added_record: object | None = None
         self.transaction = FakeTransaction()
 
     async def __aenter__(self) -> Self:
@@ -67,12 +75,15 @@ class FakeSession(AbstractAsyncContextManager[Self]):
     def add_all(self, records: tuple[object, ...]) -> None:
         self.records = records
 
+    def add(self, record: object) -> None:
+        self.added_record = record
+
     async def flush(self) -> None:
         if self.integrity_error:
             raise IntegrityError("INSERT", {}, Exception("duplicate"))
 
     async def execute(self, statement) -> FakeResult:
-        return FakeResult(self.record)
+        return FakeResult(self.record, self.rowcount)
 
 
 def session() -> AuthSession:
@@ -150,3 +161,33 @@ async def test_reader_maps_valid_stored_session_and_denies_unknown_assurance_lev
 
     assert found == stored
     assert unknown_assurance is None
+
+
+@pytest.mark.asyncio
+async def test_reauthentication_writer_updates_current_session_and_audit() -> None:
+    stored = session()
+    now = datetime(2026, 8, 9, 12, tzinfo=UTC)
+    database_session = FakeSession(rowcount=1)
+    event = AuditEvent(
+        id=uuid4(),
+        correlation_id=uuid4(),
+        actor_id=stored.user_id,
+        organization_id=None,
+        action="auth.session_reauthenticated",
+        resource_type="auth_session",
+        resource_id=str(stored.id),
+        result="succeeded",
+    )
+
+    updated = await SqlAlchemyAuthSessionReauthenticationWriter(
+        lambda: database_session
+    ).reauthenticate(
+        session_id=stored.id,
+        user_id=stored.user_id,
+        authenticated_at=now,
+        audit_event=event,
+    )
+
+    assert updated is True
+    assert isinstance(database_session.added_record, AuditEventRecord)
+    assert database_session.added_record.action == "auth.session_reauthenticated"

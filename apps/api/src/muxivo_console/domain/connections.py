@@ -62,3 +62,17 @@ class PlatformConnection:
             external_resource_id=self.external_resource_id,
             status=target,
         )
+
+
+@dataclass(frozen=True, slots=True)
+class PlatformConnectionLifecycleIdempotencyResult:
+    """Previously persisted result for one lifecycle command retry key."""
+
+    organization_id: UUID
+    connection_id: UUID
+    action: str
+    result_status: ConnectionStatus
+
+    def __post_init__(self) -> None:
+        if not self.action.strip():
+            raise ValueError("Lifecycle idempotency action must be non-empty.")
