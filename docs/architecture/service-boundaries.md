@@ -78,3 +78,10 @@ muxivo Twitch/
 The Console API follows the existing Muxivo Python/FastAPI and dependency
 injection conventions. Its domain and application layers must depend on ports,
 not on HTTP/OAuth SDK/database implementations.
+
+The application layer follows one concrete top-level class per module. Commands,
+errors, response values and use cases therefore remain independently testable
+and their dependency direction stays visible. `application/ports.py` is the
+explicit exception: it is a single Protocol catalog for the application
+boundary rather than an implementation module. The
+`scripts/application_class_layout_check.py` script enforces this rule in CI.
