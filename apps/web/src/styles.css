@@ -5846,6 +5846,11 @@ input[type="checkbox"]:disabled { cursor: not-allowed; opacity: 0.46; }
   border-radius: 12px;
 }
 
+.organization-switcher--inline {
+  display: grid;
+  gap: 8px;
+}
+
 .console-organization-picker label {
   color: var(--soft);
   font-size: 0.66rem;

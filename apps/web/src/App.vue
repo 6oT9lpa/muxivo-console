@@ -16,6 +16,7 @@ import LanguageSwitcher from "./components/common/LanguageSwitcher.vue";
 import PublicFooter from "./components/common/PublicFooter.vue";
 import ConnectionWizardPanel from "./features/console/ConnectionWizardPanel.vue";
 import OrganizationMembersPanel from "./features/console/OrganizationMembersPanel.vue";
+import OrganizationSwitcher from "./features/console/OrganizationSwitcher.vue";
 import SecurityPanel from "./features/console/SecurityPanel.vue";
 import { useI18n } from "./i18n";
 import { clientLogger } from "./utils/clientLogger";
@@ -1846,33 +1847,14 @@ function messageFor(error: unknown): string {
           <span class="console-product-pill">{{ t("console.product_label") }}</span>
         </div>
 
-        <div class="console-organization-picker">
-          <label for="console-organization-select">{{ t("console.organization.label") }}</label>
-          <select
-            id="console-organization-select"
-            v-model="selectedOrganizationId"
-            :disabled="busy || !organizations.length"
-            @change="selectOrganization"
-          >
-            <option v-if="!organizations.length" value="" disabled>
-              {{ t("console.organization.empty_select") }}
-            </option>
-            <option
-              v-for="item in organizations"
-              :key="item.organization.id"
-              :value="item.organization.id"
-            >
-              {{ item.organization.name }} · {{ roleLabel(item.membership.role) }}
-            </option>
-          </select>
-          <p v-if="activeOrganization" class="console-active-organization">
-            <span class="console-status-dot" aria-hidden="true"></span>
-            {{ t("console.organization.active") }}: {{ activeOrganization.organization.slug }}
-          </p>
-          <p v-else class="console-empty-organization">
-            {{ t("console.organization.empty_help") }}
-          </p>
-        </div>
+        <OrganizationSwitcher
+          id="console-organization-select"
+          v-model="selectedOrganizationId"
+          :organizations="organizations"
+          :disabled="busy"
+          variant="sidebar"
+          @change="selectOrganization"
+        />
 
         <nav class="console-sidebar-nav" :aria-label="t('console.sidebar.sections')">
           <button
@@ -1999,18 +1981,15 @@ function messageFor(error: unknown): string {
       <p>{{ t("console.connections.description") }}</p>
       <div v-if="organizations.length" class="identity-link">
         <h3>{{ t("console.connections.active_org_title") }}</h3>
-        <label>
-          {{ t("console.connections.organization_label") }}
-          <select v-model="selectedOrganizationId" @change="selectOrganization">
-            <option
-              v-for="item in organizations"
-              :key="item.organization.id"
-              :value="item.organization.id"
-            >
-              {{ item.organization.name }} · {{ roleLabel(item.membership.role) }}
-            </option>
-          </select>
-        </label>
+        <OrganizationSwitcher
+          id="console-connections-organization-select"
+          v-model="selectedOrganizationId"
+          :organizations="organizations"
+          :disabled="busy"
+          :label="t('console.connections.organization_label')"
+          :show-active-organization="false"
+          @change="selectOrganization"
+        />
         <p v-if="activeOrganization">
           {{ t("console.connections.selected_help", { slug: activeOrganization.organization.slug }) }}
         </p>
