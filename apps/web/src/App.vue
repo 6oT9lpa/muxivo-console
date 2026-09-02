@@ -14,6 +14,7 @@ import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { consoleApi, ConsoleApiError } from "./api/consoleApi";
 import LanguageSwitcher from "./components/common/LanguageSwitcher.vue";
 import PublicFooter from "./components/common/PublicFooter.vue";
+import ConnectionWizardPanel from "./features/console/ConnectionWizardPanel.vue";
 import OrganizationMembersPanel from "./features/console/OrganizationMembersPanel.vue";
 import SecurityPanel from "./features/console/SecurityPanel.vue";
 import { useI18n } from "./i18n";
@@ -1980,89 +1981,22 @@ function messageFor(error: unknown): string {
         <h3>{{ t("console.connections.empty_title") }}</h3>
         <p>{{ t("console.connections.empty_help") }}</p>
       </div>
-      <section v-if="activeOrganizationId && canManagePlatformConnections" class="platform-dashboard" aria-labelledby="connection-wizard-heading">
-        <div class="section-heading">
-          <div>
-            <h3 id="connection-wizard-heading">{{ selectedConnectionWizard.title }}</h3>
-            <p>{{ selectedConnectionWizard.summary }}</p>
-          </div>
-        </div>
-        <div class="platform-choice-grid" role="list" :aria-label="t('console.connections.type_aria')">
-          <button
-            v-for="option in localizedConnectionWizardOptions"
-            :key="option.platform"
-            type="button"
-            :class="{ active: platform === option.platform }"
-            :aria-pressed="platform === option.platform"
-            @click="selectConnectionWizard(option.platform)"
-          >
-            <strong>{{ option.title }}</strong>
-            <span>{{ option.summary }}</span>
-          </button>
-        </div>
-        <ol class="health-signals">
-          <li v-for="step in selectedConnectionWizard.preflightSteps" :key="step">
-            <span><strong>{{ step }}</strong></span>
-          </li>
-        </ol>
-        <form class="connection-form" @submit.prevent="registerConnection">
-          <label>
-            {{ selectedConnectionWizard.candidateLabel }}
-            <select
-              v-model="selectedConnectionCandidateId"
-              :disabled="busy || connectionCandidatesLoading || !selectableConnectionCandidates.length"
-              required
-            >
-              <option value="" disabled>
-                {{
-                  connectionCandidatesLoading
-                    ? t("console.connections.loading_candidates")
-                    : t("console.connections.select_candidate")
-                }}
-              </option>
-              <option
-                v-for="candidate in selectableConnectionCandidates"
-                :key="candidate.external_resource_id"
-                :value="candidate.external_resource_id"
-              >
-                {{ candidate.display_name }}
-              </option>
-            </select>
-          </label>
-          <p>{{ selectedConnectionWizard.candidateHelp }}</p>
-          <p v-if="connectionCandidatesLoading" class="connection-feedback" role="status">
-            {{ t("console.connections.loading_candidates") }}
-          </p>
-          <p v-else-if="connectionCandidatesUnavailable" class="connection-feedback" role="alert">
-            {{ t("console.connections.catalog_unavailable") }}
-            <button type="button" class="inline-action" :disabled="busy" @click="loadConnectionCandidates">
-              {{ t("console.connections.refresh_candidates") }}
-            </button>
-          </p>
-          <p v-else-if="connectionCandidatesIdentityLinked === false" class="connection-feedback">
-            {{ t("console.connections.identity_required") }}
-          </p>
-          <p v-else-if="!selectableConnectionCandidates.length" class="connection-feedback">
-            {{ t("console.connections.no_candidates") }}
-          </p>
-          <p v-if="platform === 'discord'">
-            {{ t("console.connections.ownership_discord") }}
-            <button type="button" class="inline-action" :disabled="busy" @click="linkDiscord">
-              {{ t("console.connections.link_identity", { platform: "Discord" }) }}
-            </button>
-          </p>
-          <p v-else-if="platform === 'twitch'">
-            {{ t("console.connections.ownership_twitch") }}
-            <button type="button" class="inline-action" :disabled="busy" @click="linkTwitch">
-              {{ t("console.connections.link_identity", { platform: "Twitch" }) }}
-            </button>
-          </p>
-          <button :disabled="busy || connectionCandidatesLoading || !selectedConnectionCandidateId">
-            {{ busy ? t("console.members.loading") : selectedConnectionWizard.actionLabel }}
-          </button>
-        </form>
-        <p>{{ t("console.connections.security_note") }}</p>
-      </section>
+      <ConnectionWizardPanel
+        v-if="activeOrganizationId && canManagePlatformConnections"
+        v-model:selected-connection-candidate-id="selectedConnectionCandidateId"
+        :busy="busy"
+        :platform="platform"
+        :localized-connection-wizard-options="localizedConnectionWizardOptions"
+        :selected-connection-wizard="selectedConnectionWizard"
+        :connection-candidates-loading="connectionCandidatesLoading"
+        :connection-candidates-unavailable="connectionCandidatesUnavailable"
+        :connection-candidates-identity-linked="connectionCandidatesIdentityLinked"
+        :selectable-connection-candidates="selectableConnectionCandidates"
+        @select-platform="selectConnectionWizard"
+        @register="registerConnection"
+        @load-candidates="loadConnectionCandidates"
+        @link-identity="linkExternalIdentity"
+      />
       <p v-else-if="activeOrganizationId" class="connection-feedback" role="status">
         {{ t("console.connections.permission_required") }}
       </p>
