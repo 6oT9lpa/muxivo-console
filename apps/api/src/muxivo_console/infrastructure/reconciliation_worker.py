@@ -5,32 +5,17 @@ from __future__ import annotations
 import asyncio
 import logging
 from contextlib import suppress
-from dataclasses import dataclass
-from uuid import UUID
 
 from muxivo_console.application.ports import IdentifierGenerator
 from muxivo_console.application.reconcile_platform_connections import (
     ReconcilePlatformConnections,
     ReconcilePlatformConnectionsCommand,
 )
+from muxivo_console.infrastructure.periodic_reconciliation_worker_settings import (
+    PeriodicReconciliationWorkerSettings,
+)
 
 logger = logging.getLogger(__name__)
-
-
-@dataclass(frozen=True, slots=True)
-class PeriodicReconciliationWorkerSettings:
-    system_actor_id: UUID
-    interval_seconds: float = 300.0
-    initial_delay_seconds: float = 10.0
-    batch_limit: int = 100
-
-    def __post_init__(self) -> None:
-        if self.interval_seconds <= 0:
-            raise ValueError("Reconciliation interval must be positive.")
-        if self.initial_delay_seconds < 0:
-            raise ValueError("Reconciliation initial delay must not be negative.")
-        if self.batch_limit <= 0:
-            raise ValueError("Reconciliation batch limit must be positive.")
 
 
 class PeriodicPlatformConnectionReconciliationWorker:
@@ -132,3 +117,9 @@ class PeriodicPlatformConnectionReconciliationWorker:
             await asyncio.wait_for(self._stop_event.wait(), timeout=delay_seconds)
         except TimeoutError:
             return
+
+
+__all__ = [
+    "PeriodicPlatformConnectionReconciliationWorker",
+    "PeriodicReconciliationWorkerSettings",
+]

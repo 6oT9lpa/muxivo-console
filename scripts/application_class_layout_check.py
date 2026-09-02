@@ -9,6 +9,11 @@ from pathlib import Path
 APPLICATION_RELATIVE_PATH = Path("apps/api/src/muxivo_console/application")
 SETTINGS_RELATIVE_PATH = Path("apps/api/src/muxivo_console/infrastructure/settings.py")
 SECURITY_RELATIVE_PATH = Path("apps/api/src/muxivo_console/infrastructure/security.py")
+RATE_LIMITING_RELATIVE_PATH = Path("apps/api/src/muxivo_console/infrastructure/rate_limiting.py")
+WORKER_FACADE_RELATIVE_PATHS = (
+    Path("apps/api/src/muxivo_console/infrastructure/reconciliation_worker.py"),
+    Path("apps/api/src/muxivo_console/infrastructure/security_cleanup_worker.py"),
+)
 INTENTIONAL_REGISTRY_FILES = frozenset({"ports.py"})
 
 
@@ -37,26 +42,36 @@ def check_application_class_layout(root: Path = Path(".")) -> tuple[ClassLayoutI
 
 def check_settings_class_layout(root: Path = Path(".")) -> tuple[ClassLayoutIssue, ...]:
     """Return configuration modules that define more than one class."""
-    settings_path = root / SETTINGS_RELATIVE_PATH
-    if not settings_path.exists():
-        return ()
-    tree = ast.parse(settings_path.read_text(encoding="utf-8"), filename=str(settings_path))
-    classes = tuple(node.name for node in tree.body if isinstance(node, ast.ClassDef))
-    if len(classes) <= 1:
-        return ()
-    return (ClassLayoutIssue(path=settings_path, classes=classes),)
+    return _check_single_module(root, SETTINGS_RELATIVE_PATH)
 
 
 def check_security_class_layout(root: Path = Path(".")) -> tuple[ClassLayoutIssue, ...]:
     """Return the security adapter facade if it defines multiple classes."""
-    security_path = root / SECURITY_RELATIVE_PATH
-    if not security_path.exists():
+    return _check_single_module(root, SECURITY_RELATIVE_PATH)
+
+
+def check_rate_limiting_class_layout(root: Path = Path(".")) -> tuple[ClassLayoutIssue, ...]:
+    """Return the rate-limit adapter facade if it defines multiple classes."""
+    return _check_single_module(root, RATE_LIMITING_RELATIVE_PATH)
+
+
+def check_worker_class_layout(root: Path = Path(".")) -> tuple[ClassLayoutIssue, ...]:
+    """Return runtime worker facades that define more than one class."""
+    issues: list[ClassLayoutIssue] = []
+    for relative_path in WORKER_FACADE_RELATIVE_PATHS:
+        issues.extend(_check_single_module(root, relative_path))
+    return tuple(issues)
+
+
+def _check_single_module(root: Path, relative_path: Path) -> tuple[ClassLayoutIssue, ...]:
+    module_path = root / relative_path
+    if not module_path.exists():
         return ()
-    tree = ast.parse(security_path.read_text(encoding="utf-8"), filename=str(security_path))
+    tree = ast.parse(module_path.read_text(encoding="utf-8"), filename=str(module_path))
     classes = tuple(node.name for node in tree.body if isinstance(node, ast.ClassDef))
     if len(classes) <= 1:
         return ()
-    return (ClassLayoutIssue(path=security_path, classes=classes),)
+    return (ClassLayoutIssue(path=module_path, classes=classes),)
 
 
 def main() -> int:
@@ -66,12 +81,14 @@ def main() -> int:
         check_application_class_layout()
         + check_settings_class_layout()
         + check_security_class_layout()
+        + check_rate_limiting_class_layout()
+        + check_worker_class_layout()
     )
     if issues:
         for issue in issues:
             print(f"{issue.path}: {', '.join(issue.classes)}")
         return 1
-    print("Application, settings and security class layout check passed.")
+    print("Application, settings, security, rate-limit and worker class layout check passed.")
     return 0
 
 

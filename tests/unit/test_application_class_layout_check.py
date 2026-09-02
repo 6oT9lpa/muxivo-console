@@ -4,8 +4,10 @@ from pathlib import Path
 
 from scripts.application_class_layout_check import (
     check_application_class_layout,
+    check_rate_limiting_class_layout,
     check_security_class_layout,
     check_settings_class_layout,
+    check_worker_class_layout,
 )
 
 
@@ -85,4 +87,54 @@ def test_security_class_layout_check_reports_multiple_security_classes(
 
     assert len(issues) == 1
     assert issues[0].path == security_path
+    assert issues[0].classes == ("First", "Second")
+
+
+def test_rate_limiting_class_layout_check_allows_the_rate_limit_facade() -> None:
+    assert check_rate_limiting_class_layout() == ()
+
+
+def test_rate_limiting_class_layout_check_reports_multiple_rate_limit_classes(
+    tmp_path: Path,
+) -> None:
+    rate_limiting_path = (
+        tmp_path / "apps" / "api" / "src" / "muxivo_console" / "infrastructure" / "rate_limiting.py"
+    )
+    rate_limiting_path.parent.mkdir(parents=True)
+    rate_limiting_path.write_text(
+        "class First:\n    pass\nclass Second:\n    pass\n",
+        encoding="utf-8",
+    )
+
+    issues = check_rate_limiting_class_layout(tmp_path)
+
+    assert len(issues) == 1
+    assert issues[0].path == rate_limiting_path
+    assert issues[0].classes == ("First", "Second")
+
+
+def test_worker_class_layout_check_allows_worker_facades() -> None:
+    assert check_worker_class_layout() == ()
+
+
+def test_worker_class_layout_check_reports_multiple_worker_classes(tmp_path: Path) -> None:
+    worker_path = (
+        tmp_path
+        / "apps"
+        / "api"
+        / "src"
+        / "muxivo_console"
+        / "infrastructure"
+        / "reconciliation_worker.py"
+    )
+    worker_path.parent.mkdir(parents=True)
+    worker_path.write_text(
+        "class First:\n    pass\nclass Second:\n    pass\n",
+        encoding="utf-8",
+    )
+
+    issues = check_worker_class_layout(tmp_path)
+
+    assert len(issues) == 1
+    assert issues[0].path == worker_path
     assert issues[0].classes == ("First", "Second")
