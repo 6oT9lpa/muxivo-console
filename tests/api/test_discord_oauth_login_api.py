@@ -66,3 +66,5 @@ def test_discord_oauth_callback_sets_first_party_cookies_and_redirects_to_consol
     assert "__Host-muxivo_csrf=csrf-token" in response.headers["set-cookie"]
     assert complete.arguments is not None
     assert complete.arguments["authorization_code"] == "oauth-code"
+    assert complete.arguments["client_ip"]
+    assert complete.arguments["user_agent"] == "testclient"

@@ -59,6 +59,8 @@ def test_login_sets_host_only_session_and_csrf_cookies() -> None:
     assert "Domain=" not in csrf_cookie
     assert authentication.command.email == "creator@example.com"
     assert authentication.command.password == "a-long-enough-password"
+    assert authentication.command.client_ip
+    assert authentication.command.user_agent == "testclient"
 
 
 def test_login_rejection_has_single_generic_public_failure() -> None:

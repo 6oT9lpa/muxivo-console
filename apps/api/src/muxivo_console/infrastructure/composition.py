@@ -179,6 +179,7 @@ from muxivo_console.infrastructure.security_cleanup_worker import (
     PeriodicSecurityCleanupWorker,
     PeriodicSecurityCleanupWorkerSettings,
 )
+from muxivo_console.infrastructure.session_fingerprint import HmacSessionFingerprintHasher
 from muxivo_console.infrastructure.settings import ConsoleSettings
 from muxivo_console.infrastructure.smtp_organization_invitation_notifier import (
     SmtpOrganizationInvitationNotifier,
@@ -228,12 +229,14 @@ def create_production_app(
     )
     password_hasher = Argon2idPasswordHasher()
     session_hasher = HmacSessionTokenHasher(settings.session_token_pepper)
+    session_fingerprint_hasher = HmacSessionFingerprintHasher(settings.session_token_pepper)
     session_creator = CreateBrowserSession(
         identifiers=identifiers,
         clock=clock,
         user_statuses=user_statuses,
         token_issuer=SecureOpaqueSessionTokenIssuer(),
         token_hasher=session_hasher,
+        fingerprint_hasher=session_fingerprint_hasher,
         sessions=SqlAlchemyAuthSessionWriter(sessions),
     )
     listed_sessions = ListBrowserSessions(
@@ -776,6 +779,7 @@ def create_production_app(
         rate_limiter=_rate_limiter_for(settings),
         metrics_recorder=InMemoryHttpMetricsRecorder(),
         browser_session_cookies=browser_session_cookies,
+        session_fingerprint_hasher=session_fingerprint_hasher,
         browser_security_policy=BrowserSecurityPolicy(
             cors_allowed_origins=settings.cors_allowed_origins,
             hsts_enabled=settings.environment != "development",

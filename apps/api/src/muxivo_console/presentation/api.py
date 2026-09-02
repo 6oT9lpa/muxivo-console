@@ -142,7 +142,11 @@ from muxivo_console.application.manage_platform_connection_lifecycle import (
     PlatformConnectionLifecycleAction,
     PlatformConnectionLifecycleRejectedError,
 )
-from muxivo_console.application.ports import HttpMetricsRecorder, RateLimiter
+from muxivo_console.application.ports import (
+    HttpMetricsRecorder,
+    RateLimiter,
+    SessionFingerprintHasher,
+)
 from muxivo_console.application.reauthenticate_browser_session import (
     BrowserSessionReauthenticationRejectedError,
     ReauthenticateBrowserSession,
@@ -565,6 +569,20 @@ def _fingerprint_label(prefix: str, value: str | None) -> str | None:
     return f"{prefix}:{value[:12]}"
 
 
+def _request_client_ip(request: Request) -> str | None:
+    """Read the trusted ASGI client address without putting it in application logs."""
+    if request.client is None or not request.client.host:
+        return None
+    return request.client.host
+
+
+def _client_log_fingerprint(hasher: SessionFingerprintHasher | None, client_host: str) -> str:
+    """Keep rate-limit telemetry useful without exposing a raw client address."""
+    if hasher is None:
+        return "unavailable"
+    return f"ip:{hasher.hash_ip_address(client_host)[:12]}"
+
+
 def _login_identity_response(
     identity: LoginIdentityProfile, *, total_identity_count: int
 ) -> LoginIdentityResponse:
@@ -634,6 +652,7 @@ def create_app(
     login_identity_unlink_use_case: UnlinkLoginIdentity | None = None,
     browser_session_cookies: BrowserSessionCookieSettings | None = None,
     browser_security_policy: BrowserSecurityPolicy | None = None,
+    session_fingerprint_hasher: SessionFingerprintHasher | None = None,
     background_services: Sequence[BackgroundService] = (),
 ) -> FastAPI:
     """Create the Console BFF without coupling application code to FastAPI."""
@@ -823,12 +842,13 @@ def create_app(
             return
         client_host = request.client.host if request.client is not None else "unknown"
         decision = await rate_limiter.check(scope=scope, key=client_host)
+        client_fingerprint = _client_log_fingerprint(session_fingerprint_hasher, client_host)
         if decision.allowed:
             logger.info(
                 "auth.rate_limit.allowed",
                 extra={
                     "scope": scope,
-                    "client_host": client_host,
+                    "client_fingerprint": client_fingerprint,
                     "correlation_id": str(request.state.correlation_id),
                 },
             )
@@ -837,7 +857,7 @@ def create_app(
             "auth.rate_limit.denied",
             extra={
                 "scope": scope,
-                "client_host": client_host,
+                "client_fingerprint": client_fingerprint,
                 "retry_after_seconds": decision.retry_after_seconds,
                 "correlation_id": str(request.state.correlation_id),
             },
@@ -1387,6 +1407,8 @@ def create_app(
                     state=state,
                     authorization_code=code,
                     correlation_id=request.state.correlation_id,
+                    client_ip=_request_client_ip(request),
+                    user_agent=request.headers.get("user-agent"),
                 )
             except OAuthLoginCompletionRejectedError:
                 issued_session = None
@@ -2060,6 +2082,8 @@ def create_app(
                     email=str(payload.email),
                     password=payload.password.get_secret_value(),
                     correlation_id=request.state.correlation_id,
+                    client_ip=_request_client_ip(request),
+                    user_agent=request.headers.get("user-agent"),
                 )
             )
         except AuthenticationRejectedError as error:

@@ -498,6 +498,14 @@ class RateLimiter(Protocol):
     async def check(self, *, scope: str, key: str) -> RateLimitDecision: ...
 
 
+class SessionFingerprintHasher(Protocol):
+    """Creates keyed, browser-safe fingerprints for session security views."""
+
+    def hash_ip_address(self, ip_address: str) -> str: ...
+
+    def hash_user_agent(self, user_agent: str) -> str: ...
+
+
 class HttpMetricsRecorder(Protocol):
     """Records process-local HTTP metrics for monitoring and alerting adapters."""
 

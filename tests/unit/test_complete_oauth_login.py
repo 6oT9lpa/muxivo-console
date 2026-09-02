@@ -95,11 +95,15 @@ async def test_creates_session_only_for_existing_verified_provider_identity() ->
         state="state",
         authorization_code="code",
         correlation_id=uuid4(),
+        client_ip="203.0.113.10",
+        user_agent="Mozilla/5.0",
     )
 
     assert issued.assurance_level is SessionAssuranceLevel.PASSWORD
     assert sessions.command.user_id == user_id
     assert sessions.command.assurance_level is SessionAssuranceLevel.RECENT_AUTHENTICATION
+    assert sessions.command.client_ip == "203.0.113.10"
+    assert sessions.command.user_agent == "Mozilla/5.0"
 
 
 @pytest.mark.asyncio

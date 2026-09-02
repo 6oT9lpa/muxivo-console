@@ -1,6 +1,6 @@
 """Authenticate an active first-party user without e-mail account enumeration."""
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from uuid import UUID
 
 from muxivo_console.application.create_browser_session import (
@@ -26,8 +26,10 @@ class AuthenticationRejectedError(PermissionError):
 @dataclass(frozen=True, slots=True)
 class AuthenticateEmailPasswordCommand:
     email: str
-    password: str
+    password: str = field(repr=False)
     correlation_id: UUID
+    client_ip: str | None = field(default=None, repr=False)
+    user_agent: str | None = field(default=None, repr=False)
 
 
 @dataclass(slots=True)
@@ -59,6 +61,8 @@ class AuthenticateEmailPassword:
                     user_id=account.user_id,
                     correlation_id=command.correlation_id,
                     assurance_level=SessionAssuranceLevel.RECENT_AUTHENTICATION,
+                    client_ip=command.client_ip,
+                    user_agent=command.user_agent,
                 )
             )
         except SessionCreationRejectedError as error:

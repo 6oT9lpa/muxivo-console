@@ -1,3 +1,4 @@
+import logging
 from datetime import UTC, datetime, timedelta
 from uuid import uuid4
 
@@ -8,6 +9,7 @@ from muxivo_console.application.create_browser_session import IssuedBrowserSessi
 from muxivo_console.application.ports import RateLimitDecision
 from muxivo_console.application.resolve_browser_session import BrowserSessionPrincipal
 from muxivo_console.domain.sessions import SessionAssuranceLevel
+from muxivo_console.infrastructure.session_fingerprint import HmacSessionFingerprintHasher
 from muxivo_console.presentation.api import (
     CSRF_COOKIE_NAME,
     CSRF_HEADER_NAME,
@@ -164,3 +166,30 @@ def test_session_reauthentication_is_rate_limited_before_use_case() -> None:
 
     assert_rate_limited(response, limiter, "auth.reauthentication")
     assert use_case.called is False
+
+
+def test_rate_limit_logs_use_a_fingerprint_instead_of_raw_client_address(caplog) -> None:
+    limiter = DenyingRateLimiter()
+    caplog.set_level(logging.INFO, logger="muxivo_console.presentation.api")
+    app = create_app(
+        registration_use_case=RecordingUseCase(),
+        rate_limiter=limiter,
+        session_fingerprint_hasher=HmacSessionFingerprintHasher(b"p" * 32),
+    )
+
+    response = TestClient(app).post(
+        "/api/v1/auth/email-password/registrations",
+        json={
+            "email": "creator@example.com",
+            "password": "a-long-enough-password",
+            "display_name": "Creator",
+        },
+    )
+
+    assert response.status_code == 429
+    denial_record = next(
+        record for record in caplog.records if record.message == "auth.rate_limit.denied"
+    )
+    assert denial_record.client_fingerprint.startswith("ip:")
+    assert not hasattr(denial_record, "client_host")
+    assert "testclient" not in caplog.text

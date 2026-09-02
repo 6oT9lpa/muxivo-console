@@ -41,6 +41,8 @@ class CompleteOAuthLogin:
         state: str,
         authorization_code: str,
         correlation_id: UUID,
+        client_ip: str | None = None,
+        user_agent: str | None = None,
     ) -> IssuedBrowserSession:
         if provider is LoginIdentityProvider.EMAIL or not state or not authorization_code:
             raise OAuthLoginCompletionRejectedError("OAuth login could not be completed.")
@@ -64,6 +66,8 @@ class CompleteOAuthLogin:
                     user_id=user_id,
                     correlation_id=correlation_id,
                     assurance_level=SessionAssuranceLevel.RECENT_AUTHENTICATION,
+                    client_ip=client_ip,
+                    user_agent=user_agent,
                 )
             )
         except Exception as error:
