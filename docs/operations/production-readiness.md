@@ -29,7 +29,7 @@ completed.
 | Security | Audit coverage review for sensitive Foundation actions | Implemented in CI |
 | Security | Recent authentication refresh and gates for password change, identity unlink and sensitive writes | Implemented |
 | Security | Scheduled cleanup for expired sessions and recovery transactions | Implemented |
-| Observability | `/metrics` scraped and alert rules configured | Alert rules drafted; backend pending |
+| Observability | `/metrics` scraped and alert rules configured | Metrics endpoint and alert rules implemented; scraper backend pending |
 | Lifecycle | Periodic platform connection reconciliation worker | Implemented |
 | Lifecycle | Idempotency keys for retry-safe lifecycle actions | Implemented |
 | Lifecycle | Browser-safe platform resource candidate discovery | Console contract/UI implemented; Control API endpoints pending |
@@ -43,7 +43,7 @@ completed.
 | Compliance | Terms reviewed and published | Pending legal review |
 | Compliance | Data inventory and retention schedule approved | Draft |
 | Operations | Incident runbook approved and exercised | Draft |
-| Operations | Backup/restore drill completed | Pending |
+| Operations | Backup/restore drill completed | Drill procedure documented; staging exercise pending |
 | Deployment | Staging/prod domains provisioned | Enforced in settings; values pending |
 | Deployment | Staging/prod OAuth credentials provisioned | Discord/Twitch OAuth enforced; values pending |
 | Secrets | KMS/secret manager selected and wired | Secret-manager source enforced; provider pending |
