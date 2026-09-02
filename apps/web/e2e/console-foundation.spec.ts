@@ -159,6 +159,22 @@ test("sign-in, create organization, connect Discord, audit and revoke from the b
   await expect(page.getByText("platform_connection.revoke")).toBeVisible();
 });
 
+test("landing page and sign-in dialog fit a narrow viewport", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("/");
+  await page.waitForTimeout(2500);
+
+  expect(
+    await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth),
+  ).toBe(false);
+
+  await page.getByRole("button", { name: /see panel|открыть панель/i }).click();
+  await expect(page.getByRole("dialog")).toBeVisible();
+  expect(
+    await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth),
+  ).toBe(false);
+});
+
 async function installConsoleApiMock(
   page: Page,
   state: {

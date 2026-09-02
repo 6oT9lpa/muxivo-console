@@ -412,6 +412,10 @@ a {
   padding-bottom: 125px;
 }
 
+.hero-copy {
+  min-width: 0;
+}
+
 .eyebrow,
 .feature-card span,
 .section-heading span,
@@ -429,6 +433,7 @@ a {
 .about-hero h1 {
   display: flex;
   flex-wrap: wrap;
+  min-width: 0;
   max-width: 980px;
   margin: 0;
   font-size: clamp(2.5rem, 8vw, 7rem);
@@ -455,6 +460,7 @@ a {
 }
 
 .typewriter-copy {
+  min-width: 0;
   white-space: pre-wrap;
   overflow-wrap: normal;
   word-break: normal;
@@ -4696,7 +4702,7 @@ input[type="checkbox"]:disabled { cursor: not-allowed; opacity: 0.46; }
 
   .hero-copy .staggered-headline,
   .about-hero .staggered-headline {
-    font-size: 2.65rem;
+    font-size: clamp(2.25rem, 9.5vw, 3.6rem);
   }
 
   .header-actions {
