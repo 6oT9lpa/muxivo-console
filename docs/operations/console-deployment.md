@@ -209,6 +209,14 @@ the existing `muxivo.pro` and Discord Activity vhost unchanged, and configure
 the staging public base URL, CORS origin, recovery URLs and OAuth redirect URLs
 to use `https://beget.ame-life.com`.
 
+The staging edge and tunnel are now active: Nginx serves the host over HTTPS,
+FRP exposes the existing Activity route on `18080` and the Console API route on
+`18081`, and the API route is intentionally failing closed with `502` until the
+local API service receives a complete staging credential set. PostgreSQL and
+the `muxivo_console` database are present on the local server. Redis is
+installed, enabled and bound only to loopback; its URL still belongs in the
+secret-manager-rendered environment.
+
 ### 7. Verify end to end
 
 Run the checks in this order:
@@ -267,7 +275,8 @@ public deployment still requires external values and services:
   any authenticated Console flow can be tested publicly;
 - a selected secret manager;
 - a dedicated production database credential;
-- Redis;
+- Redis credential/configuration wiring in the staging environment (the
+  loopback service is installed and healthy);
 - real Discord/Twitch OAuth credentials;
 - a reachable signed Discord Control API and Twitch Control API;
 - production secret-manager wiring for the verified SMTP.BZ credential and an explicitly approved delivery mailbox;

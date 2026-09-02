@@ -28,7 +28,7 @@ completed.
 | Area | Gate | Status |
 | --- | --- | --- |
 | Identity | Password recovery SMTP delivery adapter configured outside logs | SMTP.BZ domain verified and STARTTLS/AUTH probe passed; secret-manager wiring and delivery test pending |
-| Security | Shared rate limits enabled for login, registration, reauthentication, OAuth callback and recovery | Implemented; Redis URL pending |
+| Security | Shared rate limits enabled for login, registration, reauthentication, OAuth callback and recovery | Redis is installed and loopback-only; staging secret-manager URL wiring pending |
 | Security | CORS allowlist configured for staging/prod origins | Enforced in settings; values pending |
 | Security | CSP, HSTS and browser hardening headers enabled | Implemented |
 | Security | Secret redaction filter and structured JSON logging installed in production composition | Implemented |
@@ -38,7 +38,7 @@ completed.
 | Security | Recent authentication refresh and gates for password change, identity unlink and sensitive writes | Implemented |
 | Security | Scheduled cleanup for expired sessions and recovery transactions | Implemented |
 | Observability | `/metrics` scraped and alert rules configured | Metrics endpoint and alert rules implemented; scraper backend pending |
-| Operations | Liveness/readiness endpoints distinguish process health from database readiness | Implemented; external monitor wiring pending |
+| Operations | Liveness/readiness endpoints distinguish process health from database readiness | Implemented; staging API service/env wiring and external monitor pending |
 | Lifecycle | Periodic platform connection reconciliation worker | Implemented |
 | Lifecycle | Idempotency keys for retry-safe lifecycle actions | Implemented |
 | Lifecycle | Browser-safe platform resource candidate discovery | Console contract/UI implemented; Control API endpoints pending |
@@ -339,7 +339,8 @@ Minimum documented drill before production:
 
 ## Remaining engineering follow-up
 
-- Provision shared Redis/edge rate-limit backend for staging/prod.
+- Wire the installed loopback Redis service into the staging secret-manager
+  environment, then provision the shared edge rate-limit backend for prod.
 - Implement the signed `/connection-candidates` endpoint in each platform
   Control API and validate it against the contract in the Console deployment
   runbook.
