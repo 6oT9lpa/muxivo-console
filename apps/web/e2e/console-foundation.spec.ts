@@ -182,6 +182,64 @@ test("landing page and sign-in dialog fit a narrow viewport", async ({ page }) =
   ).toBe(false);
 });
 
+test("authenticated Console shell stays usable in a narrow viewport", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  const state = {
+    authenticated: true,
+    registeredEmail: "",
+    organizations: [
+      {
+        organization: {
+          id: organizationId,
+          name: "Creator community",
+          slug: "creator-community",
+        },
+        membership: {
+          id: ownerMembershipId,
+          organization_id: organizationId,
+          user_id: ownerUserId,
+          display_name: "Creator",
+          role: "owner",
+          resource_scopes: [],
+        },
+      },
+    ],
+    invitations: [],
+    connections: [],
+    auditEvents: [],
+    observedLifecycleIdempotencyKey: "",
+  };
+  await page.context().addCookies([
+    {
+      name: "muxivo_console_dev_csrf",
+      value: "csrf-token",
+      url: "http://127.0.0.1:5173",
+      sameSite: "Lax",
+    },
+  ]);
+  await installConsoleApiMock(page, state);
+
+  await page.goto("/");
+
+  await expect(page.getByRole("heading", { name: "Overview", level: 1 })).toBeVisible();
+  await expect(page.getByLabel("Active organization").first()).toHaveValue(organizationId);
+  expect(
+    await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth),
+  ).toBe(false);
+
+  await page.getByRole("button", { name: "Members", exact: true }).click();
+  await expect(page.locator("#console-members")).toBeVisible();
+  expect(
+    await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth),
+  ).toBe(false);
+
+  await page.getByRole("button", { name: "Connections", exact: true }).click();
+  await expect(page.locator("#console-connections")).toBeVisible();
+  expect(
+    await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth),
+  ).toBe(false);
+});
+
 test("sign-in dialog follows the selected light theme", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto("/");
