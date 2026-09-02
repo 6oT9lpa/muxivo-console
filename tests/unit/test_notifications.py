@@ -16,6 +16,7 @@ class FakeSmtp:
         self.host = host
         self.port = port
         self.timeout = timeout
+        self.ehlo_calls = 0
         self.started_tls = False
         self.login_arguments: tuple[str, str] | None = None
         self.message: EmailMessage | None = None
@@ -25,6 +26,9 @@ class FakeSmtp:
 
     def __exit__(self, *_) -> bool:
         return False
+
+    def ehlo(self) -> None:
+        self.ehlo_calls += 1
 
     def starttls(self) -> None:
         self.started_tls = True
@@ -60,7 +64,7 @@ async def test_smtp_password_recovery_notifier_sends_reset_message_without_token
         smtp_factory=smtp_factory,
         timeout_seconds=3,
     )
-    caplog.set_level(logging.INFO, logger="muxivo_console.infrastructure.notifications")
+    caplog.set_level(logging.INFO)
 
     await notifier.send(
         user_id=uuid4(),
@@ -74,6 +78,7 @@ async def test_smtp_password_recovery_notifier_sends_reset_message_without_token
     assert fake_smtp.host == "smtp.internal"
     assert fake_smtp.port == 587
     assert fake_smtp.timeout == 3
+    assert fake_smtp.ehlo_calls == 2
     assert fake_smtp.started_tls is True
     assert fake_smtp.login_arguments == ("smtp-user", "smtp-password")
     assert fake_smtp.message is not None
@@ -83,6 +88,10 @@ async def test_smtp_password_recovery_notifier_sends_reset_message_without_token
     assert "https://console.muxivo.test/recover?token=opaque-recovery-token" in body
     assert "opaque-recovery-token" in body
     assert "opaque-recovery-token" not in caplog.text
+    assert "smtp.delivery.connected" in caplog.text
+    assert "smtp.delivery.tls_negotiated" in caplog.text
+    assert "smtp.delivery.authenticated" in caplog.text
+    assert "smtp.delivery.message_submitted" in caplog.text
 
 
 @pytest.mark.asyncio
@@ -110,7 +119,7 @@ async def test_smtp_organization_invitation_notifier_sends_link_without_token_lo
         smtp_factory=smtp_factory,
         timeout_seconds=3,
     )
-    caplog.set_level(logging.INFO, logger="muxivo_console.infrastructure.notifications")
+    caplog.set_level(logging.INFO)
 
     delivered = await notifier.send(
         invitation_id=uuid4(),
@@ -127,6 +136,7 @@ async def test_smtp_organization_invitation_notifier_sends_link_without_token_lo
     assert fake_smtp.host == "connect.smtp.bz"
     assert fake_smtp.port == 587
     assert fake_smtp.timeout == 3
+    assert fake_smtp.ehlo_calls == 2
     assert fake_smtp.started_tls is True
     assert fake_smtp.login_arguments == ("smtp-user", "smtp-password")
     assert fake_smtp.message is not None
@@ -136,3 +146,36 @@ async def test_smtp_organization_invitation_notifier_sends_link_without_token_lo
         fake_smtp.message.get_content()
     )
     assert "opaque-invitation-token" not in caplog.text
+
+
+@pytest.mark.asyncio
+async def test_smtp_transport_logs_safe_failure_without_message_contents(caplog) -> None:
+    def failing_smtp_factory(host: str, port: int, *, timeout: float):
+        raise RuntimeError("opaque-recovery-token must not be logged")
+
+    notifier = SmtpPasswordRecoveryNotifier(
+        SmtpPasswordRecoverySettings(
+            host="smtp.internal",
+            port=587,
+            from_email="security@muxivo.test",
+            reset_url_base="https://console.muxivo.test/recover",
+            username="smtp-user",
+            password="smtp-password",
+            starttls=True,
+        ),
+        smtp_factory=failing_smtp_factory,
+    )
+    caplog.set_level(logging.INFO)
+
+    with pytest.raises(RuntimeError, match="opaque-recovery-token"):
+        await notifier.send(
+            user_id=uuid4(),
+            recipient_email="creator@example.com",
+            raw_token="opaque-recovery-token",
+            expires_at=datetime(2026, 8, 22, 12, tzinfo=UTC),
+            correlation_id=uuid4(),
+        )
+
+    assert "smtp.delivery.failed" in caplog.text
+    assert "opaque-recovery-token must not be logged" not in caplog.text
+    assert "smtp-password" not in caplog.text

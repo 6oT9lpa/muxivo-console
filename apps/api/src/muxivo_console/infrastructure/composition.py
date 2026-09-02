@@ -100,12 +100,6 @@ from muxivo_console.infrastructure.discord_oauth import DiscordOAuthClient
 from muxivo_console.infrastructure.logging_redaction import install_secret_redaction_filter
 from muxivo_console.infrastructure.metrics import InMemoryHttpMetricsRecorder
 from muxivo_console.infrastructure.naming import RandomSuffixOrganizationSlugGenerator
-from muxivo_console.infrastructure.notifications import (
-    SmtpOrganizationInvitationNotifier,
-    SmtpPasswordRecoveryNotifier,
-    UndeliveredOrganizationInvitationNotifier,
-    UndeliveredPasswordRecoveryNotifier,
-)
 from muxivo_console.infrastructure.persistence.audit_repository import (
     SqlAlchemyAuditEventReader,
     SqlAlchemyAuditEventWriter,
@@ -186,6 +180,12 @@ from muxivo_console.infrastructure.security_cleanup_worker import (
     PeriodicSecurityCleanupWorkerSettings,
 )
 from muxivo_console.infrastructure.settings import ConsoleSettings
+from muxivo_console.infrastructure.smtp_organization_invitation_notifier import (
+    SmtpOrganizationInvitationNotifier,
+)
+from muxivo_console.infrastructure.smtp_password_recovery_notifier import (
+    SmtpPasswordRecoveryNotifier,
+)
 from muxivo_console.infrastructure.twitch_connection_candidate_catalog import (
     TwitchPlatformConnectionCandidateCatalog,
 )
@@ -195,6 +195,12 @@ from muxivo_console.infrastructure.twitch_control_api import (
     TwitchPlatformHealthReader,
 )
 from muxivo_console.infrastructure.twitch_oauth import TwitchOAuthClient
+from muxivo_console.infrastructure.undelivered_organization_invitation_notifier import (
+    UndeliveredOrganizationInvitationNotifier,
+)
+from muxivo_console.infrastructure.undelivered_password_recovery_notifier import (
+    UndeliveredPasswordRecoveryNotifier,
+)
 from muxivo_console.presentation.api import (
     BrowserSecurityPolicy,
     BrowserSessionCookieSettings,
