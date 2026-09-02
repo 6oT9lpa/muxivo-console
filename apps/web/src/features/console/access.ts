@@ -15,6 +15,14 @@ export const MEMBER_ROLE_OPTIONS: readonly OrganizationRole[] = [
   "viewer",
 ];
 
+export const DEFAULT_MEMBER_SCOPE_OPTIONS: MembershipScopeInput[] = [
+  { resource: "console.control_modules", action: "read" },
+  { resource: "console.platform_connections", action: "read" },
+  { resource: "console.platform_connections", action: "manage" },
+  { resource: "console.audit_events", action: "read" },
+  { resource: "console.organization_members", action: "manage" },
+];
+
 /** Returns whether a membership can perform the requested organization action. */
 export function membershipAllows(
   membership: Pick<OrganizationMembership, "role" | "resource_scopes"> | null | undefined,

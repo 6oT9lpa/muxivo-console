@@ -14,6 +14,7 @@ import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { consoleApi, ConsoleApiError } from "./api/consoleApi";
 import LanguageSwitcher from "./components/common/LanguageSwitcher.vue";
 import PublicFooter from "./components/common/PublicFooter.vue";
+import OrganizationMembersPanel from "./features/console/OrganizationMembersPanel.vue";
 import { useI18n } from "./i18n";
 import { clientLogger } from "./utils/clientLogger";
 import {
@@ -27,12 +28,10 @@ import {
   persistActiveOrganizationId,
 } from "./utils/organizations";
 import {
-  canEditOrganizationMember as canEditOrganizationMemberForActor,
+  DEFAULT_MEMBER_SCOPE_OPTIONS,
   canManageOrganizationMembers as canManageOrganizationMembersForRole,
-  memberHasScope,
   memberRoleOptionsForActor,
   membershipAllows,
-  scopesEqual,
   supportedScopesForRole,
 } from "./features/console/access";
 import {
@@ -346,13 +345,9 @@ const canRevokeAllBrowserSessions = computed(
 const availableMemberRoleOptions = computed<OrganizationRole[]>(() =>
   memberRoleOptionsForActor(activeOrganization.value?.membership.role),
 );
-const memberScopeOptions: MembershipScopeInput[] = [
-  { resource: "console.control_modules", action: "read" },
-  { resource: "console.platform_connections", action: "read" },
-  { resource: "console.platform_connections", action: "manage" },
-  { resource: "console.audit_events", action: "read" },
-  { resource: "console.organization_members", action: "manage" },
-];
+const memberScopeOptions: MembershipScopeInput[] = DEFAULT_MEMBER_SCOPE_OPTIONS.map((scope) => ({
+  ...scope,
+}));
 const availableNewMemberScopeOptions = computed(() =>
   supportedScopesForRole(newMemberRole.value, memberScopeOptions),
 );
@@ -1014,16 +1009,6 @@ async function removeOrganizationMember(member: OrganizationMembership) {
   }
 }
 
-function isNewMemberScopeSelected(scope: MembershipScopeInput): boolean {
-  return newMemberScopes.value.some((item) => scopesEqual(item, scope));
-}
-
-function toggleNewMemberScope(scope: MembershipScopeInput) {
-  newMemberScopes.value = isNewMemberScopeSelected(scope)
-    ? newMemberScopes.value.filter((item) => !scopesEqual(item, scope))
-    : [...newMemberScopes.value, scope];
-}
-
 function normalizeNewMemberScopes() {
   newMemberScopes.value = supportedScopesForRole(
     newMemberRole.value,
@@ -1031,45 +1016,12 @@ function normalizeNewMemberScopes() {
   );
 }
 
-function memberScopeOptionsForRole(role: OrganizationRole): MembershipScopeInput[] {
-  return supportedScopesForRole(role, memberScopeOptions);
-}
-
 function normalizeMemberScopes(member: OrganizationMembership) {
   member.resource_scopes = supportedScopesForRole(member.role, member.resource_scopes);
 }
 
-function canEditOrganizationMember(member: OrganizationMembership): boolean {
-  return canEditOrganizationMemberForActor(
-    activeOrganization.value?.membership.role,
-    member.role,
-  );
-}
-
-async function toggleMemberScope(member: OrganizationMembership, scope: MembershipScopeInput) {
-  member.resource_scopes = memberHasScope(member, scope)
-    ? member.resource_scopes.filter((item) => !scopesEqual(item, scope))
-    : [...member.resource_scopes, { id: null, ...scope }];
-  await saveOrganizationMember(member);
-}
-
-function scopeLabel(scope: MembershipScopeInput): string {
-  return `${t(`console.scope.${scope.resource.replace("console.", "")}`)} · ${t(`console.scope_action.${scope.action}`)}`;
-}
-
 function roleLabel(role: OrganizationRole): string {
   return t(`console.roles.${role}`);
-}
-
-function memberDisplayLabel(member: OrganizationMembership): string {
-  return (
-    member.display_name?.trim() ||
-    t("console.members.member_fallback", { value: member.user_id.slice(0, 8) })
-  );
-}
-
-function invitationStatusLabel(status: OrganizationInvitation["status"]): string {
-  return t(`console.invitation_status.${status}`);
 }
 
 function clearInvitationToken() {
@@ -2273,92 +2225,25 @@ function messageFor(error: unknown): string {
           </ul>
         </li>
       </ul>
-      <section id="console-members" v-if="canManageOrganizationMembers" class="platform-dashboard console-section" aria-labelledby="organization-members-heading">
-        <div class="section-heading"><div><h3 id="organization-members-heading">{{ t("console.members.title") }}</h3><p>{{ t("console.members.description") }}</p></div><button type="button" :disabled="busy" @click="loadOrganizationMembers">{{ busy ? t("console.members.loading") : t("console.members.load") }}</button></div>
-        <form class="connection-form" @submit.prevent="addOrganizationMember">
-          <label>{{ t("console.members.email") }}<input v-model="newMemberEmail" type="email" autocomplete="email" :placeholder="t('console.auth.email_placeholder')" required /></label>
-          <label>{{ t("console.members.role") }}<select v-model="newMemberRole" @change="normalizeNewMemberScopes"><option v-for="role in availableMemberRoleOptions" :key="role" :value="role">{{ roleLabel(role) }}</option></select></label>
-          <fieldset>
-            <legend>{{ t("console.members.scopes") }}</legend>
-            <label v-for="scope in availableNewMemberScopeOptions" :key="`${scope.resource}-${scope.action}`">
-              <input
-                type="checkbox"
-                :checked="isNewMemberScopeSelected(scope)"
-                @change="toggleNewMemberScope(scope)"
-              />
-              {{ scopeLabel(scope) }}
-            </label>
-          </fieldset>
-          <button :disabled="busy">{{ busy ? t("console.members.inviting") : t("console.members.invite") }}</button>
-        </form>
-        <div class="section-heading policy-heading">
-          <div>
-            <h3>{{ t("console.members.invitations_title") }}</h3>
-            <p>{{ t("console.members.invitations_description") }}</p>
-          </div>
-          <button type="button" :disabled="busy" @click="loadOrganizationInvitations">
-            {{ busy ? t("console.members.loading") : t("console.members.load_invitations") }}
-          </button>
-        </div>
-        <ul v-if="organizationInvitations.length" class="health-signals invitation-list">
-          <li v-for="invitation in organizationInvitations" :key="invitation.id">
-            <span>
-              <strong>{{ invitation.email_hint }} · {{ roleLabel(invitation.role) }}</strong>
-              <small>
-                {{ t("console.members.invitation_status", { value: invitationStatusLabel(invitation.status) }) }} ·
-                {{ t("console.members.invitation_expires", { value: formatSessionTime(invitation.expires_at) }) }}
-              </small>
-              <small v-if="invitation.delivery_status === 'unavailable' || invitation.delivery_status === 'failed'">
-                {{ t("console.members.invitation_delivery_unavailable") }}
-              </small>
-            </span>
-            <div class="invitation-actions">
-              <em :data-status="invitation.status">{{ invitationStatusLabel(invitation.status) }}</em>
-              <button
-                v-if="invitation.status === 'pending'"
-                type="button"
-                :disabled="busy"
-                @click="revokeOrganizationInvitation(invitation)"
-              >
-                {{ t("console.members.revoke_invitation") }}
-              </button>
-            </div>
-          </li>
-        </ul>
-        <p v-else-if="!busy">{{ t("console.members.invitations_empty") }}</p>
-        <ul v-if="organizationMembers.length" class="health-signals">
-          <li v-for="member in organizationMembers" :key="member.user_id">
-            <span>
-              <strong>{{ memberDisplayLabel(member) }}</strong>
-              <small v-if="member.display_name">
-                {{ t("console.members.member_identifier", { value: member.user_id.slice(0, 8) }) }}
-              </small>
-              <small>{{ t("console.members.member_scopes", { role: roleLabel(member.role), count: member.resource_scopes.length }) }}</small>
-            </span>
-            <select
-              v-if="canEditOrganizationMember(member)"
-              v-model="member.role"
-              :disabled="busy"
-              @change="saveOrganizationMember(member)"
-            >
-              <option v-for="role in availableMemberRoleOptions" :key="role" :value="role">{{ roleLabel(role) }}</option>
-            </select>
-            <button v-if="canEditOrganizationMember(member)" type="button" :disabled="busy" @click="removeOrganizationMember(member)">{{ t("console.members.remove") }}</button>
-            <div v-if="canEditOrganizationMember(member)" class="connection-form">
-              <label v-for="scope in memberScopeOptionsForRole(member.role)" :key="`${member.user_id}-${scope.resource}-${scope.action}`">
-                <input
-                  type="checkbox"
-                  :checked="memberHasScope(member, scope)"
-                  :disabled="busy"
-                  @change="toggleMemberScope(member, scope)"
-                />
-                {{ scopeLabel(scope) }}
-              </label>
-            </div>
-          </li>
-        </ul>
-        <p v-else-if="!busy">{{ t("console.members.empty") }}</p>
-      </section>
+      <OrganizationMembersPanel
+        v-if="canManageOrganizationMembers"
+        v-model:new-member-email="newMemberEmail"
+        v-model:new-member-role="newMemberRole"
+        v-model:new-member-scopes="newMemberScopes"
+        :actor-role="activeOrganization?.membership.role"
+        :busy="busy"
+        :organization-members="organizationMembers"
+        :organization-invitations="organizationInvitations"
+        :available-member-role-options="availableMemberRoleOptions"
+        :available-new-member-scope-options="availableNewMemberScopeOptions"
+        @load-members="loadOrganizationMembers"
+        @invite-member="addOrganizationMember"
+        @load-invitations="loadOrganizationInvitations"
+        @revoke-invitation="revokeOrganizationInvitation"
+        @save-member="saveOrganizationMember"
+        @remove-member="removeOrganizationMember"
+        @normalize-new-member-scopes="normalizeNewMemberScopes"
+      />
       <section v-if="activeOrganizationId" class="platform-dashboard" aria-labelledby="control-modules-heading">
         <div class="section-heading"><div><h3 id="control-modules-heading">{{ t("console.modules.title") }}</h3><p>{{ t("console.modules.description") }}</p></div><button type="button" :disabled="busy" @click="loadControlModules">{{ busy ? t("console.members.loading") : t("console.modules.load") }}</button></div>
         <ul v-if="controlModules.length" class="health-signals"><li v-for="module in controlModules" :key="module.key"><span><strong>{{ module.display_name }}</strong><small>{{ platformLabel(module.platform) }} · {{ capabilityLabel(module.capability) }}</small></span><em :data-status="module.status">{{ moduleStatusLabel(module.status) }}</em></li></ul>
