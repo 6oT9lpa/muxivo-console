@@ -182,6 +182,37 @@ test("landing page and sign-in dialog fit a narrow viewport", async ({ page }) =
   ).toBe(false);
 });
 
+test("sign-in dialog follows the selected light theme", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("/");
+
+  await page
+    .getByRole("button", { name: /switch to light theme|включить светлую тему/i })
+    .click();
+  await page.getByRole("button", { name: /see panel|открыть панель/i }).click();
+
+  const panel = page.locator(".login-panel");
+  await expect(panel).toBeVisible();
+  const styleState = await panel.evaluate((element) => {
+    const title = element.querySelector("#console-auth-dialog-title");
+    const description = element.querySelector(":scope > p");
+    return {
+      panelColor: getComputedStyle(element).color,
+      panelBackgroundImage: getComputedStyle(element).backgroundImage,
+      titleColor: title ? getComputedStyle(title).color : "",
+      descriptionColor: description ? getComputedStyle(description).color : "",
+    };
+  });
+
+  expect(styleState.panelBackgroundImage).toContain("linear-gradient");
+  expect(styleState.panelColor).toBe("rgb(9, 9, 11)");
+  expect(styleState.titleColor).toBe("rgb(9, 9, 11)");
+  expect(styleState.descriptionColor).toBe("rgb(82, 82, 91)");
+  expect(
+    await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth),
+  ).toBe(false);
+});
+
 test("language switcher updates the public document and persists the locale", async ({ page }) => {
   await page.goto("/");
 
