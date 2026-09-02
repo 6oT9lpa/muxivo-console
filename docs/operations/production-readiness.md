@@ -31,7 +31,7 @@ completed.
 | Security | Shared rate limits enabled for login, registration, reauthentication, OAuth callback and recovery | Implemented; Redis URL pending |
 | Security | CORS allowlist configured for staging/prod origins | Enforced in settings; values pending |
 | Security | CSP, HSTS and browser hardening headers enabled | Implemented |
-| Security | Secret redaction filter installed in production composition | Implemented |
+| Security | Secret redaction filter and structured JSON logging installed in production composition | Implemented |
 | Security | Browser contracts checked for platform token exposure | Implemented in CI |
 | Security | Secret scan in CI | Implemented |
 | Security | Audit coverage review for sensitive Foundation actions | Implemented in CI |

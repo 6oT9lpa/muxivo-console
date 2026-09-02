@@ -161,6 +161,13 @@ Check `http://127.0.0.1:8010/healthz` and
 The first endpoint proves process liveness; the second fails closed unless the
 dedicated Console database is reachable.
 
+The production composition configures one-line UTC JSON events on the process
+handlers. Each event keeps its canonical name in `event`, carries safe metadata
+such as `correlation_id`, and passes through secret redaction. Uvicorn access
+records are normalized to method, path, protocol and status without retaining
+the raw client address. Use the journal's JSON parser or a log collector rather
+than depending on the previous human-readable formatter.
+
 ### 5. Add only the new FRP proxy
 
 Merge the `[[proxies]]` block from

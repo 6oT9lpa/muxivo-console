@@ -193,6 +193,7 @@ from muxivo_console.infrastructure.smtp_organization_invitation_notifier import 
 from muxivo_console.infrastructure.smtp_password_recovery_notifier import (
     SmtpPasswordRecoveryNotifier,
 )
+from muxivo_console.infrastructure.structured_logging import install_structured_logging
 from muxivo_console.infrastructure.twitch_connection_candidate_catalog import (
     TwitchPlatformConnectionCandidateCatalog,
 )
@@ -222,6 +223,7 @@ def create_production_app(
 ):
     """Compose a fully wired API without leaking infrastructure into handlers."""
     install_secret_redaction_filter()
+    install_structured_logging()
     sessions = create_session_factory(settings.database_url)
     identifiers = Uuid7IdentifierGenerator()
     clock = UtcClock()
