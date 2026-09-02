@@ -13,8 +13,13 @@ _IGNORED_DIRECTORIES = {
     ".pytest_cache",
     ".ruff_cache",
     ".venv",
+    "__pycache__",
+    ".nox",
+    ".tox",
+    "build",
     "dist",
     "node_modules",
+    "venv",
 }
 _IGNORED_SUFFIXES = {
     ".docx",
