@@ -66,11 +66,17 @@ Set-Location 'E:\muxivo\muxivo Console'
 .\scripts\start-dev.ps1
 ```
 
-Open `http://127.0.0.1:5173` and sign in with
-`demo@example.com` / `muxivo-demo-password`. Create an organization and use
-the workspace controls. The script creates its random development-only keys in
-the ignored `.dev/console.env` file and starts PostgreSQL and the API in Docker,
-then Vite on the host.
+Open `http://127.0.0.1:5173` and use the Create account flow. An account is
+created only after the six-digit e-mail verification code is accepted; the
+development launcher no longer creates a test account or bypasses verification.
+To exercise real verification and recovery delivery locally, add a development
+SMTP configuration to the ignored `.dev/console.env` file using the
+`MUXIVO_CONSOLE_PASSWORD_RECOVERY_SMTP_*` variables documented in
+`deploy/console.env.example`. Without SMTP configuration, delivery fails closed
+and the automated API/frontend tests use explicit notification doubles or mocks.
+The script creates its random development-only keys in the ignored
+`.dev/console.env` file and starts PostgreSQL and the API in Docker, then Vite on
+the host.
 
 The walkthrough exercises Console-owned authentication, organization and RBAC
 flows. Browser operations that read a connected Discord guild still require the

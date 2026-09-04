@@ -88,9 +88,6 @@ try {
         if ($attempt -eq 30) { throw "Console API did not become ready. Run: docker compose -f docker-compose.dev.yml logs api" }
     }
 
-    $demoPayload = @{ email = "demo@example.com"; password = "muxivo-demo-password"; display_name = "Muxivo demo" } | ConvertTo-Json
-    Invoke-WebRequest -UseBasicParsing "http://127.0.0.1:8000/api/v1/auth/email-password/registrations" -Method Post -ContentType "application/json" -Body $demoPayload | Out-Null
-
     if (-not (Test-ProcessRunning $webPidFile)) {
         $web = Start-Process -FilePath "npm.cmd" -ArgumentList @("run", "dev", "--", "--host", "127.0.0.1") -WorkingDirectory $webDirectory -WindowStyle Hidden -RedirectStandardOutput $webLog -RedirectStandardError $webErrorLog -PassThru
         Set-Content -LiteralPath $webPidFile -Value $web.Id -Encoding ascii
@@ -100,5 +97,6 @@ try {
 }
 
 Write-Host "Muxivo Console is ready at http://127.0.0.1:5173"
-Write-Host "Demo sign-in: demo@example.com / muxivo-demo-password"
+Write-Host "Use the Create account flow; an account is created only after the six-digit e-mail code is verified."
+Write-Host "Configure development SMTP variables in $environmentFile to exercise real verification and recovery delivery."
 Write-Host "The real Discord Control API is optional for this local Console walkthrough; its URL is configured in $environmentFile."
