@@ -72,8 +72,8 @@ On 2026-09-05 the deployment was checked without changing application data:
   Activity host remained reachable;
 - the latest API source was staged at `/opt/muxivo-console` on the local server,
   with a rollback copy at `/opt/muxivo-console.backup-eb08bd6`;
-- a source scan found no legacy `RegisterEmailPassword`, `account_accepted` or
-  `direct-registration` symbols in the deployed `apps` and `tests` trees.
+- a source scan found no deprecated registration implementation markers in the
+  deployed `apps` and `tests` trees.
 
 The `502` responses are an intentional readiness boundary, not a successful
 production deployment. The next activation step requires a real approved
