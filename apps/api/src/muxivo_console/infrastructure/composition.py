@@ -144,6 +144,9 @@ from muxivo_console.infrastructure.persistence.identity_repository import (
     SqlAlchemyPasswordCredentialRepository,
     SqlAlchemyUserEmailLookupReader,
 )
+from muxivo_console.infrastructure.persistence.identity_unlink_writer import (
+    SqlAlchemyLoginIdentityUnlinkWriter,
+)
 from muxivo_console.infrastructure.persistence.oauth_login_transaction_repository import (
     SqlAlchemyOAuthLoginTransactionConsumer,
     SqlAlchemyOAuthLoginTransactionWriter,
@@ -283,7 +286,7 @@ def create_production_app(
         identifiers=identifiers,
         user_statuses=user_statuses,
         identities=SqlAlchemyLoginIdentityReader(sessions),
-        unlinker=SqlAlchemyLoginIdentityReader(sessions),
+        unlinker=SqlAlchemyLoginIdentityUnlinkWriter(sessions),
         recent_authentication=RequireRecentAuthentication(clock=clock),
     )
     password_credentials = SqlAlchemyPasswordCredentialRepository(sessions)
