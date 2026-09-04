@@ -27,6 +27,7 @@ completed.
 
 | Area | Gate | Status |
 | --- | --- | --- |
+| Identity | E-mail/password registration creates an account only after a short-lived six-digit code is verified | Implemented; SMTP.BZ secret-manager wiring and delivery test pending |
 | Identity | Password recovery SMTP delivery adapter configured outside logs | SMTP.BZ domain verified and STARTTLS/AUTH probe passed; secret-manager wiring and delivery test pending |
 | Security | Shared rate limits enabled for login, registration, reauthentication, OAuth callback and recovery | Redis is installed and loopback-only; staging secret-manager URL wiring pending |
 | Security | CORS allowlist configured for staging/prod origins | Enforced in settings; values pending |
@@ -57,10 +58,13 @@ completed.
 | Deployment | Staging/prod OAuth credentials provisioned | Discord/Twitch OAuth enforced; values pending |
 | Secrets | KMS/secret manager selected and wired | Secret-manager source enforced; provider pending |
 
-Email verification is intentionally out of scope for this Console Foundation
-pass. The current production gate is password recovery, session management and
-usable login identity safety without e-mail confirmation; verified-email UX can
-be added as a later account-trust milestone.
+E-mail ownership verification is part of the current Console authentication
+flow. The public registration endpoint creates only a short-lived pending
+record, stores encrypted/hashed values in the one-time token store, and sends
+the six-digit code through the configured SMTP adapter. The user account,
+password credential and registration audit event are created only after the
+code is verified. SMTP configuration and a real recipient delivery check still
+remain staging/prod launch gates.
 
 ## Privacy policy draft outline
 

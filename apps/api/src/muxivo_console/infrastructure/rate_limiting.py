@@ -16,6 +16,8 @@ from muxivo_console.infrastructure.redis_rate_limit_unavailable_error import (
 
 DEFAULT_AUTH_RATE_LIMIT_RULES: Mapping[str, RateLimitRule] = {
     "auth.registration": RateLimitRule(limit=5, window_seconds=60),
+    "auth.registration.verification": RateLimitRule(limit=10, window_seconds=60),
+    "auth.registration.resend": RateLimitRule(limit=3, window_seconds=300),
     "auth.login": RateLimitRule(limit=10, window_seconds=60),
     "auth.oauth.start": RateLimitRule(limit=10, window_seconds=60),
     "auth.oauth.callback": RateLimitRule(limit=20, window_seconds=60),

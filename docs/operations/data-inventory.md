@@ -9,6 +9,7 @@ provider, region, retention configuration and owner before staging approval.
 | Password credential | Argon2id password hash and credential metadata | Secret-derived | Never | Password authentication | While identity is usable |
 | Browser session | Hashed session token, timestamps, assurance, hashed IP/user-agent presentation | Security metadata | Raw opaque session cookie only; HttpOnly | Session security | 30 days after expiry/revocation |
 | CSRF token | Browser cookie and request header value | Security token | Intentionally readable by browser | CSRF defense | Session lifetime |
+| Pending registration | Registration ID, encrypted e-mail, keyed e-mail lookup hash, Argon2id password hash, keyed code hash and bounded attempts | Personal/security metadata | Opaque pending-flow token and user-entered code only; raw password/code never persisted | E-mail ownership verification before account creation | Short-lived Redis TTL; delete on verification or delivery failure |
 | Recovery transaction | Hashed recovery token, expiry and user reference | Security metadata | Raw token only through approved recovery channel | Password recovery | 24 hours after expiry/consumption |
 | Login identity | Provider and provider subject | Provider metadata | Limited profile projection | Sign-in and identity linking | While identity is linked |
 | Organization | Name, slug and identifiers | Tenant metadata | Authorized organization responses | Tenant boundary | While organization exists |

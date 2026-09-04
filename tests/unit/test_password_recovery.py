@@ -106,13 +106,31 @@ class RecoveryNotifier:
 
 
 class RecoveryCompletionWriter:
-    def __init__(self, result: bool = True) -> None:
+    def __init__(self, result: UUID | None) -> None:
         self.result = result
         self.arguments: dict[str, object] | None = None
 
-    async def complete(self, **arguments) -> bool:
+    async def complete(self, **arguments) -> UUID | None:
         self.arguments = arguments
         return self.result
+
+
+class RecoveryRecipientReader:
+    def __init__(self, email: str | None = "creator@example.com") -> None:
+        self.email = email
+        self.user_id: UUID | None = None
+
+    async def find_primary_email(self, *, user_id: UUID) -> str | None:
+        self.user_id = user_id
+        return self.email
+
+
+class RecoveryCompletionNotifier:
+    def __init__(self) -> None:
+        self.arguments: dict[str, object] | None = None
+
+    async def send(self, **arguments) -> None:
+        self.arguments = arguments
 
 
 @pytest.mark.asyncio
@@ -177,16 +195,20 @@ async def test_recovery_request_is_anti_enumeration_for_missing_account() -> Non
 @pytest.mark.asyncio
 async def test_recovery_completion_hashes_token_and_password_then_delegates_atomic_write() -> None:
     now = datetime(2026, 8, 19, 12, tzinfo=UTC)
-    audit_id, correlation_id = uuid4(), uuid4()
+    user_id, audit_id, correlation_id = uuid4(), uuid4(), uuid4()
     token_hasher = TokenHasher()
     passwords = Passwords()
-    writer = RecoveryCompletionWriter()
+    writer = RecoveryCompletionWriter(user_id)
+    recipients = RecoveryRecipientReader()
+    notifier = RecoveryCompletionNotifier()
     use_case = CompletePasswordRecovery(
         identifiers=SequenceIdentifiers([audit_id]),
         clock=FixedClock(now),
         token_hasher=token_hasher,
         password_hasher=passwords,
         completions=writer,
+        recipients=recipients,
+        notifier=notifier,
     )
 
     await use_case.execute(
@@ -206,6 +228,13 @@ async def test_recovery_completion_hashes_token_and_password_then_delegates_atom
         "audit_id": audit_id,
         "correlation_id": correlation_id,
     }
+    assert recipients.user_id == user_id
+    assert notifier.arguments == {
+        "user_id": user_id,
+        "recipient_email": "creator@example.com",
+        "changed_at": now,
+        "correlation_id": correlation_id,
+    }
 
 
 @pytest.mark.asyncio
@@ -215,7 +244,9 @@ async def test_recovery_completion_rejects_invalid_or_consumed_token() -> None:
         clock=FixedClock(datetime(2026, 8, 19, 12, tzinfo=UTC)),
         token_hasher=TokenHasher(),
         password_hasher=Passwords(),
-        completions=RecoveryCompletionWriter(result=False),
+        completions=RecoveryCompletionWriter(result=None),
+        recipients=RecoveryRecipientReader(),
+        notifier=RecoveryCompletionNotifier(),
     )
 
     with pytest.raises(PasswordRecoveryCompletionRejectedError):

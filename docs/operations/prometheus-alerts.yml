@@ -21,7 +21,7 @@ groups:
           sum(
             rate(
               muxivo_console_http_requests_total{
-                route=~"/api/v1/auth/(email-password/(registrations|sessions)|password-recovery/(requests|completions)|discord/.*)",
+                route=~"/api/v1/auth/(email-password/(registrations|registration-verifications(/resend)?|sessions)|password-recovery/(requests|completions)|discord/.*)",
                 status_code=~"401|403|429"
               }[5m]
             )

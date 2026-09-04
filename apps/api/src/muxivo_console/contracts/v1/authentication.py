@@ -12,9 +12,27 @@ class EmailPasswordRegistrationRequest(BaseModel):
 
 
 class EmailPasswordRegistrationResponse(BaseModel):
-    """Enumeration-safe result for both accepted and duplicate registrations."""
+    """Enumeration-safe response for the pending e-mail verification flow."""
 
-    status: Literal["accepted"] = "accepted"
+    status: Literal["verification_required"] = "verification_required"
+    verification_token: str | None = None
+
+
+class EmailPasswordRegistrationVerificationRequest(BaseModel):
+    """Bearer token plus the six-digit code delivered to the e-mail inbox."""
+
+    token: SecretStr = Field(min_length=1, max_length=4096)
+    code: str = Field(pattern=r"^\d{6}$")
+
+
+class EmailPasswordRegistrationVerificationResponse(BaseModel):
+    status: Literal["verified"] = "verified"
+
+
+class EmailPasswordRegistrationVerificationResendRequest(BaseModel):
+    """Request a fresh code without exposing whether the pending flow exists."""
+
+    token: SecretStr = Field(min_length=1, max_length=4096)
 
 
 class EmailPasswordLoginRequest(BaseModel):

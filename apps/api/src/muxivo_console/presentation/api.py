@@ -54,6 +54,9 @@ from muxivo_console.application.create_organization import (
     CreateOrganizationCommand,
     OrganizationCreationRejectedError,
 )
+from muxivo_console.application.email_password_registration_verification_rejected_error import (
+    EmailPasswordRegistrationVerificationRejectedError,
+)
 from muxivo_console.application.get_platform_ai_moderation_policy import (
     GetPlatformAiModerationPolicy,
 )
@@ -151,11 +154,6 @@ from muxivo_console.application.reauthenticate_browser_session import (
     ReauthenticateBrowserSession,
     ReauthenticateBrowserSessionCommand,
 )
-from muxivo_console.application.register_email_password import (
-    RegisterEmailPassword,
-    RegisterEmailPasswordCommand,
-    RegistrationRejectedError,
-)
 from muxivo_console.application.register_platform_connection import (
     PlatformConnectionRegistrationRejectedError,
     RegisterPlatformConnection,
@@ -167,6 +165,9 @@ from muxivo_console.application.request_password_recovery import (
 )
 from muxivo_console.application.require_recent_authentication import (
     RecentAuthenticationRequiredError,
+)
+from muxivo_console.application.resend_email_password_registration_command import (
+    ResendEmailPasswordRegistrationCommand,
 )
 from muxivo_console.application.resolve_browser_session import (
     BrowserSessionPrincipal,
@@ -183,6 +184,12 @@ from muxivo_console.application.revoke_organization_invitation import (
     RevokeOrganizationInvitation,
     RevokeOrganizationInvitationCommand,
 )
+from muxivo_console.application.start_email_password_registration import (
+    StartEmailPasswordRegistration,
+)
+from muxivo_console.application.start_email_password_registration_command import (
+    StartEmailPasswordRegistrationCommand,
+)
 from muxivo_console.application.update_platform_ai_moderation_policy import (
     UpdatePlatformAiModerationPolicy,
 )
@@ -191,6 +198,12 @@ from muxivo_console.application.update_platform_channel_purpose import (
 )
 from muxivo_console.application.update_platform_welcome_settings import (
     UpdatePlatformWelcomeSettings,
+)
+from muxivo_console.application.verify_email_password_registration import (
+    VerifyEmailPasswordRegistration,
+)
+from muxivo_console.application.verify_email_password_registration_command import (
+    VerifyEmailPasswordRegistrationCommand,
 )
 from muxivo_console.contracts.v1.ai_moderation_policy import (
     AiModerationPolicyUpdateRequest,
@@ -202,6 +215,9 @@ from muxivo_console.contracts.v1.authentication import (
     EmailPasswordLoginRequest,
     EmailPasswordRegistrationRequest,
     EmailPasswordRegistrationResponse,
+    EmailPasswordRegistrationVerificationRequest,
+    EmailPasswordRegistrationVerificationResendRequest,
+    EmailPasswordRegistrationVerificationResponse,
     PasswordChangeRequest,
     PasswordRecoveryCompletionRequest,
     PasswordRecoveryRequest,
@@ -317,6 +333,8 @@ CSRF_HEADER_NAME = "X-CSRF-Token"
 CSRF_EXEMPT_PATHS = frozenset(
     {
         "/api/v1/auth/email-password/registrations",
+        "/api/v1/auth/email-password/registration-verifications",
+        "/api/v1/auth/email-password/registration-verifications/resend",
         "/api/v1/auth/email-password/sessions",
         "/api/v1/auth/discord/authorizations",
         "/api/v1/auth/password-recovery/requests",
@@ -567,7 +585,8 @@ def _login_identity_response(
 
 def create_app(
     control_modules_use_case: ListControlModules | None = None,
-    registration_use_case: RegisterEmailPassword | None = None,
+    registration_verification_start_use_case: StartEmailPasswordRegistration | None = None,
+    registration_verification_use_case: VerifyEmailPasswordRegistration | None = None,
     authentication_use_case: AuthenticateEmailPassword | None = None,
     password_change_use_case: ChangeEmailPassword | None = None,
     password_recovery_request_use_case: RequestPasswordRecovery | None = None,
@@ -2039,36 +2058,133 @@ def create_app(
     @app.post(
         "/api/v1/auth/email-password/registrations",
         response_model=EmailPasswordRegistrationResponse,
+        response_model_exclude_none=True,
         status_code=status.HTTP_202_ACCEPTED,
         tags=["authentication"],
     )
-    async def register_email_password(
+    async def start_email_password_registration(
         payload: EmailPasswordRegistrationRequest, request: Request
     ) -> EmailPasswordRegistrationResponse:
         await enforce_auth_rate_limit(request, scope="auth.registration")
-        if registration_use_case is None:
+        if registration_verification_start_use_case is None:
             raise HTTPException(
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
                 detail="Registration is unavailable",
             )
         try:
-            await registration_use_case.execute(
-                RegisterEmailPasswordCommand(
+            started = await registration_verification_start_use_case.execute(
+                StartEmailPasswordRegistrationCommand(
                     email=str(payload.email),
                     password=payload.password.get_secret_value(),
                     display_name=payload.display_name,
                     correlation_id=request.state.correlation_id,
                 )
             )
-        except RegistrationRejectedError as error:
-            logger.info(
-                "auth.email_password_registration.rejected",
+        except (ConnectionError, ValueError) as error:
+            logger.error(
+                "auth.email_password.verification.start_failed",
                 extra={
                     "correlation_id": str(request.state.correlation_id),
                     "error_type": type(error).__name__,
                 },
             )
-        return EmailPasswordRegistrationResponse()
+            if isinstance(error, ConnectionError):
+                raise HTTPException(
+                    status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                    detail="Registration is temporarily unavailable",
+                ) from error
+            # Keep malformed application input generic even if a future
+            # contract stops validating it at the Pydantic boundary.
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="Registration data is invalid",
+            ) from error
+        return EmailPasswordRegistrationResponse(
+            status="verification_required",
+            verification_token=started.raw_token,
+        )
+
+    @app.post(
+        "/api/v1/auth/email-password/registration-verifications",
+        response_model=EmailPasswordRegistrationVerificationResponse,
+        status_code=status.HTTP_200_OK,
+        tags=["authentication"],
+    )
+    async def verify_email_password_registration(
+        payload: EmailPasswordRegistrationVerificationRequest, request: Request
+    ) -> EmailPasswordRegistrationVerificationResponse:
+        await enforce_auth_rate_limit(request, scope="auth.registration.verification")
+        if registration_verification_use_case is None:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="E-mail verification is unavailable",
+            )
+        try:
+            await registration_verification_use_case.execute(
+                VerifyEmailPasswordRegistrationCommand(
+                    token=payload.token.get_secret_value(),
+                    code=payload.code,
+                    correlation_id=request.state.correlation_id,
+                )
+            )
+        except EmailPasswordRegistrationVerificationRejectedError as error:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="E-mail verification failed",
+            ) from error
+        except ConnectionError as error:
+            logger.error(
+                "auth.email_password.verification.backend_unavailable",
+                extra={
+                    "correlation_id": str(request.state.correlation_id),
+                    "error_type": type(error).__name__,
+                },
+            )
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="E-mail verification is temporarily unavailable",
+            ) from error
+        return EmailPasswordRegistrationVerificationResponse()
+
+    @app.post(
+        "/api/v1/auth/email-password/registration-verifications/resend",
+        response_model=EmailPasswordRegistrationResponse,
+        response_model_exclude_none=True,
+        status_code=status.HTTP_202_ACCEPTED,
+        tags=["authentication"],
+    )
+    async def resend_email_password_registration_verification(
+        payload: EmailPasswordRegistrationVerificationResendRequest, request: Request
+    ) -> EmailPasswordRegistrationResponse:
+        await enforce_auth_rate_limit(request, scope="auth.registration.resend")
+        if registration_verification_start_use_case is None:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="E-mail verification is unavailable",
+            )
+        try:
+            resent = await registration_verification_start_use_case.resend(
+                ResendEmailPasswordRegistrationCommand(
+                    token=payload.token.get_secret_value(),
+                    correlation_id=request.state.correlation_id,
+                )
+            )
+        except ConnectionError as error:
+            logger.error(
+                "auth.email_password.verification.resend_backend_unavailable",
+                extra={
+                    "correlation_id": str(request.state.correlation_id),
+                    "error_type": type(error).__name__,
+                },
+            )
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="E-mail verification is temporarily unavailable",
+            ) from error
+        return EmailPasswordRegistrationResponse(
+            status="verification_required",
+            verification_token=resent.raw_token,
+        )
 
     @app.post(
         "/api/v1/auth/email-password/sessions",

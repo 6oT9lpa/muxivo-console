@@ -391,6 +391,8 @@ class EmailProtector(EmailLookupHasher, Protocol):
 
     def encrypt(self, normalized_email: str) -> bytes: ...
 
+    def decrypt(self, ciphertext: bytes) -> str: ...
+
 
 class PasswordHasher(Protocol):
     """Hashes and verifies passwords without exposing a plaintext credential."""
@@ -446,7 +448,13 @@ class PasswordRecoveryCompletionWriter(Protocol):
         completed_at,
         audit_id: UUID,
         correlation_id: UUID,
-    ) -> bool: ...
+    ) -> UUID | None: ...
+
+
+class PasswordRecoveryRecipientReader(Protocol):
+    """Resolves the protected primary e-mail after a recovery succeeds."""
+
+    async def find_primary_email(self, *, user_id: UUID) -> str | None: ...
 
 
 class SecurityRecordCleaner(Protocol):
@@ -469,6 +477,45 @@ class PasswordRecoveryNotifier(Protocol):
         expires_at,
         correlation_id: UUID,
     ) -> None: ...
+
+
+class PasswordRecoveryCompletionNotifier(Protocol):
+    """Confirms a completed password change without exposing recovery secrets."""
+
+    async def send(
+        self,
+        *,
+        user_id: UUID,
+        recipient_email: str,
+        changed_at,
+        correlation_id: UUID,
+    ) -> None: ...
+
+
+class EmailPasswordRegistrationVerificationNotifier(Protocol):
+    """Delivers a short-lived six-digit registration verification code."""
+
+    async def send(
+        self,
+        *,
+        registration_id: UUID,
+        recipient_email: str,
+        verification_code: str,
+        expires_at,
+        correlation_id: UUID,
+    ) -> None: ...
+
+
+class OneTimeTokenStore(Protocol):
+    """Stores encrypted/hashed pending flow values with atomic exact-value consume."""
+
+    async def put(self, *, key: str, value: str, ttl_seconds: int) -> bool: ...
+
+    async def get(self, *, key: str) -> str | None: ...
+
+    async def replace(self, *, key: str, value: str, ttl_seconds: int) -> bool: ...
+
+    async def consume(self, *, key: str, value: str) -> bool: ...
 
 
 class OrganizationInvitationNotifier(Protocol):

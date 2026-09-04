@@ -15,7 +15,9 @@ from muxivo_console.application.ports import (
     Clock,
     IdentifierGenerator,
     PasswordHasher,
+    PasswordRecoveryCompletionNotifier,
     PasswordRecoveryCompletionWriter,
+    PasswordRecoveryRecipientReader,
     SessionTokenHasher,
 )
 
@@ -31,6 +33,8 @@ class CompletePasswordRecovery:
     token_hasher: SessionTokenHasher
     password_hasher: PasswordHasher
     completions: PasswordRecoveryCompletionWriter
+    recipients: PasswordRecoveryRecipientReader
+    notifier: PasswordRecoveryCompletionNotifier
 
     async def execute(self, command: CompletePasswordRecoveryCommand) -> None:
         logger.info(
@@ -50,22 +54,52 @@ class CompletePasswordRecovery:
             )
             raise PasswordRecoveryCompletionRejectedError("Password recovery failed.")
 
-        completed = await self.completions.complete(
+        completed_at = self.clock.now()
+        user_id = await self.completions.complete(
             token_hash=self.token_hasher.hash(command.token),
             password_hash=self.password_hasher.hash(command.new_password),
-            completed_at=self.clock.now(),
+            completed_at=completed_at,
             audit_id=self.identifiers.new(),
             correlation_id=command.correlation_id,
         )
-        if not completed:
+        if user_id is None:
             logger.warning(
                 "password.recovery.complete.rejected",
                 extra={"correlation_id": str(command.correlation_id)},
             )
             raise PasswordRecoveryCompletionRejectedError("Password recovery failed.")
+        recipient_email = await self.recipients.find_primary_email(user_id=user_id)
+        if recipient_email is None:
+            logger.error(
+                "password.recovery.completion_notification.recipient_unavailable",
+                extra={
+                    "user_id": str(user_id),
+                    "correlation_id": str(command.correlation_id),
+                },
+            )
+        else:
+            try:
+                await self.notifier.send(
+                    user_id=user_id,
+                    recipient_email=recipient_email,
+                    changed_at=completed_at,
+                    correlation_id=command.correlation_id,
+                )
+            except Exception as error:
+                logger.error(
+                    "password.recovery.completion_notification.delivery_failed",
+                    extra={
+                        "user_id": str(user_id),
+                        "correlation_id": str(command.correlation_id),
+                        "error_type": type(error).__name__,
+                    },
+                )
         logger.info(
             "password.recovery.complete.completed",
-            extra={"correlation_id": str(command.correlation_id)},
+            extra={
+                "user_id": str(user_id),
+                "correlation_id": str(command.correlation_id),
+            },
         )
 
 

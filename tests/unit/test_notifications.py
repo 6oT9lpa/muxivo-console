@@ -5,8 +5,11 @@ from uuid import uuid4
 
 import pytest
 from muxivo_console.infrastructure.notifications import (
+    SmtpEmailPasswordRegistrationVerificationNotifier,
     SmtpOrganizationInvitationNotifier,
+    SmtpPasswordRecoveryCompletionNotifier,
     SmtpPasswordRecoveryNotifier,
+    UndeliveredEmailPasswordRegistrationVerificationNotifier,
 )
 from muxivo_console.infrastructure.settings import SmtpPasswordRecoverySettings
 
@@ -84,7 +87,7 @@ async def test_smtp_password_recovery_notifier_sends_reset_message_without_token
     assert fake_smtp.message is not None
     assert fake_smtp.message["From"] == "security@muxivo.test"
     assert fake_smtp.message["To"] == "creator@example.com"
-    body = fake_smtp.message.get_content()
+    body = fake_smtp.message.get_body(preferencelist=("plain",)).get_content()
     assert "https://console.muxivo.test/recover?token=opaque-recovery-token" in body
     assert "opaque-recovery-token" in body
     assert "opaque-recovery-token" not in caplog.text
@@ -92,6 +95,106 @@ async def test_smtp_password_recovery_notifier_sends_reset_message_without_token
     assert "smtp.delivery.tls_negotiated" in caplog.text
     assert "smtp.delivery.authenticated" in caplog.text
     assert "smtp.delivery.message_submitted" in caplog.text
+
+
+@pytest.mark.asyncio
+async def test_smtp_registration_verification_notifier_sends_code_without_logging_it(
+    caplog,
+) -> None:
+    fake_smtp: FakeSmtp | None = None
+
+    def smtp_factory(host: str, port: int, *, timeout: float) -> FakeSmtp:
+        nonlocal fake_smtp
+        fake_smtp = FakeSmtp(host, port, timeout=timeout)
+        return fake_smtp
+
+    notifier = SmtpEmailPasswordRegistrationVerificationNotifier(
+        SmtpPasswordRecoverySettings(
+            host="smtp.internal",
+            port=587,
+            from_email="security@muxivo.test",
+            reset_url_base="https://console.muxivo.test/recover",
+            username="smtp-user",
+            password="smtp-password",
+            starttls=True,
+        ),
+        smtp_factory=smtp_factory,
+    )
+    caplog.set_level(logging.INFO)
+
+    await notifier.send(
+        registration_id=uuid4(),
+        recipient_email="creator@example.com",
+        verification_code="123456",
+        expires_at=datetime(2026, 8, 22, 12, tzinfo=UTC),
+        correlation_id=uuid4(),
+    )
+
+    assert fake_smtp is not None
+    assert fake_smtp.message is not None
+    assert fake_smtp.message["To"] == "creator@example.com"
+    body = fake_smtp.message.get_body(preferencelist=("plain",)).get_content()
+    assert "123456" in body
+    assert "123456" not in caplog.text
+
+
+@pytest.mark.asyncio
+async def test_unconfigured_registration_verification_delivery_fails_closed(caplog) -> None:
+    notifier = UndeliveredEmailPasswordRegistrationVerificationNotifier()
+    caplog.set_level(logging.INFO)
+
+    with pytest.raises(ConnectionError):
+        await notifier.send(
+            registration_id=uuid4(),
+            recipient_email="creator@example.com",
+            verification_code="123456",
+            expires_at=datetime(2026, 8, 22, 12, tzinfo=UTC),
+            correlation_id=uuid4(),
+        )
+
+    assert "auth.email_password.verification_delivery.unconfigured" in caplog.text
+    assert "123456" not in caplog.text
+
+
+@pytest.mark.asyncio
+async def test_smtp_password_recovery_completion_notifier_sends_token_free_confirmation(
+    caplog,
+) -> None:
+    fake_smtp: FakeSmtp | None = None
+
+    def smtp_factory(host: str, port: int, *, timeout: float) -> FakeSmtp:
+        nonlocal fake_smtp
+        fake_smtp = FakeSmtp(host, port, timeout=timeout)
+        return fake_smtp
+
+    notifier = SmtpPasswordRecoveryCompletionNotifier(
+        SmtpPasswordRecoverySettings(
+            host="smtp.internal",
+            port=587,
+            from_email="security@muxivo.test",
+            reset_url_base="https://console.muxivo.test/recover",
+            username="smtp-user",
+            password="smtp-password",
+            starttls=True,
+        ),
+        smtp_factory=smtp_factory,
+    )
+    caplog.set_level(logging.INFO)
+
+    await notifier.send(
+        user_id=uuid4(),
+        recipient_email="creator@example.com",
+        changed_at=datetime(2026, 8, 22, 12, tzinfo=UTC),
+        correlation_id=uuid4(),
+    )
+
+    assert fake_smtp is not None
+    assert fake_smtp.message is not None
+    assert fake_smtp.message["Subject"] == "Muxivo Console password changed"
+    body = fake_smtp.message.get_body(preferencelist=("plain",)).get_content()
+    assert "password was changed" in body
+    assert "token" not in body.lower()
+    assert "password.recovery.completion_notification.completed" in caplog.text
 
 
 @pytest.mark.asyncio

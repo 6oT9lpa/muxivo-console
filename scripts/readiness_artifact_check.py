@@ -35,6 +35,13 @@ REQUIRED_READINESS_MARKERS: tuple[tuple[str, str], ...] = (
 )
 
 REQUIRED_LAUNCH_GATES: tuple[tuple[str, str], ...] = (
+    (
+        (
+            "E-mail/password registration creates an account only after a short-lived "
+            "six-digit code is verified"
+        ),
+        "e-mail ownership verification gate",
+    ),
     ("Password recovery SMTP delivery adapter configured outside logs", "password recovery gate"),
     (
         (
@@ -69,8 +76,8 @@ REQUIRED_LAUNCH_GATES: tuple[tuple[str, str], ...] = (
 
 REQUIRED_SCOPE_MARKERS: tuple[tuple[str, str], ...] = (
     (
-        "Email verification is intentionally out of scope for this Console Foundation",
-        "email verification scope exclusion",
+        "E-mail ownership verification is part of the current Console authentication",
+        "e-mail ownership verification scope",
     ),
 )
 

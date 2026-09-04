@@ -80,6 +80,16 @@ def assert_rate_limited(response, limiter: DenyingRateLimiter, expected_scope: s
             "auth.registration",
         ),
         (
+            "/api/v1/auth/email-password/registration-verifications",
+            {"token": "opaque-pending-token", "code": "123456"},
+            "auth.registration.verification",
+        ),
+        (
+            "/api/v1/auth/email-password/registration-verifications/resend",
+            {"token": "opaque-pending-token"},
+            "auth.registration.resend",
+        ),
+        (
             "/api/v1/auth/email-password/sessions",
             {"email": "creator@example.com", "password": "a-long-enough-password"},
             "auth.login",
@@ -103,7 +113,8 @@ def test_auth_mutation_endpoints_are_rate_limited_before_use_case(
     use_case = RecordingUseCase()
     login_use_case = LoginUseCase()
     app = create_app(
-        registration_use_case=use_case,
+        registration_verification_start_use_case=use_case,
+        registration_verification_use_case=use_case,
         authentication_use_case=login_use_case,
         password_recovery_request_use_case=use_case,
         password_recovery_completion_use_case=use_case,
@@ -172,7 +183,7 @@ def test_rate_limit_logs_use_a_fingerprint_instead_of_raw_client_address(caplog)
     limiter = DenyingRateLimiter()
     caplog.set_level(logging.INFO, logger="muxivo_console.presentation.api")
     app = create_app(
-        registration_use_case=RecordingUseCase(),
+        registration_verification_start_use_case=RecordingUseCase(),
         rate_limiter=limiter,
         session_fingerprint_hasher=HmacSessionFingerprintHasher(b"p" * 32),
     )

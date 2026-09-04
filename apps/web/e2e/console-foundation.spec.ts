@@ -59,13 +59,26 @@ test("sign-in, create organization, connect Discord, audit and revoke from the b
   await page.getByLabel("Password", { exact: true }).fill("a-long-enough-password");
   await page.getByRole("button", { name: "Create Console account" }).click();
 
-  await expect(page.getByRole("status")).toContainText(
-    "Account accepted. Sign in with your password",
+  await expect(page.getByRole("dialog").locator(".auth-notice")).toContainText(
+    "a six-digit confirmation code is on its way",
   );
   expect(state.registeredEmail).toBe("creator@example.com");
 
-  await page.getByLabel("Email", { exact: true }).fill("creator@example.com");
-  await page.getByLabel("Password", { exact: true }).fill("a-long-enough-password");
+  await page.getByLabel("6-digit confirmation code").fill("123456");
+  await page.getByRole("button", { name: "Confirm e-mail" }).click();
+  await expect(page.getByRole("dialog").locator(".auth-notice")).toContainText(
+    "E-mail confirmed. Sign in to open Muxivo Console",
+  );
+  await page.getByRole("button", { name: "Continue to sign in" }).click();
+  await expect(
+    page.getByRole("heading", { name: "Welcome back." }),
+  ).toBeVisible();
+
+  const signInEmail = page.locator("#console-auth-email");
+  const signInPassword = page.locator("#console-auth-password");
+  await expect(signInPassword).toBeVisible();
+  await signInEmail.fill("creator@example.com");
+  await signInPassword.fill("a-long-enough-password");
   await page.getByRole("button", { name: "Sign in to Console" }).click();
 
   await expect(page.getByRole("heading", { name: "Overview", level: 1 })).toBeVisible();
@@ -172,11 +185,11 @@ test("landing page and sign-in dialog fit a narrow viewport", async ({ page }) =
   const dialog = page.getByRole("dialog");
   await expect(dialog).toBeVisible();
   await expect(dialog).toHaveAttribute("aria-labelledby", "console-auth-dialog-title");
-  await expect(page.getByLabel("Email", { exact: true })).toBeFocused();
-  const lastFocusableControl = dialog.locator("button").last();
+  await expect(dialog.locator("#console-auth-email")).toBeFocused();
+  const lastFocusableControl = dialog.locator("button:not([disabled])").last();
   await lastFocusableControl.focus();
   await page.keyboard.press("Tab");
-  await expect(dialog.getByRole("button", { name: "Close" })).toBeFocused();
+  await expect(dialog.getByRole("button", { name: /Close/ })).toBeFocused();
   expect(
     await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth),
   ).toBe(false);
@@ -240,7 +253,7 @@ test("authenticated Console shell stays usable in a narrow viewport", async ({ p
   ).toBe(false);
 });
 
-test("sign-in dialog follows the selected light theme", async ({ page }) => {
+test("sign-in dialog keeps the Activity-style black surface in light theme", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto("/");
 
@@ -253,22 +266,70 @@ test("sign-in dialog follows the selected light theme", async ({ page }) => {
   await expect(panel).toBeVisible();
   const styleState = await panel.evaluate((element) => {
     const title = element.querySelector("#console-auth-dialog-title");
-    const description = element.querySelector(":scope > p");
+    const description = element.querySelector(".auth-panel-heading > p");
+    const shader = element.parentElement?.querySelector(".auth-shader");
     return {
       panelColor: getComputedStyle(element).color,
-      panelBackgroundImage: getComputedStyle(element).backgroundImage,
+      panelBackgroundColor: getComputedStyle(element).backgroundColor,
       titleColor: title ? getComputedStyle(title).color : "",
       descriptionColor: description ? getComputedStyle(description).color : "",
+      shaderBackgroundImage: shader ? getComputedStyle(shader).backgroundImage : "",
     };
   });
 
-  expect(styleState.panelBackgroundImage).toContain("linear-gradient");
-  expect(styleState.panelColor).toBe("rgb(9, 9, 11)");
-  expect(styleState.titleColor).toBe("rgb(9, 9, 11)");
-  expect(styleState.descriptionColor).toBe("rgb(82, 82, 91)");
+  expect(styleState.panelBackgroundColor).toBe("rgb(5, 5, 5)");
+  expect(styleState.panelColor).toBe("rgb(244, 244, 245)");
+  expect(styleState.titleColor).toBe("rgb(250, 250, 250)");
+  expect(styleState.descriptionColor).toBe("rgb(161, 161, 170)");
+  expect(styleState.shaderBackgroundImage).toContain("radial-gradient");
   expect(
     await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth),
   ).toBe(false);
+});
+
+test("auth modal exposes the anti-enumeration recovery flow", async ({ page }) => {
+  const state = {
+    authenticated: false,
+    registeredEmail: "",
+    organizations: [] as unknown[],
+    invitations: [] as unknown[],
+    connections: [] as PlatformConnection[],
+    auditEvents: [],
+    observedLifecycleIdempotencyKey: "",
+  };
+  await page.context().addCookies([
+    {
+      name: "muxivo_console_dev_csrf",
+      value: "csrf-token",
+      url: "http://127.0.0.1:5173",
+      sameSite: "Lax",
+    },
+  ]);
+  await installConsoleApiMock(page, state);
+
+  await page.goto("/");
+  await page.getByRole("button", { name: "See Panel" }).click();
+  await page.getByRole("button", { name: "Forgot password?" }).click();
+  await expect(page.locator("#console-auth-recovery-email")).toBeFocused();
+  await page.getByLabel("Account email").fill("creator@example.com");
+  await page.getByRole("button", { name: "Request reset" }).click();
+  await expect(page.getByRole("dialog").locator(".auth-notice")).toContainText(
+    "instructions will be sent",
+  );
+
+  await page.goto("/recover?token=recovery-token");
+  await expect(page.getByRole("dialog")).toBeVisible();
+  await expect(page.locator("#console-auth-recovery-token")).toHaveValue(
+    "recovery-token",
+  );
+  await page.getByLabel("New password", { exact: true }).fill("a-new-long-enough-password");
+  await page
+    .getByLabel("Confirm new password", { exact: true })
+    .fill("a-new-long-enough-password");
+  await page.getByRole("button", { name: "Reset password" }).click();
+  await expect(page.getByRole("dialog").locator(".auth-notice")).toContainText(
+    "Password reset. Sign in with your new password.",
+  );
 });
 
 test("language switcher updates the public document and persists the locale", async ({ page }) => {
@@ -326,10 +387,47 @@ async function installConsoleApiMock(
         password: "a-long-enough-password",
       });
       state.registeredEmail = payload.email;
-      return json(route, { status: "accepted" }, 202);
+      return json(
+        route,
+        { status: "verification_required", verification_token: "registration-token" },
+        202,
+      );
+    }
+    if (
+      method === "POST" &&
+      path === "/api/v1/auth/email-password/registration-verifications"
+    ) {
+      const payload = JSON.parse(request.postData() ?? "{}");
+      expect(payload).toEqual({ token: "registration-token", code: "123456" });
+      return json(route, { status: "verified" });
+    }
+    if (
+      method === "POST" &&
+      path === "/api/v1/auth/email-password/registration-verifications/resend"
+    ) {
+      const payload = JSON.parse(request.postData() ?? "{}");
+      expect(payload).toEqual({ token: "registration-token" });
+      return json(
+        route,
+        { status: "verification_required", verification_token: "registration-token" },
+        202,
+      );
     }
     if (method === "POST" && path === "/api/v1/auth/email-password/sessions") {
       state.authenticated = true;
+      return empty(route);
+    }
+    if (method === "POST" && path === "/api/v1/auth/password-recovery/requests") {
+      const payload = JSON.parse(request.postData() ?? "{}");
+      expect(payload).toEqual({ email: "creator@example.com" });
+      return json(route, { status: "accepted" });
+    }
+    if (method === "POST" && path === "/api/v1/auth/password-recovery/completions") {
+      const payload = JSON.parse(request.postData() ?? "{}");
+      expect(payload).toEqual({
+        token: "recovery-token",
+        new_password: "a-new-long-enough-password",
+      });
       return empty(route);
     }
     if (method === "GET" && path === "/api/v1/auth/sessions") {

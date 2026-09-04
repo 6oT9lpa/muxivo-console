@@ -1,4 +1,4 @@
-"""Create a first-party Muxivo e-mail/password account."""
+"""Persist a first-party account only after e-mail ownership is proven."""
 
 from __future__ import annotations
 
@@ -6,15 +6,18 @@ import logging
 from dataclasses import dataclass
 from uuid import UUID
 
+from muxivo_console.application.complete_email_password_registration_command import (
+    CompleteEmailPasswordRegistrationCommand,
+)
+from muxivo_console.application.email_password_registration_rejected_error import (
+    EmailPasswordRegistrationRejectedError,
+)
 from muxivo_console.application.ports import (
     EmailAddressNormalizer,
     EmailPasswordRegistrationWriter,
     EmailProtector,
     IdentifierGenerator,
-    PasswordHasher,
 )
-from muxivo_console.application.register_email_password_command import RegisterEmailPasswordCommand
-from muxivo_console.application.registration_rejected_error import RegistrationRejectedError
 from muxivo_console.domain.audit import AuditEvent
 from muxivo_console.domain.identity import (
     EmailPasswordRegistration,
@@ -26,26 +29,26 @@ from muxivo_console.domain.identity import (
     UserStatus,
 )
 
-logger = logging.getLogger("muxivo_console.application.register_email_password")
+logger = logging.getLogger("muxivo_console.application.complete_email_password_registration")
 
 
 @dataclass(slots=True)
-class RegisterEmailPassword:
-    """Register a user and all first-party identity records atomically."""
+class CompleteEmailPasswordRegistration:
+    """Write the account projection at the end of the verified registration flow."""
 
     identifiers: IdentifierGenerator
     email_normalizer: EmailAddressNormalizer
     email_protector: EmailProtector
-    password_hasher: PasswordHasher
     registrations: EmailPasswordRegistrationWriter
 
-    async def execute(self, command: RegisterEmailPasswordCommand) -> UUID:
+    async def execute(self, command: CompleteEmailPasswordRegistrationCommand) -> UUID:
         logger.info(
-            "auth.email_password.registration.started",
+            "auth.email_password.registration.verified_started",
             extra={"correlation_id": str(command.correlation_id)},
         )
-        normalized_email = self.email_normalizer.normalize(command.email)
-        self._validate_password(command.password)
+        normalized_email = self.email_normalizer.normalize(command.normalized_email)
+        if not command.password_hash.startswith("$argon2id$"):
+            raise EmailPasswordRegistrationRejectedError("Registration could not be completed.")
 
         user_id = self.identifiers.new()
         lookup_hash = self.email_protector.lookup_hash(normalized_email)
@@ -69,7 +72,7 @@ class RegisterEmailPassword:
             ),
             password_credential=PasswordCredential(
                 user_id=user_id,
-                password_hash=self.password_hasher.hash(command.password),
+                password_hash=command.password_hash,
             ),
         )
         created = await self.registrations.register(
@@ -79,7 +82,7 @@ class RegisterEmailPassword:
                 correlation_id=command.correlation_id,
                 actor_id=user_id,
                 organization_id=None,
-                action="auth.email_password_registration",
+                action="auth.email_password_registration_verified",
                 resource_type="user",
                 resource_id=str(user_id),
                 result="succeeded",
@@ -93,17 +96,12 @@ class RegisterEmailPassword:
                     "user_id": str(user_id),
                 },
             )
-            raise RegistrationRejectedError("Registration could not be completed.")
+            raise EmailPasswordRegistrationRejectedError("Registration could not be completed.")
         logger.info(
-            "auth.email_password.registration.completed",
+            "auth.email_password.registration.verified_completed",
             extra={
                 "correlation_id": str(command.correlation_id),
                 "user_id": str(user_id),
             },
         )
         return user_id
-
-    @staticmethod
-    def _validate_password(password: str) -> None:
-        if not 12 <= len(password) <= 1024:
-            raise RegistrationRejectedError("Registration could not be completed.")

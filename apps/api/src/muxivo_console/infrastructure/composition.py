@@ -6,6 +6,9 @@ from muxivo_console.application.begin_identity_link import BeginIdentityLink
 from muxivo_console.application.begin_oauth_login import BeginOAuthLogin
 from muxivo_console.application.change_email_password import ChangeEmailPassword
 from muxivo_console.application.cleanup_security_records import CleanupSecurityRecords
+from muxivo_console.application.complete_email_password_registration import (
+    CompleteEmailPasswordRegistration,
+)
 from muxivo_console.application.complete_identity_link import CompleteIdentityLink
 from muxivo_console.application.complete_oauth_login import CompleteOAuthLogin
 from muxivo_console.application.complete_password_recovery import CompletePasswordRecovery
@@ -64,7 +67,6 @@ from muxivo_console.application.platform_connection_candidate_catalog_router imp
 )
 from muxivo_console.application.reauthenticate_browser_session import ReauthenticateBrowserSession
 from muxivo_console.application.reconcile_platform_connections import ReconcilePlatformConnections
-from muxivo_console.application.register_email_password import RegisterEmailPassword
 from muxivo_console.application.register_platform_connection import (
     PlatformConnectionVerifierRouter,
     RegisterPlatformConnection,
@@ -77,6 +79,9 @@ from muxivo_console.application.revoke_browser_session import RevokeBrowserSessi
 from muxivo_console.application.revoke_organization_invitation import (
     RevokeOrganizationInvitation,
 )
+from muxivo_console.application.start_email_password_registration import (
+    StartEmailPasswordRegistration,
+)
 from muxivo_console.application.update_platform_ai_moderation_policy import (
     UpdatePlatformAiModerationPolicy,
 )
@@ -85,6 +90,9 @@ from muxivo_console.application.update_platform_channel_purpose import (
 )
 from muxivo_console.application.update_platform_welcome_settings import (
     UpdatePlatformWelcomeSettings,
+)
+from muxivo_console.application.verify_email_password_registration import (
+    VerifyEmailPasswordRegistration,
 )
 from muxivo_console.domain.activity import Platform
 from muxivo_console.infrastructure.discord_connection_candidate_catalog import (
@@ -97,9 +105,20 @@ from muxivo_console.infrastructure.discord_control_api import (
     HmacControlAssertionIssuer,
 )
 from muxivo_console.infrastructure.discord_oauth import DiscordOAuthClient
+from muxivo_console.infrastructure.in_memory_one_time_token_store import (
+    InMemoryOneTimeTokenStore,
+)
 from muxivo_console.infrastructure.logging_redaction import install_secret_redaction_filter
 from muxivo_console.infrastructure.metrics import InMemoryHttpMetricsRecorder
 from muxivo_console.infrastructure.naming import RandomSuffixOrganizationSlugGenerator
+from muxivo_console.infrastructure.notifications import (
+    SmtpEmailPasswordRegistrationVerificationNotifier,
+    SmtpOrganizationInvitationNotifier,
+    SmtpPasswordRecoveryCompletionNotifier,
+    SmtpPasswordRecoveryNotifier,
+    UndeliveredEmailPasswordRegistrationVerificationNotifier,
+    UndeliveredPasswordRecoveryCompletionNotifier,
+)
 from muxivo_console.infrastructure.persistence.audit_repository import (
     SqlAlchemyAuditEventReader,
     SqlAlchemyAuditEventWriter,
@@ -142,6 +161,9 @@ from muxivo_console.infrastructure.persistence.organization_repository import (
     SqlAlchemyOrganizationMembershipReader,
     SqlAlchemyUserStatusReader,
 )
+from muxivo_console.infrastructure.persistence.password_recovery_recipient_reader import (
+    SqlAlchemyPasswordRecoveryRecipientReader,
+)
 from muxivo_console.infrastructure.persistence.password_recovery_repository import (
     SqlAlchemyPasswordRecoveryRepository,
 )
@@ -171,6 +193,7 @@ from muxivo_console.infrastructure.reconciliation_worker import (
     PeriodicPlatformConnectionReconciliationWorker,
     PeriodicReconciliationWorkerSettings,
 )
+from muxivo_console.infrastructure.redis_one_time_token_store import RedisOneTimeTokenStore
 from muxivo_console.infrastructure.security import (
     Argon2idPasswordHasher,
     FernetEmailProtector,
@@ -187,12 +210,6 @@ from muxivo_console.infrastructure.security_cleanup_worker import (
 )
 from muxivo_console.infrastructure.session_fingerprint import HmacSessionFingerprintHasher
 from muxivo_console.infrastructure.settings import ConsoleSettings
-from muxivo_console.infrastructure.smtp_organization_invitation_notifier import (
-    SmtpOrganizationInvitationNotifier,
-)
-from muxivo_console.infrastructure.smtp_password_recovery_notifier import (
-    SmtpPasswordRecoveryNotifier,
-)
 from muxivo_console.infrastructure.structured_logging import install_structured_logging
 from muxivo_console.infrastructure.twitch_connection_candidate_catalog import (
     TwitchPlatformConnectionCandidateCatalog,
@@ -293,6 +310,11 @@ def create_production_app(
         if settings.password_recovery_smtp is not None
         else UndeliveredPasswordRecoveryNotifier()
     )
+    password_recovery_completion_notifier = (
+        SmtpPasswordRecoveryCompletionNotifier(settings.password_recovery_smtp)
+        if settings.password_recovery_smtp is not None
+        else UndeliveredPasswordRecoveryCompletionNotifier()
+    )
     password_recovery_request = RequestPasswordRecovery(
         identifiers=identifiers,
         clock=clock,
@@ -317,13 +339,45 @@ def create_production_app(
         token_hasher=session_hasher,
         password_hasher=password_hasher,
         completions=password_recovery_repository,
+        recipients=SqlAlchemyPasswordRecoveryRecipientReader(sessions, email_protector),
+        notifier=password_recovery_completion_notifier,
     )
-    registrations = RegisterEmailPassword(
+    registration_completion = CompleteEmailPasswordRegistration(
         identifiers=identifiers,
         email_normalizer=ValidatedEmailAddressNormalizer(),
         email_protector=email_protector,
-        password_hasher=password_hasher,
         registrations=SqlAlchemyEmailPasswordRegistrationWriter(sessions),
+    )
+    pending_registration_store = (
+        RedisOneTimeTokenStore(settings.rate_limit.redis_url)
+        if settings.rate_limit is not None and settings.rate_limit.redis_url is not None
+        else InMemoryOneTimeTokenStore()
+    )
+    if settings.password_recovery_smtp is not None:
+        registration_verification_notifier = SmtpEmailPasswordRegistrationVerificationNotifier(
+            settings.password_recovery_smtp
+        )
+    else:
+        registration_verification_notifier = (
+            UndeliveredEmailPasswordRegistrationVerificationNotifier()
+        )
+    registration_verification_start = StartEmailPasswordRegistration(
+        identifiers=identifiers,
+        clock=clock,
+        email_normalizer=ValidatedEmailAddressNormalizer(),
+        email_protector=email_protector,
+        password_hasher=password_hasher,
+        token_issuer=SecureOpaqueSessionTokenIssuer(),
+        token_hasher=session_hasher,
+        accounts=SqlAlchemyEmailPasswordAccountReader(sessions),
+        pending_registrations=pending_registration_store,
+        notifier=registration_verification_notifier,
+    )
+    registration_verification_complete = VerifyEmailPasswordRegistration(
+        token_hasher=session_hasher,
+        email_protector=email_protector,
+        pending_registrations=pending_registration_store,
+        registrations=registration_completion,
     )
     authentication = AuthenticateEmailPassword(
         email_normalizer=ValidatedEmailAddressNormalizer(),
@@ -726,7 +780,8 @@ def create_production_app(
         twitch_authorization_url = twitch_oauth_client.authorization_url
     return create_app(
         control_modules_use_case=modules,
-        registration_use_case=registrations,
+        registration_verification_start_use_case=registration_verification_start,
+        registration_verification_use_case=registration_verification_complete,
         authentication_use_case=authentication,
         organization_creation_use_case=organizations,
         organization_list_use_case=listed_organizations,

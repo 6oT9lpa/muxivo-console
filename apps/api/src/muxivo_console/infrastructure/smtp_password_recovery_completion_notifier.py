@@ -1,4 +1,4 @@
-"""SMTP password recovery notification adapter."""
+"""SMTP notification sent after a password recovery completes."""
 
 from __future__ import annotations
 
@@ -8,7 +8,6 @@ import smtplib
 from collections.abc import Callable
 from datetime import datetime
 from email.message import EmailMessage
-from urllib.parse import urlencode
 from uuid import UUID
 
 from muxivo_console.infrastructure.settings import SmtpPasswordRecoverySettings
@@ -17,8 +16,8 @@ from muxivo_console.infrastructure.smtp_mail_transport import SmtpMailTransport
 logger = logging.getLogger(__name__)
 
 
-class SmtpPasswordRecoveryNotifier:
-    """Render and deliver first-party password recovery messages."""
+class SmtpPasswordRecoveryCompletionNotifier:
+    """Deliver a token-free password-change confirmation through SMTP."""
 
     def __init__(
         self,
@@ -40,58 +39,38 @@ class SmtpPasswordRecoveryNotifier:
         *,
         user_id: UUID,
         recipient_email: str,
-        raw_token: str,
-        expires_at: datetime,
+        changed_at: datetime,
         correlation_id: UUID,
     ) -> None:
         logger.info(
-            "password.recovery.delivery.started",
+            "password.recovery.completion_notification.started",
             extra={"user_id": str(user_id), "correlation_id": str(correlation_id)},
         )
-        message = self._message_for(
-            recipient_email=recipient_email,
-            raw_token=raw_token,
-            expires_at=expires_at,
-        )
+        message = self._message_for(recipient_email=recipient_email, changed_at=changed_at)
         await self._transport.send(
             message,
-            operation="password_recovery",
+            operation="password_recovery_completion",
             resource_id=user_id,
             correlation_id=correlation_id,
         )
         logger.info(
-            "password.recovery.delivery.completed",
+            "password.recovery.completion_notification.completed",
             extra={"user_id": str(user_id), "correlation_id": str(correlation_id)},
         )
 
-    def _message_for(
-        self,
-        *,
-        recipient_email: str,
-        raw_token: str,
-        expires_at: datetime,
-    ) -> EmailMessage:
-        reset_link = f"{self._settings.reset_url_base}?{urlencode({'token': raw_token})}"
-        safe_reset_link = html.escape(reset_link, quote=True)
-        safe_token = html.escape(raw_token)
-        safe_expiry = html.escape(expires_at.isoformat())
+    def _message_for(self, *, recipient_email: str, changed_at: datetime) -> EmailMessage:
+        safe_changed_at = html.escape(changed_at.isoformat())
         message = EmailMessage()
         message["From"] = self._settings.from_email
         message["To"] = recipient_email
-        message["Subject"] = "Muxivo Console password recovery"
+        message["Subject"] = "Muxivo Console password changed"
         message.set_content(
             "\n".join(
                 (
-                    "A password recovery request was made for your Muxivo Console account.",
+                    "Your Muxivo Console password was changed.",
                     "",
-                    "Use this recovery link:",
-                    reset_link,
-                    "",
-                    "If the Console asks for a token directly, use this token:",
-                    raw_token,
-                    "",
-                    f"This recovery token expires at {expires_at.isoformat()}.",
-                    "If you did not request this, ignore this message.",
+                    f"Changed at: {changed_at.isoformat()}.",
+                    "If you did not make this change, secure your account immediately.",
                 )
             )
         )
@@ -107,25 +86,15 @@ class SmtpPasswordRecoveryNotifier:
                     '      <p style="margin:0;color:#a5b4fc;font-size:12px;font-weight:700;'
                     'letter-spacing:2px;">MUXIVO CONSOLE</p>',
                     '      <h1 style="margin:18px 0 10px;font-size:28px;line-height:1.1;">'
-                    "Reset your password</h1>",
+                    "Password changed</h1>",
                     '      <p style="margin:0;color:#a1a1aa;line-height:1.6;">'
-                    "A password recovery request was made for your Console account. "
-                    "Use the secure button below to choose a new password.</p>",
-                    '      <p style="margin:26px 0;text-align:center;"><a '
-                    f'href="{safe_reset_link}" style="display:inline-block;padding:13px 20px;'
-                    "color:#fff;background:#5865f2;border-radius:8px;text-decoration:none;"
-                    'font-weight:700;">Open password reset</a></p>',
-                    '      <p style="margin:0;color:#a1a1aa;font-size:13px;line-height:1.6;">'
-                    "If needed, enter this one-time token manually:</p>",
-                    '      <code style="display:block;margin-top:9px;padding:13px;'
-                    "color:#c7d2fe;background:#050505;border:1px solid #3f3f46;"
-                    f'border-radius:8px;word-break:break-all;">{safe_token}</code>',
-                    '      <p style="margin:18px 0 0;color:#a1a1aa;font-size:13px;'
-                    f'line-height:1.6;">This token expires at {safe_expiry}.</p>',
+                    "Your Muxivo Console password was changed successfully.</p>",
+                    '      <p style="margin:24px 0 0;color:#a1a1aa;font-size:13px;'
+                    f'line-height:1.6;">Changed at: {safe_changed_at}.</p>',
                     '      <p style="margin:18px 0 0;padding-top:18px;color:#fbbf24;'
                     'border-top:1px solid #27272a;font-size:13px;line-height:1.6;">'
-                    "If you did not request this, ignore the message. Your password will "
-                    "not change unless you complete the reset.</p>",
+                    "If you did not make this change, secure your account immediately and "
+                    "contact support.</p>",
                     "    </div>",
                     "  </body>",
                     "</html>",

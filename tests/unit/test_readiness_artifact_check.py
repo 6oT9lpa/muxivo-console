@@ -49,7 +49,7 @@ def test_readiness_artifact_check_flags_missing_supporting_operations_artifact(
     assert any(issue.artifact == artifact for issue in issues)
 
 
-def test_readiness_artifact_check_keeps_email_verification_out_of_foundation_scope(
+def test_readiness_artifact_check_keeps_email_verification_in_authentication_scope(
     tmp_path: Path,
 ) -> None:
     _copy_required_artifacts(tmp_path)
@@ -57,8 +57,8 @@ def test_readiness_artifact_check_keeps_email_verification_out_of_foundation_sco
     readiness = readiness_path.read_text(encoding="utf-8")
     readiness_path.write_text(
         readiness.replace(
-            "Email verification is intentionally out of scope for this Console Foundation",
-            "Email verification copy, delivery and resend controls",
+            "E-mail ownership verification is part of the current Console authentication",
+            "E-mail ownership verification was removed from Console authentication",
         ),
         encoding="utf-8",
     )
@@ -67,7 +67,7 @@ def test_readiness_artifact_check_keeps_email_verification_out_of_foundation_sco
 
     assert any(
         issue.marker
-        == "Email verification is intentionally out of scope for this Console Foundation"
+        == "E-mail ownership verification is part of the current Console authentication"
         for issue in issues
     )
 

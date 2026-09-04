@@ -2,6 +2,7 @@
 
 from collections.abc import Callable
 from contextlib import AbstractAsyncContextManager
+from uuid import UUID
 
 from sqlalchemy import update
 from sqlalchemy.exc import IntegrityError
@@ -65,7 +66,7 @@ class SqlAlchemyPasswordRecoveryRepository:
         completed_at,
         audit_id,
         correlation_id,
-    ) -> bool:
+    ) -> UUID | None:
         try:
             async with self._session_factory() as session:
                 async with session.begin():
@@ -82,7 +83,7 @@ class SqlAlchemyPasswordRecoveryRepository:
                         )
                     ).scalar_one_or_none()
                     if recovery_record is None:
-                        return False
+                        return None
                     password_result = await session.execute(
                         update(PasswordCredentialRecord)
                         .where(PasswordCredentialRecord.user_id == recovery_record.user_id)
@@ -94,7 +95,7 @@ class SqlAlchemyPasswordRecoveryRepository:
                         )
                     )
                     if password_result.rowcount != 1:
-                        return False
+                        return None
                     await session.execute(
                         update(AuthSessionRecord)
                         .where(
@@ -118,5 +119,5 @@ class SqlAlchemyPasswordRecoveryRepository:
                     )
                     await session.flush()
         except IntegrityError:
-            return False
-        return True
+            return None
+        return recovery_record.user_id

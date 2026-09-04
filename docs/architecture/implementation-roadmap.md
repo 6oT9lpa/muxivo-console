@@ -5,15 +5,16 @@
 1. Create FastAPI and Vue/TypeScript applications using the stated layout.
 2. Add PostgreSQL migrations for users, login identities, organizations,
    memberships, sessions, adapter connections and append-only audit records.
-3. Implement password registration, session rotation, logout and account
-   recovery with secure error handling. Verified-email confirmation is excluded
-   from this Foundation pass and belongs to a later account-trust milestone.
+3. Implement password registration only through a short-lived e-mail ownership
+   verification flow, then add session rotation, logout and account recovery
+   with secure error handling. Account records are created only after the
+   six-digit code is verified.
 4. Implement RBAC policy checks and organization selection.
 5. Add health/readiness endpoints, structured logs, correlation IDs, metrics,
    CI, unit tests and security tests.
 
-Exit gate: email-based account creation and organization membership work without
-any platform token in the browser.
+Exit gate: verified e-mail account creation and organization membership work
+without any platform token in the browser.
 
 ## Phase B — browser identity providers
 

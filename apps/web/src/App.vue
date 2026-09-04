@@ -14,6 +14,7 @@ import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue"
 import { consoleApi, ConsoleApiError } from "./api/consoleApi";
 import LanguageSwitcher from "./components/common/LanguageSwitcher.vue";
 import PublicFooter from "./components/common/PublicFooter.vue";
+import AuthModal from "./features/auth/AuthModal.vue";
 import ConnectionWizardPanel from "./features/console/ConnectionWizardPanel.vue";
 import OrganizationMembersPanel from "./features/console/OrganizationMembersPanel.vue";
 import OrganizationSwitcher from "./features/console/OrganizationSwitcher.vue";
@@ -100,12 +101,28 @@ const reauthenticationPassword = ref("");
 const newPassword = ref("");
 const confirmNewPassword = ref("");
 const recoveryEmail = ref("");
-const recoveryToken = ref("");
+const initialAuthUrl =
+  typeof window !== "undefined" ? new URL(window.location.href) : null;
+const isPasswordRecoveryPath = (url: URL | null): boolean =>
+  Boolean(
+    url &&
+      ["/recover", "/reset-password"].some((path) => url.pathname.endsWith(path)),
+  );
+const recoveryToken = ref(
+  initialAuthUrl?.searchParams.get("recovery_token") ??
+    (isPasswordRecoveryPath(initialAuthUrl)
+      ? initialAuthUrl?.searchParams.get("token") ?? ""
+      : ""),
+);
 const recoveryNewPassword = ref("");
 const recoveryConfirmPassword = ref("");
+const registrationCode = ref("");
+const registrationVerificationToken = ref("");
+const registrationVerificationSent = ref(false);
+const registrationEmailVerified = ref(false);
 const invitationToken = ref(
-  typeof window !== "undefined"
-    ? new URL(window.location.href).searchParams.get("token") ?? ""
+  initialAuthUrl && !isPasswordRecoveryPath(initialAuthUrl)
+    ? initialAuthUrl.searchParams.get("token") ?? ""
     : "",
 );
 const identityLinkedProvider = ref<"discord" | "twitch" | null>(
@@ -120,7 +137,8 @@ const organizationName = ref("");
 const authenticated = ref(false);
 const landingTab = ref<"overview" | "about">("overview");
 const loginOpen = ref(false);
-const loginDialog = ref<HTMLElement | null>(null);
+const loginVisible = ref(false);
+let loginCloseTimer: ReturnType<typeof setTimeout> | null = null;
 const loginTrigger = ref<HTMLButtonElement | null>(null);
 const theme = ref<Theme>(initialTheme);
 const activeConsoleSection = ref<ConsoleSection>("overview");
@@ -252,62 +270,45 @@ function scrollToConsoleSection(section: ConsoleSection): void {
   clientLogger.info("console.navigation.changed", { section });
 }
 
-const previousBodyOverflow = ref("");
-
-watch(loginOpen, async (isOpen) => {
-  if (typeof document === "undefined") return;
-  if (isOpen) {
-    previousBodyOverflow.value = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-    await nextTick();
-    const firstInput = loginDialog.value?.querySelector<HTMLInputElement>("input:not([disabled])");
-    if (firstInput) {
-      firstInput.focus();
-    } else {
-      loginDialog.value?.querySelector<HTMLElement>("button:not([disabled])")?.focus();
-    }
-    clientLogger.info("console.auth.dialog_opened");
-    return;
-  }
-  document.body.style.overflow = previousBodyOverflow.value;
-  await nextTick();
-  loginTrigger.value?.focus();
-  clientLogger.info("console.auth.dialog_closed");
-});
-
-onBeforeUnmount(() => {
-  if (typeof document !== "undefined") document.body.style.overflow = previousBodyOverflow.value;
-});
-
 function navLetters(label: string): string[] {
   return Array.from(label);
 }
 
-function handleLoginDialogKeydown(event: KeyboardEvent): void {
-  if (event.key !== "Tab") return;
-  const dialog = loginDialog.value;
-  if (!dialog) return;
-
-  const focusableElements = Array.from(
-    dialog.querySelectorAll<HTMLElement>(
-      "button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), a[href], [tabindex]:not([tabindex='-1'])",
-    ),
-  ).filter((element) => element.getClientRects().length > 0);
-  if (!focusableElements.length) {
-    event.preventDefault();
-    return;
+async function openLoginModal(): Promise<void> {
+  if (loginCloseTimer !== null) {
+    clearTimeout(loginCloseTimer);
+    loginCloseTimer = null;
   }
-
-  const firstElement = focusableElements[0];
-  const lastElement = focusableElements[focusableElements.length - 1];
-  if (event.shiftKey && document.activeElement === firstElement) {
-    event.preventDefault();
-    lastElement.focus();
-  } else if (!event.shiftKey && document.activeElement === lastElement) {
-    event.preventDefault();
-    firstElement.focus();
+  loginOpen.value = true;
+  await nextTick();
+  const enter = () => {
+    loginVisible.value = true;
+    clientLogger.info("console.auth.modal_entered");
+  };
+  if (typeof window !== "undefined") {
+    window.requestAnimationFrame(enter);
+  } else {
+    enter();
   }
+  clientLogger.info("console.auth.modal_open_requested");
 }
+
+function closeLoginModal(): void {
+  if (!loginOpen.value) return;
+  loginVisible.value = false;
+  if (loginCloseTimer !== null) clearTimeout(loginCloseTimer);
+  loginCloseTimer = setTimeout(() => {
+    loginOpen.value = false;
+    loginCloseTimer = null;
+    loginTrigger.value?.focus();
+    clientLogger.info("console.auth.modal_closed");
+  }, 280);
+  clientLogger.info("console.auth.modal_exit_started");
+}
+
+onBeforeUnmount(() => {
+  if (loginCloseTimer !== null) clearTimeout(loginCloseTimer);
+});
 
 const usableConnections = computed(() =>
   connections.value.filter(
@@ -400,7 +401,7 @@ async function signIn() {
       body: JSON.stringify({ email: email.value, password: password.value }),
     });
     authenticated.value = true;
-    loginOpen.value = false;
+    closeLoginModal();
     password.value = "";
     notice.value = t("console.notice.signed_in");
     await Promise.all([loadOrganizations(), loadBrowserSessions(), loadLoginIdentities()]);
@@ -412,7 +413,7 @@ async function signIn() {
   }
 }
 
-async function createAccount() {
+async function requestRegistrationVerification() {
   const validationMessage = accountRegistrationValidationMessage({
     displayName: registrationDisplayName.value,
     email: registrationEmail.value,
@@ -425,7 +426,10 @@ async function createAccount() {
   busy.value = true;
   notice.value = "";
   try {
-    await consoleApi<{ status: "accepted" }>("/api/v1/auth/email-password/registrations", {
+    const response = await consoleApi<{
+      status: "verification_required";
+      verification_token?: string;
+    }>("/api/v1/auth/email-password/registrations", {
       method: "POST",
       body: JSON.stringify({
         email: registrationEmail.value,
@@ -433,16 +437,89 @@ async function createAccount() {
         display_name: registrationDisplayName.value,
       }),
     });
-    email.value = registrationEmail.value;
-    password.value = "";
-    registrationPassword.value = "";
-    authMode.value = "sign-in";
-    notice.value = t("console.notice.account_accepted");
+    registrationVerificationToken.value = response.verification_token ?? "";
+    registrationVerificationSent.value = Boolean(response.verification_token);
+    registrationEmailVerified.value = false;
+    registrationCode.value = "";
+    notice.value = t("console.notice.verification_requested");
+    clientLogger.info("console.auth.registration.verification_requested");
   } catch (error) {
     notice.value = messageFor(error);
   } finally {
     busy.value = false;
   }
+}
+
+async function resendRegistrationVerification() {
+  if (!registrationVerificationToken.value) {
+    await requestRegistrationVerification();
+    return;
+  }
+  busy.value = true;
+  notice.value = "";
+  try {
+    const response = await consoleApi<{ status: "verification_required"; verification_token: string }>(
+      "/api/v1/auth/email-password/registration-verifications/resend",
+      {
+        method: "POST",
+        body: JSON.stringify({ token: registrationVerificationToken.value }),
+      },
+    );
+    if (response.verification_token) registrationVerificationToken.value = response.verification_token;
+    registrationVerificationSent.value = true;
+    notice.value = t("console.notice.verification_requested");
+    clientLogger.info("console.auth.registration.verification_resent");
+  } catch (error) {
+    registrationVerificationToken.value = "";
+    registrationVerificationSent.value = false;
+    registrationCode.value = "";
+    notice.value = messageFor(error);
+  } finally {
+    busy.value = false;
+  }
+}
+
+async function verifyRegistration() {
+  if (!registrationVerificationToken.value) return;
+  busy.value = true;
+  notice.value = "";
+  try {
+    await consoleApi<{ status: "verified" }>(
+      "/api/v1/auth/email-password/registration-verifications",
+      {
+        method: "POST",
+        body: JSON.stringify({
+          token: registrationVerificationToken.value,
+          code: registrationCode.value,
+        }),
+      },
+    );
+    email.value = registrationEmail.value;
+    registrationEmailVerified.value = true;
+    registrationVerificationSent.value = true;
+    registrationVerificationToken.value = "";
+    registrationPassword.value = "";
+    notice.value = t("console.notice.email_verified");
+    clientLogger.info("console.auth.registration.verification_completed");
+  } catch (error) {
+    notice.value = messageFor(error);
+  } finally {
+    busy.value = false;
+  }
+}
+
+function resetRegistrationVerification(): void {
+  registrationVerificationToken.value = "";
+  registrationVerificationSent.value = false;
+  registrationEmailVerified.value = false;
+  registrationCode.value = "";
+  clientLogger.info("console.auth.registration.verification_reset");
+}
+
+function continueToSignIn(): void {
+  authMode.value = "sign-in";
+  password.value = "";
+  notice.value = t("console.notice.account_created");
 }
 
 async function signInWithDiscord() {
@@ -540,9 +617,7 @@ async function signOut() {
 }
 
 onMounted(async () => {
-  if (invitationToken.value) {
-    loginOpen.value = true;
-  }
+  if (invitationToken.value || recoveryToken.value) void openLoginModal();
   const linkedProvider = identityLinkedProvider.value;
   if (linkedProvider && typeof window !== "undefined") {
     const url = new URL(window.location.href);
@@ -1657,7 +1732,7 @@ function messageFor(error: unknown): string {
             <Sun v-if="theme === 'dark'" :size="18" aria-hidden="true" />
             <Moon v-else :size="18" aria-hidden="true" />
           </button>
-          <button ref="loginTrigger" class="panel-cta" type="button" @click="loginOpen = true">
+          <button ref="loginTrigger" class="panel-cta" type="button" @click="openLoginModal">
             {{ t("header.see_panel") }}
           </button>
         </div>
@@ -1666,173 +1741,36 @@ function messageFor(error: unknown): string {
       <MuxivoLanding v-if="landingTab === 'overview'" id="top" />
       <GetToKnowUs v-else id="top" />
       <PublicFooter />
-      <section
+      <AuthModal
         v-if="loginOpen"
-        ref="loginDialog"
-        class="login-overlay"
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="console-auth-dialog-title"
-        @keydown="handleLoginDialogKeydown"
-        @keydown.esc="loginOpen = false"
-      >
-        <div class="login-panel">
-          <button
-            class="close-login"
-            type="button"
-            :aria-label="t('console.auth.close')"
-            @click="loginOpen = false"
-          >
-            ×
-          </button>
-          <span class="eyebrow">MUXIVO CONSOLE</span>
-          <h2 id="console-auth-dialog-title">
-            {{
-              authMode === "sign-in"
-                ? t("console.auth.welcome_title")
-                : t("console.auth.create_title")
-            }}
-          </h2>
-          <p>
-            {{
-              authMode === "sign-in"
-                ? t("console.auth.sign_in_description")
-                : t("console.auth.create_description")
-            }}
-          </p>
-          <div v-if="invitationToken" class="auth-invitation-context" role="status">
-            <strong>{{ t("console.invitation.accept_title") }}</strong>
-            <p>{{ t("console.invitation.accept_description") }}</p>
-          </div>
-          <div class="auth-mode-tabs" role="tablist" :aria-label="t('console.auth.mode_label')">
-            <button
-              type="button"
-              role="tab"
-              :aria-selected="authMode === 'sign-in'"
-              :class="{ active: authMode === 'sign-in' }"
-              @click="authMode = 'sign-in'"
-            >
-              {{ t("console.auth.sign_in") }}
-            </button>
-            <button
-              type="button"
-              role="tab"
-              :aria-selected="authMode === 'create-account'"
-              :class="{ active: authMode === 'create-account' }"
-              @click="authMode = 'create-account'"
-            >
-              {{ t("console.auth.create_account") }}
-            </button>
-          </div>
-          <form v-if="authMode === 'sign-in'" @submit.prevent="signIn">
-            <label>
-              {{ t("console.auth.email") }}
-              <input v-model="email" type="email" autocomplete="email" required />
-            </label>
-            <label>
-              {{ t("console.auth.password") }}
-              <input
-                v-model="password"
-                type="password"
-                autocomplete="current-password"
-                minlength="12"
-                required
-              />
-            </label>
-            <button :disabled="busy">
-              {{ busy ? t("console.auth.signing_in") : t("console.auth.sign_in_button") }}
-            </button>
-          </form>
-          <form v-else @submit.prevent="createAccount">
-            <label>
-              {{ t("console.auth.display_name") }}
-              <input
-                v-model="registrationDisplayName"
-                autocomplete="name"
-                maxlength="64"
-                required
-              />
-            </label>
-            <label>
-              {{ t("console.auth.email") }}
-              <input v-model="registrationEmail" type="email" autocomplete="email" required />
-            </label>
-            <label>
-              {{ t("console.auth.password") }}
-              <input
-                v-model="registrationPassword"
-                type="password"
-                autocomplete="new-password"
-                minlength="12"
-                maxlength="1024"
-                required
-              />
-            </label>
-            <button :disabled="busy">
-              {{ busy ? t("console.auth.creating") : t("console.auth.create_button") }}
-            </button>
-          </form>
-          <div class="identity-link">
-            <h3>{{ t("console.auth.discord_heading") }}</h3>
-            <p>{{ t("console.auth.discord_description") }}</p>
-            <button type="button" :disabled="busy" @click="signInWithDiscord">
-              {{ t("console.auth.discord_button") }}
-            </button>
-          </div>
-          <div class="identity-link">
-            <h3>{{ t("console.auth.recovery_heading") }}</h3>
-            <p>
-              {{ t("console.auth.recovery_description") }}
-            </p>
-            <form @submit.prevent="requestPasswordRecovery">
-              <label>
-                {{ t("console.auth.account_email") }}
-                <input
-                  v-model="recoveryEmail"
-                  type="email"
-                  autocomplete="email"
-                  :placeholder="t('console.auth.email_placeholder')"
-                  required
-                />
-              </label>
-              <button type="submit" :disabled="busy">
-                {{ busy ? t("console.auth.requesting") : t("console.auth.request_reset") }}
-              </button>
-            </form>
-            <form @submit.prevent="completePasswordRecovery">
-              <label>
-                {{ t("console.auth.recovery_token") }}
-                <input v-model="recoveryToken" autocomplete="one-time-code" required />
-              </label>
-              <label>
-                {{ t("console.auth.new_password") }}
-                <input
-                  v-model="recoveryNewPassword"
-                  type="password"
-                  autocomplete="new-password"
-                  minlength="12"
-                  maxlength="1024"
-                  required
-                />
-              </label>
-              <label>
-                {{ t("console.auth.confirm_password") }}
-                <input
-                  v-model="recoveryConfirmPassword"
-                  type="password"
-                  autocomplete="new-password"
-                  minlength="12"
-                  maxlength="1024"
-                  required
-                />
-              </label>
-              <button type="submit" :disabled="busy">
-                {{ busy ? t("console.auth.resetting") : t("console.auth.reset_password") }}
-              </button>
-            </form>
-          </div>
-        </div>
-      </section>
+        v-model:auth-mode="authMode"
+        v-model:email="email"
+        v-model:password="password"
+        v-model:registration-display-name="registrationDisplayName"
+        v-model:registration-email="registrationEmail"
+        v-model:registration-password="registrationPassword"
+        v-model:recovery-email="recoveryEmail"
+        v-model:recovery-token="recoveryToken"
+        v-model:recovery-new-password="recoveryNewPassword"
+        v-model:recovery-confirm-password="recoveryConfirmPassword"
+        v-model:registration-code="registrationCode"
+        :visible="loginVisible"
+        :busy="busy"
+        :notice="notice"
+        :invitation-token="invitationToken"
+        :registration-verification-sent="registrationVerificationSent"
+        :registration-email-verified="registrationEmailVerified"
+        @close="closeLoginModal"
+        @sign-in="signIn"
+        @request-recovery="requestPasswordRecovery"
+        @complete-recovery="completePasswordRecovery"
+        @request-registration-verification="requestRegistrationVerification"
+        @resend-registration-verification="resendRegistrationVerification"
+        @verify-registration="verifyRegistration"
+        @reset-registration-verification="resetRegistrationVerification"
+        @continue-sign-in="continueToSignIn"
+        @oauth-provider="(provider) => provider === 'discord' && signInWithDiscord()"
+      />
     </template>
     <section v-else class="console-shell">
       <aside class="console-sidebar" :aria-label="t('console.sidebar.navigation')">

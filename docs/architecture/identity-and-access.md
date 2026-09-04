@@ -48,9 +48,9 @@ Examples:
 
 ### Supported identity providers
 
-1. Email: password plus recovery/session safety in the Foundation scope.
-   Verified-email UX is a later account-trust milestone, not a prerequisite for
-   first-party Console sign-in.
+1. Email: password plus recovery/session safety. New e-mail/password accounts
+   must prove inbox ownership with the short-lived verification flow before
+   their user, login identity and password credential become active.
 2. OIDC/OAuth providers: Twitch, Discord, Google and Yandex ID.
 3. Future enterprise OIDC/SAML providers without changing the user model.
 
@@ -63,6 +63,27 @@ identity has been verified. Sessions are stored server-side and represented in
 the browser by a Secure, HttpOnly, SameSite cookie. The browser does not receive
 platform refresh tokens.
 
+### E-mail registration trust boundary
+
+The e-mail/password registration flow is deliberately split into two
+application steps:
+
+1. `POST /api/v1/auth/email-password/registrations` validates the input,
+   encrypts the normalized e-mail, hashes the password with Argon2id, hashes
+   the six-digit code and stores only that pending representation in the
+   short-lived Redis token store. The endpoint returns an opaque pending-flow
+   token and never creates a user account.
+2. `POST /api/v1/auth/email-password/registration-verifications` verifies the
+   code with a constant-time comparison and atomically consumes the pending
+   value. Only then does the transactional writer create the user, e-mail
+   identity, password credential and audit event.
+
+The resend endpoint rotates the code and retains the same short-lived pending
+flow. Delivery failures fail closed and remove the pending value so an
+unusable or partially delivered registration cannot become an accidental
+account-creation path. Existing e-mail addresses use the same generic public
+response and are never enumerated.
+
 ### Identity linking rules
 
 - Do not merge accounts solely because providers return the same email address.
@@ -70,8 +91,7 @@ platform refresh tokens.
   and a fresh authentication challenge for the provider being linked.
 - Removing the final usable login identity is forbidden.
 - Recovery and sensitive account changes require recent authentication; future
-  email-address changes should add verified-email confirmation when that
-  account-trust milestone is implemented.
+  email-address changes should use the same verified-email trust boundary.
 - A user may link several identities of the same provider only if that becomes
   a product requirement; the initial UI should expose one primary identity per
   provider to reduce confusion.

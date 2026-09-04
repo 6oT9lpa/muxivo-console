@@ -103,7 +103,7 @@ async def test_password_recovery_completion_records_password_recovered_audit_eve
         correlation_id=correlation_id,
     )
 
-    assert completed is True
+    assert completed == user_id
     assert database_session.flushed is True
     assert len(database_session.executed) == 3
     assert len(database_session.added) == 1
