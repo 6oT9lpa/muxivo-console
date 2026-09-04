@@ -55,7 +55,7 @@ completed.
 | Compliance | Data inventory and retention schedule approved | Draft |
 | Operations | Incident runbook approved and exercised | Draft |
 | Operations | Backup/restore drill completed | Drill procedure documented; staging exercise pending |
-| Deployment | Staging/prod domains provisioned | Temporary staging `beget.ame-life.com` serves frontend release `eb08bd6`; API is pending credential/service activation and canonical production host is pending |
+| Deployment | Staging/prod domains provisioned | Temporary staging `beget.ame-life.com` serves frontend release `eb08bd6`; API source is staged at `ecf2704`, pending credential/service activation, and canonical production host is pending |
 | Deployment | Staging/prod OAuth credentials provisioned | Discord/Twitch OAuth enforced; values pending |
 | Secrets | KMS/secret manager selected and wired | HashiCorp Vault + Vault Agent selected; Vault instance, AppRole policy and runtime wiring pending |
 
@@ -70,8 +70,8 @@ On 2026-09-05 the deployment was checked without changing application data:
   is absent;
 - `https://muxivo.pro/` returned HTTP `200`, confirming the existing Discord
   Activity host remained reachable;
-- the latest API source was staged at `/opt/muxivo-console` on the local server,
-  with a rollback copy at `/opt/muxivo-console.backup-eb08bd6`;
+- the latest API source `ecf2704` was staged at `/opt/muxivo-console` on the
+  local server, with a rollback copy at `/opt/muxivo-console.backup-ecf2704`;
 - a source scan found no deprecated registration implementation markers in the
   deployed `apps` and `tests` trees.
 

@@ -222,9 +222,9 @@ FRP exposes the existing Activity route on `18080` and the Console API route on
 local API service receives a complete staging credential set. A read-only
 verification on 2026-09-05 returned `200` for the staging frontend and `502`
 for `/healthz` and `/readyz`; the root `muxivo.pro` Activity returned `200` in
-the same check. The latest Console source is staged at
-`/opt/muxivo-console` on the local server with deployment marker `eb08bd6`, and
-the previous source is retained at `/opt/muxivo-console.backup-eb08bd6` for
+the same check. The latest Console source `ecf2704` is staged at
+`/opt/muxivo-console` on the local server, and the previous source is retained
+at `/opt/muxivo-console.backup-ecf2704` for
 rollback. The disabled `muxivo-console-api.service` has no credential file yet,
 so it was not started. PostgreSQL and the `muxivo_console` database are present
 on the local server. Redis is installed, enabled and bound only to loopback;
