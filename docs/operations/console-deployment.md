@@ -197,13 +197,13 @@ The final host serves static frontend assets from
 `/srv/muxivo-console/web`, proxies only `/api/`, `/healthz` and `/readyz` to FRP
 `18081`, and does not expose `/metrics` publicly.
 
-As of 2026-09-02, the temporary staging host is `beget.ame-life.com`. Its DNS
+As of 2026-09-05, the temporary staging host is `beget.ame-life.com`. Its DNS
 record resolves to `138.124.119.238`, its dedicated certificate covers the
-hostname, and the active HTTPS vhost serves the current Console build. The
-canonical `console.muxivo.pro` host remains separate and still requires its own
-DNS record, certificate and final HTTPS vhost. The staging host is suitable for
-visual checks only until the API, FRP route and production environment are
-provisioned.
+hostname, and the active HTTPS vhost serves the Console frontend release
+`eb08bd6`. The canonical `console.muxivo.pro` host remains separate and still
+requires its own DNS record, certificate and final HTTPS vhost. The staging
+host is suitable for visual checks only until the API, FRP route and production
+environment are provisioned.
 
 For this temporary rollout, install
 `deploy/nginx-console-beget.conf.example` as the dedicated staging vhost. Keep
@@ -214,10 +214,16 @@ to use `https://beget.ame-life.com`.
 The staging edge and tunnel are now active: Nginx serves the host over HTTPS,
 FRP exposes the existing Activity route on `18080` and the Console API route on
 `18081`, and the API route is intentionally failing closed with `502` until the
-local API service receives a complete staging credential set. PostgreSQL and
-the `muxivo_console` database are present on the local server. Redis is
-installed, enabled and bound only to loopback; its URL still belongs in the
-secret-manager-rendered environment.
+local API service receives a complete staging credential set. A read-only
+verification on 2026-09-05 returned `200` for the staging frontend and `502`
+for `/healthz` and `/readyz`; the root `muxivo.pro` Activity returned `200` in
+the same check. The latest Console source is staged at
+`/opt/muxivo-console` on the local server with deployment marker `eb08bd6`, and
+the previous source is retained at `/opt/muxivo-console.backup-eb08bd6` for
+rollback. The disabled `muxivo-console-api.service` has no credential file yet,
+so it was not started. PostgreSQL and the `muxivo_console` database are present
+on the local server. Redis is installed, enabled and bound only to loopback;
+its URL still belongs in the secret-manager-rendered environment.
 
 ### 7. Verify end to end
 

@@ -1,7 +1,8 @@
 # Muxivo Console production readiness
 
-Status: draft for staging preparation. This document is not legal advice and must
-be reviewed by counsel before public launch.
+Status: draft for staging preparation; last staging verification: 2026-09-05.
+This document is not legal advice and must be reviewed by counsel before public
+launch.
 
 Canonical supporting artifacts:
 
@@ -39,7 +40,7 @@ completed.
 | Security | Recent authentication refresh and gates for password change, identity unlink and sensitive writes | Implemented |
 | Security | Scheduled cleanup for expired sessions and recovery transactions | Implemented |
 | Observability | `/metrics` scraped and alert rules configured | Metrics endpoint and alert rules implemented; scraper backend pending |
-| Operations | Liveness/readiness endpoints distinguish process health from database readiness | Implemented; staging API service/env wiring and external monitor pending |
+| Operations | Liveness/readiness endpoints distinguish process health from database readiness | Implemented; API unit is installed but disabled until the staging credential file and environment are provisioned |
 | Lifecycle | Periodic platform connection reconciliation worker | Implemented |
 | Lifecycle | Idempotency keys for retry-safe lifecycle actions | Implemented |
 | Lifecycle | Browser-safe platform resource candidate discovery | Console contract/UI implemented; Control API endpoints pending |
@@ -54,9 +55,30 @@ completed.
 | Compliance | Data inventory and retention schedule approved | Draft |
 | Operations | Incident runbook approved and exercised | Draft |
 | Operations | Backup/restore drill completed | Drill procedure documented; staging exercise pending |
-| Deployment | Staging/prod domains provisioned | Temporary staging `beget.ame-life.com` is active; canonical production host pending |
+| Deployment | Staging/prod domains provisioned | Temporary staging `beget.ame-life.com` serves frontend release `eb08bd6`; API is pending credential/service activation and canonical production host is pending |
 | Deployment | Staging/prod OAuth credentials provisioned | Discord/Twitch OAuth enforced; values pending |
 | Secrets | KMS/secret manager selected and wired | Secret-manager source enforced; provider pending |
+
+## Latest staging verification
+
+On 2026-09-05 the deployment was checked without changing application data:
+
+- `https://beget.ame-life.com/` served the Console frontend release `eb08bd6`
+  with HTTP `200`;
+- `https://beget.ame-life.com/healthz` and `/readyz` returned HTTP `502` because
+  the API unit is intentionally disabled while `/etc/muxivo-console/console.env`
+  is absent;
+- `https://muxivo.pro/` returned HTTP `200`, confirming the existing Discord
+  Activity host remained reachable;
+- the latest API source was staged at `/opt/muxivo-console` on the local server,
+  with a rollback copy at `/opt/muxivo-console.backup-eb08bd6`;
+- a source scan found no legacy `RegisterEmailPassword`, `account_accepted` or
+  `direct-registration` symbols in the deployed `apps` and `tests` trees.
+
+The `502` responses are an intentional readiness boundary, not a successful
+production deployment. The next activation step requires a real approved
+secret-manager integration, a dedicated database credential, Redis URL, OAuth
+credentials, SMTP configuration and signed Control API endpoints.
 
 E-mail ownership verification is part of the current Console authentication
 flow. The public registration endpoint creates only a short-lived pending
