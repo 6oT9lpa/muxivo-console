@@ -17,6 +17,11 @@ credential path used by `muxivo-console-api.service`.
 
 - `muxivo-console-api.service` runs the production ASGI application and applies
   migrations before startup.
+- `vault-agent.hcl.example`, `console.env.ctmpl.example`,
+  `vault-policy.hcl.example` and `muxivo-console-vault-agent.service` describe
+  the selected HashiCorp Vault + Vault Agent credential path. The API unit
+  requires the agent and consumes only its root-owned runtime credential; it
+  does not read a repository `.env` file.
 - `frpc-console.toml.example` is only a proxy fragment. Merge the `[[proxies]]`
   block into the existing `/etc/frp/frpc.toml` while preserving its server and
   authentication settings.

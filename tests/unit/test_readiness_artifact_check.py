@@ -49,6 +49,18 @@ def test_readiness_artifact_check_flags_missing_supporting_operations_artifact(
     assert any(issue.artifact == artifact for issue in issues)
 
 
+def test_readiness_artifact_check_flags_missing_secret_manager_artifact(
+    tmp_path: Path,
+) -> None:
+    _copy_required_artifacts(tmp_path)
+    artifact = tmp_path / "deploy" / "vault-policy.hcl.example"
+    artifact.unlink()
+
+    issues = check_readiness_artifacts(tmp_path)
+
+    assert any(issue.artifact == artifact for issue in issues)
+
+
 def test_readiness_artifact_check_keeps_email_verification_in_authentication_scope(
     tmp_path: Path,
 ) -> None:
@@ -82,6 +94,11 @@ def _copy_required_artifacts(destination: Path) -> None:
         Path("docs/operations/retention-policy.md"),
         Path("docs/operations/incident-runbook.md"),
         Path("deploy/prometheus-console.yml.example"),
+        Path("deploy/vault-agent.hcl.example"),
+        Path("deploy/console.env.ctmpl.example"),
+        Path("deploy/vault-policy.hcl.example"),
+        Path("deploy/muxivo-console-vault-agent.service"),
+        Path("deploy/muxivo-console-api.service"),
         Path(".github/workflows/console-quality.yml"),
     ):
         target = destination / source

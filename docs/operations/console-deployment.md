@@ -144,13 +144,18 @@ Install the built Vue output at `/srv/muxivo-console/web`.
 Use `deploy/console.env.example` as the variable checklist. The real values
 must be supplied by the selected secret manager, including the database URL,
 encryption keys, session pepper, Control API signing keys, OAuth credentials,
-Redis URL and SMTP password. The systemd unit consumes a root-owned credential
-file through `LoadCredential`; the unit does not make the file part of the
-repository or the frontend bundle.
+Redis URL and SMTP password. The selected integration is HashiCorp Vault +
+Vault Agent: install `deploy/muxivo-console-vault-agent.service`, render
+`deploy/console.env.ctmpl.example` as
+`/etc/muxivo-console/console.env.ctmpl`, and keep the AppRole role/secret ID and
+Vault CA certificate root-only. The API unit requires the agent and consumes
+only `/run/muxivo-console-vault-agent/console.env` through `LoadCredential`; it
+does not read a repository `.env` file or receive secrets in process arguments.
 
-Set `MUXIVO_CONSOLE_SECRET_SOURCE` to the actual approved manager, not to a
-placeholder. If no manager has been selected, the public service must remain
-stopped rather than weakening the production guard.
+Set `MUXIVO_CONSOLE_SECRET_SOURCE=hashicorp-vault` in the Vault KV record, not
+in a repository placeholder. If Vault, its AppRole policy or the rendered
+credential is missing, the public service must remain stopped rather than
+weakening the production guard.
 
 ### 4. Apply the API service
 

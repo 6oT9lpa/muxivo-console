@@ -129,6 +129,50 @@ REQUIRED_SUPPORTING_ARTIFACTS: tuple[tuple[str, tuple[tuple[str, str], ...]], ..
             ("127.0.0.1:8010", "loopback API target"),
         ),
     ),
+    (
+        "deploy/vault-agent.hcl.example",
+        (
+            ("auto_auth", "Vault Agent auto-authentication"),
+            ("auth/approle", "Vault AppRole authentication mount"),
+            ("console.env.ctmpl", "Vault-rendered Console environment template"),
+        ),
+    ),
+    (
+        "deploy/console.env.ctmpl.example",
+        (
+            ('secret "secret/data/muxivo-console/staging"', "staging Vault KV path"),
+            ("MUXIVO_CONSOLE_EMAIL_ENCRYPTION_KEY", "encrypted e-mail key mapping"),
+            ("MUXIVO_CONSOLE_SESSION_TOKEN_PEPPER", "session pepper mapping"),
+            ("MUXIVO_CONSOLE_PASSWORD_RECOVERY_SMTP_PASSWORD", "SMTP password mapping"),
+        ),
+    ),
+    (
+        "deploy/vault-policy.hcl.example",
+        (
+            ('path "secret/data/muxivo-console/staging"', "staging Vault policy path"),
+            ('capabilities = ["read"]', "read-only Vault policy"),
+        ),
+    ),
+    (
+        "deploy/muxivo-console-vault-agent.service",
+        (
+            ("ExecStart=/usr/bin/vault agent", "Vault Agent service command"),
+            ("RuntimeDirectory=muxivo-console-vault-agent", "isolated Vault Agent runtime"),
+        ),
+    ),
+    (
+        "deploy/muxivo-console-api.service",
+        (
+            (
+                "Requires=muxivo-console-vault-agent.service",
+                "API-to-Vault-Agent dependency",
+            ),
+            (
+                "LoadCredential=console_env:/run/muxivo-console-vault-agent/console.env",
+                "API runtime credential source",
+            ),
+        ),
+    ),
 )
 
 REQUIRED_CI_MARKERS: tuple[tuple[str, str], ...] = (

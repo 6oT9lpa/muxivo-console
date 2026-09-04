@@ -57,7 +57,7 @@ completed.
 | Operations | Backup/restore drill completed | Drill procedure documented; staging exercise pending |
 | Deployment | Staging/prod domains provisioned | Temporary staging `beget.ame-life.com` serves frontend release `eb08bd6`; API is pending credential/service activation and canonical production host is pending |
 | Deployment | Staging/prod OAuth credentials provisioned | Discord/Twitch OAuth enforced; values pending |
-| Secrets | KMS/secret manager selected and wired | Secret-manager source enforced; provider pending |
+| Secrets | KMS/secret manager selected and wired | HashiCorp Vault + Vault Agent selected; Vault instance, AppRole policy and runtime wiring pending |
 
 ## Latest staging verification
 
@@ -76,9 +76,39 @@ On 2026-09-05 the deployment was checked without changing application data:
   deployed `apps` and `tests` trees.
 
 The `502` responses are an intentional readiness boundary, not a successful
-production deployment. The next activation step requires a real approved
-secret-manager integration, a dedicated database credential, Redis URL, OAuth
-credentials, SMTP configuration and signed Control API endpoints.
+production deployment. The next activation step requires the approved
+HashiCorp Vault instance and AppRole policy, a dedicated database credential,
+Redis URL, OAuth credentials, SMTP configuration and signed Control API
+endpoints.
+
+## Secret-manager decision
+
+HashiCorp Vault is the selected secret manager for staging and production. The
+application does not call Vault directly and never receives a Vault token in
+its process arguments. A root-owned Vault Agent authenticates with a dedicated
+AppRole, reads only the environment-specific KV v2 path and renders the
+application environment into `/run/muxivo-console-vault-agent/console.env` with
+mode `0600`. The systemd API unit starts only after that agent and imports the
+rendered file through `LoadCredential`.
+
+Required boundaries:
+
+- separate Vault namespaces/paths and AppRole policies for staging and
+  production;
+- TLS with a pinned/approved Vault CA, no plaintext Vault URL in public logs;
+- read-only policy limited to the Console path;
+- root-only role/secret ID files with rotation and revocation procedures;
+- audit logging enabled in Vault;
+- Vault Agent renewal/re-render followed by a controlled API restart;
+- no secret values in Git, frontend bundles, process arguments, CI output or
+  structured application logs.
+
+The repository artifacts are
+`deploy/vault-agent.hcl.example`, `deploy/console.env.ctmpl.example`,
+`deploy/vault-policy.hcl.example` and
+`deploy/muxivo-console-vault-agent.service`. The decision is recorded; the
+external Vault instance, AppRole bootstrap and real secret population remain
+deployment actions.
 
 E-mail ownership verification is part of the current Console authentication
 flow. The public registration endpoint creates only a short-lived pending

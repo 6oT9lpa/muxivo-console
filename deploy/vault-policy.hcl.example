@@ -1,0 +1,6 @@
+# Read-only policy for the Muxivo Console staging/prod Vault Agent role.
+# Use one distinct policy/path per environment; this example is staging only.
+
+path "secret/data/muxivo-console/staging" {
+  capabilities = ["read"]
+}

@@ -1,0 +1,45 @@
+# HashiCorp Vault Agent configuration for Muxivo Console.
+#
+# Copy this file to /etc/muxivo-console/vault-agent.hcl only after replacing
+# the example Vault address and CA path. The role ID and secret ID are supplied
+# as root-only files; neither value belongs in this repository or a process
+# argument.
+
+pid_file = "/run/muxivo-console-vault-agent/agent.pid"
+
+vault {
+  address = "https://vault.example.internal:8200"
+  ca_cert = "/etc/muxivo-console/vault-ca.pem"
+}
+
+auto_auth {
+  method "approle" {
+    mount_path = "auth/approle"
+
+    config = {
+      role_id_file_path                   = "/etc/muxivo-console/vault-role-id"
+      secret_id_file_path                 = "/etc/muxivo-console/vault-secret-id"
+      remove_secret_id_file_after_reading = false
+    }
+  }
+
+  sink "file" {
+    config = {
+      path = "/run/muxivo-console-vault-agent/token"
+      mode = 0600
+    }
+  }
+}
+
+template {
+  source      = "/etc/muxivo-console/console.env.ctmpl"
+  destination = "/run/muxivo-console-vault-agent/console.env"
+  perms       = "0600"
+
+  command = "/usr/bin/systemctl try-restart --no-block muxivo-console-api.service"
+
+  wait {
+    min = "5s"
+    max = "30s"
+  }
+}

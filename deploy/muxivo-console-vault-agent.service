@@ -1,0 +1,39 @@
+[Unit]
+Description=HashiCorp Vault Agent for Muxivo Console credentials
+Documentation=https://developer.hashicorp.com/vault/docs/agent
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=simple
+User=root
+Group=root
+RuntimeDirectory=muxivo-console-vault-agent
+RuntimeDirectoryMode=0750
+ExecStart=/usr/bin/vault agent -config=/etc/muxivo-console/vault-agent.hcl
+Restart=on-failure
+RestartSec=5s
+TimeoutStartSec=60s
+TimeoutStopSec=30s
+UMask=0077
+
+NoNewPrivileges=true
+PrivateDevices=true
+PrivateTmp=true
+ProtectHome=true
+ProtectSystem=strict
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+ProtectClock=true
+LockPersonality=true
+RestrictRealtime=true
+RestrictSUIDSGID=true
+RestrictNamespaces=true
+CapabilityBoundingSet=
+AmbientCapabilities=
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+ReadWritePaths=/run/muxivo-console-vault-agent
+
+[Install]
+WantedBy=multi-user.target
