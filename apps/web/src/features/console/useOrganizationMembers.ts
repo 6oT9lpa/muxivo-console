@@ -193,18 +193,18 @@ export function useOrganizationMembers(
 
   async function saveOrganizationMember(member: OrganizationMembership): Promise<void> {
     if (!activeOrganizationId.value || !canManageMembers.value) return;
-    normalizeMemberScopes(member);
+    const normalizedMember = normalizeMemberScopes(member);
     busy.value = true;
     notice.value = "";
     clientLogger.info("console.organization.member.update_requested");
     try {
       const updated = await consoleApi<OrganizationMembership>(
-        `/api/v1/organizations/${encodeURIComponent(activeOrganizationId.value)}/members/${encodeURIComponent(member.user_id)}`,
+        `/api/v1/organizations/${encodeURIComponent(activeOrganizationId.value)}/members/${encodeURIComponent(normalizedMember.user_id)}`,
         {
           method: "PUT",
           body: JSON.stringify({
-            role: member.role,
-            resource_scopes: member.resource_scopes.map((scope) => ({
+            role: normalizedMember.role,
+            resource_scopes: normalizedMember.resource_scopes.map((scope) => ({
               resource: scope.resource,
               action: scope.action,
             })),
@@ -258,8 +258,11 @@ export function useOrganizationMembers(
     );
   }
 
-  function normalizeMemberScopes(member: OrganizationMembership): void {
-    member.resource_scopes = supportedScopesForRole(member.role, member.resource_scopes);
+  function normalizeMemberScopes(member: OrganizationMembership): OrganizationMembership {
+    return {
+      ...member,
+      resource_scopes: supportedScopesForRole(member.role, member.resource_scopes),
+    };
   }
 
   function roleLabel(role: OrganizationRole): string {

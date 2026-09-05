@@ -149,4 +149,36 @@ describe("useOrganizationMembers", () => {
     expect(messageFor).toHaveBeenCalledOnce();
     expect(notice.value).toBe("neutral error");
   });
+
+  it("does not mutate member scopes when an update fails", async () => {
+    consoleApiMock.mockRejectedValue(new Error("backend details must stay private"));
+    const { members } = createMembers();
+    const candidate = {
+      ...member(),
+      resource_scopes: [
+        {
+          id: "scope-1",
+          resource: "console.platform_connections" as const,
+          action: "manage" as const,
+        },
+      ],
+    };
+
+    await members.saveOrganizationMember(candidate);
+
+    expect(candidate.resource_scopes).toEqual([
+      {
+        id: "scope-1",
+        resource: "console.platform_connections",
+        action: "manage",
+      },
+    ]);
+    expect(consoleApiMock).toHaveBeenCalledWith(
+      "/api/v1/organizations/org-1/members/user-1",
+      {
+        method: "PUT",
+        body: JSON.stringify({ role: "viewer", resource_scopes: [] }),
+      },
+    );
+  });
 });
