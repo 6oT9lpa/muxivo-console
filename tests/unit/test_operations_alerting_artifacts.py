@@ -127,6 +127,10 @@ def test_vault_templates_and_policies_cannot_cross_environment_boundaries() -> N
         assert (
             'printf "%q" (printf "%v" .Data.data.security_cleanup_enabled)'
         ) in template
+        assert (
+            '{{- if and .Data.data.twitch_control_base_url '
+            '.Data.data.twitch_control_signing_key }}'
+        ) in template
 
 
 def test_staging_vault_server_is_loopback_tls_and_persistent() -> None:
