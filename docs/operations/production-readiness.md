@@ -58,7 +58,7 @@ completed.
 | Compliance | Data inventory and retention schedule approved | Draft |
 | Operations | Incident runbook approved and exercised | Draft |
 | Operations | Backup/restore drill completed | Drill procedure documented; staging exercise pending |
-| Deployment | Staging/prod domains provisioned | Temporary staging `beget.ame-life.com` serves frontend release `d8c8c44`; API source release `5ddc58c` is staged but the service remains stopped pending credential activation, and canonical production host is pending |
+| Deployment | Staging/prod domains provisioned | Temporary staging `beget.ame-life.com` serves frontend release `559ba75`; API source release `5ddc58c` is staged but the service remains stopped pending credential activation, and canonical production host is pending |
 | Deployment | Staging/prod OAuth credentials provisioned | Discord/Twitch OAuth enforced; Google/Yandex ID and Telegram Login adapters are implemented and remain disabled until their values are supplied |
 | Secrets | KMS/secret manager selected and wired | HashiCorp Vault + Vault Agent selected; Vault instance, AppRole policy and runtime wiring pending |
 
@@ -66,7 +66,7 @@ completed.
 
 On 2026-09-05 the deployment was checked without changing application data:
 
-- `https://beget.ame-life.com/` served the Console frontend release `d8c8c44`
+- `https://beget.ame-life.com/` served the Console frontend release `559ba75`
   with HTTP `200`;
 - the read-only public network preflight passed DNS resolution, certificate
   validation with TLS 1.3 and the Console frontend marker; its only failed
@@ -79,15 +79,15 @@ On 2026-09-05 the deployment was checked without changing application data:
   Activity host remained reachable;
 - the latest API source `5ddc58c` was staged at `/opt/muxivo-console` on the
   local server, with a rollback copy at `/opt/muxivo-console.backup-5ddc58c`;
-- the frontend release `d8c8c44` was installed at `/srv/muxivo-console/web`,
-  with a rollback copy at `/srv/muxivo-console/web.backup-d8c8c44`;
+- the frontend release `559ba75` was installed at `/srv/muxivo-console/web`,
+  with a rollback copy at `/srv/muxivo-console/web.backup-559ba75`;
 - a source scan found no deprecated registration implementation markers in the
   deployed `apps` and `tests` trees.
 
 The same verification pass produced the following local quality evidence:
 
 - backend regression: `488 passed`;
-- frontend unit suite: `36 passed`;
+- frontend unit suite: `39 passed`;
 - frontend production build: successful;
 - browser E2E suite: `6 passed`;
 - legacy-auth, secret, browser-token, audit-coverage, readiness-artifact,
