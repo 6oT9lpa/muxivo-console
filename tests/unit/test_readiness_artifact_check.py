@@ -37,6 +37,25 @@ def test_readiness_artifact_check_flags_removed_ci_gate(tmp_path: Path) -> None:
     assert any(issue.marker == "python scripts/audit_coverage.py" for issue in issues)
 
 
+def test_readiness_artifact_check_flags_removed_observability_smoke(tmp_path: Path) -> None:
+    _copy_required_artifacts(tmp_path)
+    workflow_path = tmp_path / ".github" / "workflows" / "console-quality.yml"
+    workflow = workflow_path.read_text(encoding="utf-8")
+    workflow_path.write_text(
+        workflow.replace(
+            "python scripts/observability_composition_smoke.py",
+            "python -m pytest",
+        ),
+        encoding="utf-8",
+    )
+
+    issues = check_readiness_artifacts(tmp_path)
+
+    assert any(
+        issue.marker == "python scripts/observability_composition_smoke.py" for issue in issues
+    )
+
+
 def test_readiness_artifact_check_flags_missing_supporting_operations_artifact(
     tmp_path: Path,
 ) -> None:

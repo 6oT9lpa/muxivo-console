@@ -169,3 +169,20 @@ jobs:
 
       - name: Run development Docker Compose smoke
         run: python scripts/development_composition_smoke.py
+
+  observability-composition-smoke:
+    name: Development observability composition smoke
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Run API and Prometheus composition smoke
+        run: python scripts/observability_composition_smoke.py

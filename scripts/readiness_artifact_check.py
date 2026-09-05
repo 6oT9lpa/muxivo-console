@@ -222,6 +222,10 @@ REQUIRED_CI_MARKERS: tuple[tuple[str, str], ...] = (
         "python scripts/development_composition_smoke.py",
         "development compose runtime smoke command",
     ),
+    (
+        "python scripts/observability_composition_smoke.py",
+        "development observability compose runtime smoke command",
+    ),
 )
 
 
