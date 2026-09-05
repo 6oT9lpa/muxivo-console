@@ -58,7 +58,7 @@ completed.
 | Compliance | Data inventory and retention schedule approved | Draft |
 | Operations | Incident runbook approved and exercised | Draft |
 | Operations | Backup/restore drill completed | Isolated database restore, migration rollback and restored-data application smoke passed on 2026-09-05; measured RTO/RPO and scheduled backup retention remain pending |
-| Deployment | Staging/prod domains provisioned | Temporary staging `beget.ame-life.com` serves frontend release `8e3db1b`; API source release `d22e079` and its Python runtime are staged, but the service remains stopped pending credential activation, and canonical production host is pending |
+| Deployment | Staging/prod domains provisioned | Temporary staging `beget.ame-life.com` serves frontend release `35c7fab`; API source release `d22e079` and its Python runtime are staged, but the service remains stopped pending credential activation, and canonical production host is pending |
 | Deployment | Staging/prod OAuth credentials provisioned | Discord/Twitch OAuth enforced; Google/Yandex ID and Telegram Login adapters are implemented and remain disabled until their values are supplied |
 | Secrets | KMS/secret manager selected and wired | HashiCorp Vault + Vault Agent selected; Vault instance, AppRole policy and runtime wiring pending |
 
@@ -66,10 +66,11 @@ completed.
 
 On 2026-09-05 the deployment was checked without changing application data:
 
-- `https://beget.ame-life.com/` served the Console frontend release `8e3db1b`
+- `https://beget.ame-life.com/` served the Console frontend release `35c7fab`
   with HTTP `200`;
-- the post-refactor asset `assets/index-D1hf1o5x.js` returned HTTP `200`, the
-  public HTML referenced it, the security orchestration marker was present,
+- the current asset `assets/index-trFUJZKv.js` returned HTTP `200`, the public
+  HTML referenced it, the security orchestration and locale logging markers
+  were present,
   and the public bundle contained no legacy registration markers;
 - the read-only public network preflight passed DNS resolution, certificate
   validation with TLS 1.3 and the Console frontend marker; its only failed
@@ -85,8 +86,8 @@ On 2026-09-05 the deployment was checked without changing application data:
 - the API runtime `/opt/muxivo-console/venv` was provisioned from the current
   `pyproject.toml`; imports and the Alembic CLI passed without starting the
   service;
-- the frontend release `8e3db1b` was installed at `/srv/muxivo-console/web`,
-  with a rollback copy at `/srv/muxivo-console/web.backup-8e3db1b`;
+- the frontend release `35c7fab` was installed at `/srv/muxivo-console/web`,
+  with a rollback copy at `/srv/muxivo-console/web.backup-35c7fab`;
 - a source scan found no deprecated registration implementation markers in the
   deployed `apps` and `tests` trees.
 
