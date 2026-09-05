@@ -430,7 +430,12 @@ class BrowserSessionReauthenticationWriter(Protocol):
 
 
 class PasswordRecoveryTransactionWriter(Protocol):
-    """Stores a one-time recovery token hash and audit fact."""
+    """Stores the durable recovery hash and audit fact.
+
+    The short-lived Redis reference is managed by the application use cases;
+    this port keeps the database transaction required for atomic credential
+    rotation and session revocation.
+    """
 
     async def create(
         self, *, transaction: PasswordRecoveryTransaction, audit_event: AuditEvent

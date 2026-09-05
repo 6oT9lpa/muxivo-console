@@ -1238,12 +1238,25 @@ def create_app(
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
                 detail="Password recovery is unavailable",
             )
-        await password_recovery_request_use_case.execute(
-            RequestPasswordRecoveryCommand(
-                email=str(payload.email),
-                correlation_id=request.state.correlation_id,
+        try:
+            await password_recovery_request_use_case.execute(
+                RequestPasswordRecoveryCommand(
+                    email=str(payload.email),
+                    correlation_id=request.state.correlation_id,
+                )
             )
-        )
+        except ConnectionError as error:
+            logger.error(
+                "password.recovery.request.backend_unavailable",
+                extra={
+                    "correlation_id": str(request.state.correlation_id),
+                    "error_type": type(error).__name__,
+                },
+            )
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Password recovery is temporarily unavailable",
+            ) from error
         return PasswordRecoveryRequestResponse()
 
     async def begin_external_identity_link(
@@ -1320,6 +1333,18 @@ def create_app(
                     correlation_id=request.state.correlation_id,
                 )
             )
+        except ConnectionError as error:
+            logger.error(
+                "password.recovery.complete.backend_unavailable",
+                extra={
+                    "correlation_id": str(request.state.correlation_id),
+                    "error_type": type(error).__name__,
+                },
+            )
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Password recovery is temporarily unavailable",
+            ) from error
         except PasswordRecoveryCompletionRejectedError as error:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,

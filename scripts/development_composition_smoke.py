@@ -121,7 +121,9 @@ def _run_command(
         "development_composition_smoke.stage_started",
         extra={"stage": stage},
     )
-    runner(command, check=True, cwd=str(root))
+    # Compose renders the complete environment in `config`; capture every
+    # command so generated credentials never reach the terminal or CI logs.
+    runner(command, check=True, cwd=str(root), capture_output=True, text=True)
     logger.info(
         "development_composition_smoke.stage_completed",
         extra={"stage": stage},
@@ -130,7 +132,13 @@ def _run_command(
 
 def _run_cleanup(runner: CommandRunner, command: Sequence[str], *, root: Path) -> None:
     try:
-        runner(command, check=False, cwd=str(root))
+        runner(
+            command,
+            check=False,
+            cwd=str(root),
+            capture_output=True,
+            text=True,
+        )
     except Exception as error:  # pragma: no cover - depends on local Docker behavior.
         logger.error(
             "development_composition_smoke.cleanup_failed",

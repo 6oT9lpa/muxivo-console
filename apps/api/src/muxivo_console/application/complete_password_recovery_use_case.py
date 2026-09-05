@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
+from uuid import UUID
 
 from muxivo_console.application.complete_password_recovery_command import (
     CompletePasswordRecoveryCommand,
@@ -14,6 +15,7 @@ from muxivo_console.application.password_recovery_completion_rejected_error impo
 from muxivo_console.application.ports import (
     Clock,
     IdentifierGenerator,
+    OneTimeTokenStore,
     PasswordHasher,
     PasswordRecoveryCompletionNotifier,
     PasswordRecoveryCompletionWriter,
@@ -33,6 +35,7 @@ class CompletePasswordRecovery:
     token_hasher: SessionTokenHasher
     password_hasher: PasswordHasher
     completions: PasswordRecoveryCompletionWriter
+    recovery_tokens: OneTimeTokenStore
     recipients: PasswordRecoveryRecipientReader
     notifier: PasswordRecoveryCompletionNotifier
 
@@ -54,9 +57,29 @@ class CompletePasswordRecovery:
             )
             raise PasswordRecoveryCompletionRejectedError("Password recovery failed.")
 
+        token_hash = self.token_hasher.hash(command.token)
+        token_key = self._key(token_hash)
+        try:
+            stored_reference = await self.recovery_tokens.get(key=token_key)
+        except ConnectionError as error:
+            logger.error(
+                "password.recovery.complete.token_store_unavailable",
+                extra={
+                    "correlation_id": str(command.correlation_id),
+                    "error_type": type(error).__name__,
+                },
+            )
+            raise
+        if not _is_valid_reference(stored_reference):
+            logger.warning(
+                "password.recovery.complete.rejected_missing_token_store_reference",
+                extra={"correlation_id": str(command.correlation_id)},
+            )
+            raise PasswordRecoveryCompletionRejectedError("Password recovery failed.")
+
         completed_at = self.clock.now()
         user_id = await self.completions.complete(
-            token_hash=self.token_hasher.hash(command.token),
+            token_hash=token_hash,
             password_hash=self.password_hasher.hash(command.new_password),
             completed_at=completed_at,
             audit_id=self.identifiers.new(),
@@ -68,6 +91,29 @@ class CompletePasswordRecovery:
                 extra={"correlation_id": str(command.correlation_id)},
             )
             raise PasswordRecoveryCompletionRejectedError("Password recovery failed.")
+        try:
+            consumed = await self.recovery_tokens.consume(
+                key=token_key,
+                value=stored_reference,
+            )
+        except ConnectionError as error:
+            logger.error(
+                "password.recovery.complete.token_store_cleanup_failed",
+                extra={
+                    "user_id": str(user_id),
+                    "correlation_id": str(command.correlation_id),
+                    "error_type": type(error).__name__,
+                },
+            )
+        else:
+            if not consumed:
+                logger.warning(
+                    "password.recovery.complete.token_store_reference_missing_after_commit",
+                    extra={
+                        "user_id": str(user_id),
+                        "correlation_id": str(command.correlation_id),
+                    },
+                )
         recipient_email = await self.recipients.find_primary_email(user_id=user_id)
         if recipient_email is None:
             logger.error(
@@ -102,6 +148,9 @@ class CompletePasswordRecovery:
             },
         )
 
+    def _key(self, token_hash: str) -> str:
+        return f"muxivo-console:password-recovery:{token_hash}"
+
 
 def _is_usable_token(token: str) -> bool:
     if not token or len(token) > 4096:
@@ -111,3 +160,13 @@ def _is_usable_token(token: str) -> bool:
 
 def _is_valid_password(password: str) -> bool:
     return 12 <= len(password) <= 1024
+
+
+def _is_valid_reference(reference: str | None) -> bool:
+    if reference is None:
+        return False
+    try:
+        UUID(reference)
+    except (TypeError, ValueError):
+        return False
+    return True

@@ -15,6 +15,9 @@ from muxivo_console.application.request_password_recovery import (
 from muxivo_console.domain.audit import AuditEvent
 from muxivo_console.domain.identity import EmailPasswordAccount, UserStatus
 from muxivo_console.domain.password_recovery import PasswordRecoveryTransaction
+from muxivo_console.infrastructure.in_memory_one_time_token_store import (
+    InMemoryOneTimeTokenStore,
+)
 
 
 class SequenceIdentifiers:
@@ -139,6 +142,7 @@ async def test_recovery_request_creates_hashed_token_and_notifies_active_account
     user_id, transaction_id, audit_id, correlation_id = uuid4(), uuid4(), uuid4(), uuid4()
     token_hasher = TokenHasher()
     transactions = RecoveryTransactions()
+    recovery_tokens = InMemoryOneTimeTokenStore()
     notifier = RecoveryNotifier()
     use_case = RequestPasswordRecovery(
         identifiers=SequenceIdentifiers([transaction_id, audit_id]),
@@ -149,6 +153,7 @@ async def test_recovery_request_creates_hashed_token_and_notifies_active_account
         token_hasher=token_hasher,
         accounts=Accounts(EmailPasswordAccount(user_id, UserStatus.ACTIVE, "$argon2id$hash")),
         transactions=transactions,
+        recovery_tokens=recovery_tokens,
         notifier=notifier,
     )
 
@@ -159,6 +164,9 @@ async def test_recovery_request_creates_hashed_token_and_notifies_active_account
     assert transactions.transaction.id == transaction_id
     assert transactions.transaction.user_id == user_id
     assert transactions.transaction.token_hash == "a" * 64
+    assert await recovery_tokens.get(key="muxivo-console:password-recovery:" + "a" * 64) == str(
+        transaction_id
+    )
     assert transactions.transaction.expires_at == now + timedelta(minutes=30)
     assert transactions.audit_event is not None
     assert transactions.audit_event.id == audit_id
@@ -172,6 +180,7 @@ async def test_recovery_request_creates_hashed_token_and_notifies_active_account
 async def test_recovery_request_is_anti_enumeration_for_missing_account() -> None:
     token_hasher = TokenHasher()
     transactions = RecoveryTransactions()
+    recovery_tokens = InMemoryOneTimeTokenStore()
     notifier = RecoveryNotifier()
     use_case = RequestPasswordRecovery(
         identifiers=SequenceIdentifiers([uuid4(), uuid4()]),
@@ -182,6 +191,7 @@ async def test_recovery_request_is_anti_enumeration_for_missing_account() -> Non
         token_hasher=token_hasher,
         accounts=Accounts(None),
         transactions=transactions,
+        recovery_tokens=recovery_tokens,
         notifier=notifier,
     )
 
@@ -199,6 +209,12 @@ async def test_recovery_completion_hashes_token_and_password_then_delegates_atom
     token_hasher = TokenHasher()
     passwords = Passwords()
     writer = RecoveryCompletionWriter(user_id)
+    recovery_tokens = InMemoryOneTimeTokenStore()
+    await recovery_tokens.put(
+        key="muxivo-console:password-recovery:" + "a" * 64,
+        value=str(uuid4()),
+        ttl_seconds=1800,
+    )
     recipients = RecoveryRecipientReader()
     notifier = RecoveryCompletionNotifier()
     use_case = CompletePasswordRecovery(
@@ -207,6 +223,7 @@ async def test_recovery_completion_hashes_token_and_password_then_delegates_atom
         token_hasher=token_hasher,
         password_hasher=passwords,
         completions=writer,
+        recovery_tokens=recovery_tokens,
         recipients=recipients,
         notifier=notifier,
     )
@@ -220,6 +237,7 @@ async def test_recovery_completion_hashes_token_and_password_then_delegates_atom
     )
 
     assert token_hasher.tokens == ["opaque-recovery-token"]
+    assert await recovery_tokens.get(key="muxivo-console:password-recovery:" + "a" * 64) is None
     assert passwords.hash_calls == ["new-secure-password"]
     assert writer.arguments == {
         "token_hash": "a" * 64,
@@ -239,12 +257,14 @@ async def test_recovery_completion_hashes_token_and_password_then_delegates_atom
 
 @pytest.mark.asyncio
 async def test_recovery_completion_rejects_invalid_or_consumed_token() -> None:
+    recovery_tokens = InMemoryOneTimeTokenStore()
     use_case = CompletePasswordRecovery(
         identifiers=SequenceIdentifiers([uuid4()]),
         clock=FixedClock(datetime(2026, 8, 19, 12, tzinfo=UTC)),
         token_hasher=TokenHasher(),
         password_hasher=Passwords(),
         completions=RecoveryCompletionWriter(result=None),
+        recovery_tokens=recovery_tokens,
         recipients=RecoveryRecipientReader(),
         notifier=RecoveryCompletionNotifier(),
     )

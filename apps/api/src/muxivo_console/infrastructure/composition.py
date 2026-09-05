@@ -258,6 +258,7 @@ def create_production_app(
     password_hasher = Argon2idPasswordHasher()
     session_hasher = HmacSessionTokenHasher(settings.session_token_pepper)
     session_fingerprint_hasher = HmacSessionFingerprintHasher(settings.session_token_pepper)
+    one_time_token_store = _one_time_token_store_for(settings)
     session_creator = CreateBrowserSession(
         identifiers=identifiers,
         clock=clock,
@@ -327,6 +328,7 @@ def create_production_app(
         token_hasher=session_hasher,
         accounts=SqlAlchemyEmailPasswordAccountReader(sessions),
         transactions=password_recovery_repository,
+        recovery_tokens=one_time_token_store,
         notifier=password_recovery_notifier,
     )
     organization_invitation_notifier = (
@@ -342,6 +344,7 @@ def create_production_app(
         token_hasher=session_hasher,
         password_hasher=password_hasher,
         completions=password_recovery_repository,
+        recovery_tokens=one_time_token_store,
         recipients=SqlAlchemyPasswordRecoveryRecipientReader(sessions, email_protector),
         notifier=password_recovery_completion_notifier,
     )
@@ -350,11 +353,6 @@ def create_production_app(
         email_normalizer=ValidatedEmailAddressNormalizer(),
         email_protector=email_protector,
         registrations=SqlAlchemyEmailPasswordRegistrationWriter(sessions),
-    )
-    pending_registration_store = (
-        RedisOneTimeTokenStore(settings.rate_limit.redis_url)
-        if settings.rate_limit is not None and settings.rate_limit.redis_url is not None
-        else InMemoryOneTimeTokenStore()
     )
     if settings.password_recovery_smtp is not None:
         registration_verification_notifier = SmtpEmailPasswordRegistrationVerificationNotifier(
@@ -373,13 +371,13 @@ def create_production_app(
         token_issuer=SecureOpaqueSessionTokenIssuer(),
         token_hasher=session_hasher,
         accounts=SqlAlchemyEmailPasswordAccountReader(sessions),
-        pending_registrations=pending_registration_store,
+        pending_registrations=one_time_token_store,
         notifier=registration_verification_notifier,
     )
     registration_verification_complete = VerifyEmailPasswordRegistration(
         token_hasher=session_hasher,
         email_protector=email_protector,
-        pending_registrations=pending_registration_store,
+        pending_registrations=one_time_token_store,
         registrations=registration_completion,
     )
     authentication = AuthenticateEmailPassword(
@@ -864,6 +862,15 @@ def create_development_app(settings: ConsoleSettings):
         settings,
         browser_session_cookies=BrowserSessionCookieSettings.development(),
     )
+
+
+def _one_time_token_store_for(settings: ConsoleSettings):
+    """Use shared Redis for every short-lived authentication flow outside dev."""
+    if settings.rate_limit is not None and settings.rate_limit.redis_url is not None:
+        return RedisOneTimeTokenStore(settings.rate_limit.redis_url)
+    if settings.environment == "development":
+        return InMemoryOneTimeTokenStore()
+    raise ValueError("Production one-time authentication flows require a Redis URL.")
 
 
 def _rate_limiter_for(settings: ConsoleSettings):

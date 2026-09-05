@@ -84,6 +84,24 @@ unusable or partially delivered registration cannot become an accidental
 account-creation path. Existing e-mail addresses use the same generic public
 response and are never enumerated.
 
+### Password recovery trust boundary
+
+Password recovery uses two coordinated one-time stores:
+
+1. The database keeps only the SHA-256 token hash, expiry and consumed state
+   required for the atomic password rotation, session revocation and audit
+   transaction.
+2. Redis keeps a short-lived reference keyed by that hash. The recovery
+   completion endpoint must find a valid Redis reference before it spends
+   Argon2id work or attempts the database mutation. After a successful commit,
+   the reference is removed with an atomic compare-and-delete operation.
+
+The raw recovery token exists only in the protected e-mail link and the
+password-reset request body. It is never written to Redis, PostgreSQL, logs or
+API responses. If Redis is unavailable, the flow fails closed and returns a
+generic temporary-unavailability response; a partially stored or delivered
+recovery transaction cannot be used.
+
 ### Identity linking rules
 
 - Do not merge accounts solely because providers return the same email address.

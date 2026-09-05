@@ -29,7 +29,7 @@ completed.
 | Area | Gate | Status |
 | --- | --- | --- |
 | Identity | E-mail/password registration creates an account only after a short-lived six-digit code is verified | Implemented; SMTP.BZ secret-manager wiring and delivery test pending |
-| Identity | Password recovery SMTP delivery adapter configured outside logs | SMTP.BZ domain verified and STARTTLS/AUTH probe passed; secret-manager wiring and delivery test pending |
+| Identity | Password recovery SMTP delivery adapter configured outside logs | SMTP.BZ domain verified and STARTTLS/AUTH probe passed; Redis-backed token gate, secret-manager wiring and delivery test pending |
 | Security | Shared rate limits enabled for login, registration, reauthentication, OAuth callback and recovery | Redis is installed and loopback-only; staging secret-manager URL wiring pending |
 | Security | CORS allowlist configured for staging/prod origins | Enforced in settings; values pending |
 | Security | CSP, HSTS and browser hardening headers enabled | Implemented |
@@ -181,7 +181,8 @@ draft, Console can accurately describe:
 - CSRF protection for authenticated mutations;
 - rate limiting for abuse-prone authentication and reauthentication flows;
 - production browser security headers;
-- hashed browser session and recovery tokens;
+- hashed browser session and recovery tokens, with short-lived Redis references
+  for recovery replay protection;
 - recent authentication refresh plus gates for password change, login identity
   unlink and sensitive platform writes;
 - secret redaction for logs;
@@ -217,7 +218,7 @@ cover:
 | Password hash | Yes | Secret-derived | Never | Argon2id hash only |
 | Browser session token | Hash only | Yes | Cookie carries raw opaque token, HttpOnly | DB never stores raw token |
 | CSRF token | Cookie + header | Security token | Yes, intentionally browser-readable | Not an authentication credential |
-| Recovery token | Hash only | Yes | Only delivered through recovery channel | Logs must never include raw token |
+| Recovery token | SHA-256 hash in PostgreSQL plus short-lived reference in Redis | Yes | Accepted only as reset-link input; never returned by API | Raw token is never stored in Redis, PostgreSQL or logs |
 | Login identity provider subject | Yes | Personal/provider metadata | Limited identity profile only | No provider OAuth token |
 | Organization | Yes | No | Yes to members | Tenant boundary |
 | Membership role/scopes | Yes | No | Yes to authorized members | Used for RBAC |

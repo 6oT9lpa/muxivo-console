@@ -24,10 +24,10 @@ def test_development_environment_generates_all_required_runtime_values() -> None
 def test_smoke_runs_real_compose_stages_and_cleans_generated_environment(tmp_path: Path) -> None:
     compose_file = tmp_path / "docker-compose.dev.yml"
     compose_file.write_text("services: {}\n", encoding="utf-8")
-    commands: list[tuple[tuple[str, ...], bool]] = []
+    commands: list[tuple[tuple[str, ...], bool, bool, bool]] = []
 
-    def runner(command, *, check, cwd):
-        commands.append((tuple(command), check))
+    def runner(command, *, check, cwd, capture_output, text):
+        commands.append((tuple(command), check, capture_output, text))
 
     def opener(request, *, timeout):
         assert request.full_url in {
@@ -49,6 +49,7 @@ def test_smoke_runs_real_compose_stages_and_cleans_generated_environment(tmp_pat
     assert commands[1][0][-6:] == ("up", "-d", "--build", "--wait", "postgres", "api")
     assert commands[-1][0][-2:] == ("down", "--remove-orphans")
     assert commands[-1][1] is False
+    assert all(command[2:] == (True, True) for command in commands)
     assert not (tmp_path / ".dev" / "console.env").exists()
 
 
