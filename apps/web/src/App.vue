@@ -1005,9 +1005,12 @@ function connectionRiskyActionsBlocked(status: PlatformConnection["status"]): bo
             <small>{{ connectionStatusDescription(connection) }}</small>
           </span>
           <em :data-status="connection.status">{{ connectionStatusLabel(connection.status) }}</em>
-          <button type="button" :disabled="busy || connection.status === 'active'" @click="runConnectionLifecycle(connection, 'reauthorize')">{{ t("console.connections.reauthorize") }}</button>
-          <button type="button" :disabled="busy || connection.status === 'reauth_required' || connection.status === 'pending' || connection.status === 'disconnected'" @click="runConnectionLifecycle(connection, 'revoke')">{{ t("console.connections.revoke") }}</button>
-          <button type="button" :disabled="busy || connection.status === 'disconnected'" @click="runConnectionLifecycle(connection, 'disconnect')">{{ t("console.connections.disconnect") }}</button>
+          <div v-if="canManagePlatformConnections" class="connection-actions">
+            <button type="button" :disabled="busy || connection.status === 'active'" @click="runConnectionLifecycle(connection, 'reauthorize')">{{ t("console.connections.reauthorize") }}</button>
+            <button type="button" :disabled="busy || connection.status === 'reauth_required' || connection.status === 'pending' || connection.status === 'disconnected'" @click="runConnectionLifecycle(connection, 'revoke')">{{ t("console.connections.revoke") }}</button>
+            <button type="button" :disabled="busy || connection.status === 'disconnected'" @click="runConnectionLifecycle(connection, 'disconnect')">{{ t("console.connections.disconnect") }}</button>
+          </div>
+          <small v-else class="connection-feedback">{{ t("console.connections.manage_permission_required") }}</small>
           <small v-if="connectionRiskyActionsBlocked(connection.status)">{{ t("console.connections.risky_blocked") }}</small>
           <ul v-if="connection.granted_scopes.length" class="scope-list" :aria-label="t('console.connections.granted_scopes')">
             <li v-for="scope in connection.granted_scopes" :key="scope.key">

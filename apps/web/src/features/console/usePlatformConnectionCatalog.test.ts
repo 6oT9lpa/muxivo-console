@@ -159,6 +159,19 @@ describe("usePlatformConnectionCatalog", () => {
     expect(completed).toBe(true);
   });
 
+  it("fails closed when a read-only member attempts a lifecycle action", async () => {
+    const { catalog, canManagePlatformConnections } = createCatalog();
+    canManagePlatformConnections.value = false;
+
+    const completed = await catalog.runConnectionLifecycle(
+      connection("connection-1"),
+      "disconnect",
+    );
+
+    expect(consoleApiMock).not.toHaveBeenCalled();
+    expect(completed).toBe(false);
+  });
+
   it("keeps a 503 candidate catalog failure retryable without leaking details", async () => {
     consoleApiMock.mockRejectedValue(new ConsoleApiErrorMock(503, "private upstream detail"));
     const { catalog, notice } = createCatalog();

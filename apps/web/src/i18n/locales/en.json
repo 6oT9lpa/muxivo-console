@@ -341,6 +341,7 @@
   "console.connections.identity_required": "Link the matching platform identity to discover resources you can connect.",
   "console.connections.no_candidates": "No connectable resources were found for this identity.",
   "console.connections.permission_required": "Your organization role does not include access to platform connections.",
+  "console.connections.manage_permission_required": "You can view this connection, but managing its lifecycle requires organization management access.",
   "console.connections.ownership_discord": "Need ownership proof first?",
   "console.connections.ownership_twitch": "Need broadcaster proof first?",
   "console.connections.link_identity": "Link {platform} identity",

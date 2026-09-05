@@ -249,7 +249,14 @@ export function usePlatformConnectionCatalog(
     connection: PlatformConnection,
     action: ConnectionLifecycleAction,
   ): Promise<boolean> {
-    if (!activeOrganizationId.value) return false;
+    if (!activeOrganizationId.value || !canManagePlatformConnections.value) {
+      clientLogger.info("console.connection.lifecycle.load_skipped", {
+        action,
+        has_active_organization: Boolean(activeOrganizationId.value),
+        can_manage_connections: canManagePlatformConnections.value,
+      });
+      return false;
+    }
     const suffix =
       action === "reauthorize"
         ? "reauthorizations"

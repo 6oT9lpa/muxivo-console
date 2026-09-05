@@ -341,6 +341,7 @@
   "console.connections.identity_required": "Свяжите соответствующую идентичность платформы, чтобы найти доступные ресурсы.",
   "console.connections.no_candidates": "Для этой идентичности нет доступных ресурсов для подключения.",
   "console.connections.permission_required": "Роль в организации не даёт доступа к подключениям платформ.",
+  "console.connections.manage_permission_required": "Вы можете просматривать это подключение, но управление его жизненным циклом требует права управления организацией.",
   "console.connections.ownership_discord": "Сначала нужно подтвердить владение?",
   "console.connections.ownership_twitch": "Сначала нужно подтвердить права вещателя?",
   "console.connections.link_identity": "Связать идентичность {platform}",
