@@ -25,6 +25,8 @@ function createAuth() {
     authenticated,
     closeLoginModal: vi.fn(),
     loadOrganizations: vi.fn().mockResolvedValue(undefined),
+    loadBrowserSessions: vi.fn().mockResolvedValue(undefined),
+    loadLoginIdentities: vi.fn().mockResolvedValue(undefined),
     acceptInvitationIfPresent: vi.fn().mockResolvedValue(undefined),
   };
   return { auth: useConsoleAuth(dependencies), ...dependencies };
@@ -66,8 +68,15 @@ describe("useConsoleAuth", () => {
       .mockResolvedValueOnce(undefined)
       .mockResolvedValueOnce({ items: [] })
       .mockResolvedValueOnce({ items: [] });
-    const { auth, authenticated, closeLoginModal, loadOrganizations, acceptInvitationIfPresent } =
-      createAuth();
+    const {
+      auth,
+      authenticated,
+      closeLoginModal,
+      loadOrganizations,
+      loadBrowserSessions,
+      loadLoginIdentities,
+      acceptInvitationIfPresent,
+    } = createAuth();
     auth.email.value = "creator@example.com";
     auth.password.value = "a-long-enough-password";
 
@@ -76,8 +85,9 @@ describe("useConsoleAuth", () => {
     expect(authenticated.value).toBe(true);
     expect(closeLoginModal).toHaveBeenCalledOnce();
     expect(loadOrganizations).toHaveBeenCalledOnce();
+    expect(loadBrowserSessions).toHaveBeenCalledOnce();
+    expect(loadLoginIdentities).toHaveBeenCalledOnce();
     expect(acceptInvitationIfPresent).toHaveBeenCalledOnce();
     expect(auth.password.value).toBe("");
   });
 });
-

@@ -16,6 +16,7 @@ import LanguageSwitcher from "./components/common/LanguageSwitcher.vue";
 import PublicFooter from "./components/common/PublicFooter.vue";
 import AuthModal from "./features/auth/AuthModal.vue";
 import { useConsoleAuth } from "./features/auth/useConsoleAuth";
+import { useConsoleSecurity } from "./features/auth/useConsoleSecurity";
 import ConnectionWizardPanel from "./features/console/ConnectionWizardPanel.vue";
 import OrganizationMembersPanel from "./features/console/OrganizationMembersPanel.vue";
 import OrganizationSwitcher from "./features/console/OrganizationSwitcher.vue";
@@ -239,16 +240,35 @@ const {
 });
 
 const {
+  currentPassword,
+  reauthenticationPassword,
+  newPassword,
+  confirmNewPassword,
+  browserSessions,
+  loginIdentities,
+  loadBrowserSessions,
+  refreshSecurity,
+  loadLoginIdentities,
+  unlinkLoginIdentity,
+  changePassword,
+  refreshRecentAuthentication,
+  resetSecurityState,
+  providerLabel,
+} = useConsoleSecurity({
+  t,
+  busy,
+  notice,
+  authenticated,
+  messageFor,
+});
+
+const {
   authMode,
   email,
   password,
   registrationDisplayName,
   registrationEmail,
   registrationPassword,
-  currentPassword,
-  reauthenticationPassword,
-  newPassword,
-  confirmNewPassword,
   recoveryEmail,
   recoveryToken,
   recoveryNewPassword,
@@ -259,8 +279,6 @@ const {
   invitationToken,
   identityLinkedProvider,
   availableAuthProviders,
-  browserSessions,
-  loginIdentities,
   signIn,
   requestRegistrationVerification,
   resendRegistrationVerification,
@@ -272,14 +290,7 @@ const {
   requestPasswordRecovery,
   completePasswordRecovery,
   linkExternalIdentity,
-  loadBrowserSessions,
-  refreshSecurity,
-  loadLoginIdentities,
-  unlinkLoginIdentity,
-  changePassword,
-  refreshRecentAuthentication,
   clearInvitationToken,
-  providerLabel,
 } = useConsoleAuth({
   t,
   busy,
@@ -288,6 +299,8 @@ const {
   messageFor,
   closeLoginModal,
   loadOrganizations,
+  loadBrowserSessions,
+  loadLoginIdentities,
   acceptInvitationIfPresent,
 });
 
@@ -426,12 +439,7 @@ async function signOut() {
   try {
     await consoleApi<void>("/api/v1/auth/session", { method: "DELETE" });
     authenticated.value = false;
-    browserSessions.value = [];
-    loginIdentities.value = [];
-    currentPassword.value = "";
-    reauthenticationPassword.value = "";
-    newPassword.value = "";
-    confirmNewPassword.value = "";
+    resetSecurityState();
     clearInvitationToken();
     resetOrganizationWorkspace();
     resetOrganizationSelection();
@@ -500,12 +508,7 @@ async function revokeAllSessions() {
       method: "DELETE",
     });
     authenticated.value = false;
-    browserSessions.value = [];
-    loginIdentities.value = [];
-    currentPassword.value = "";
-    reauthenticationPassword.value = "";
-    newPassword.value = "";
-    confirmNewPassword.value = "";
+    resetSecurityState();
     clearInvitationToken();
     resetOrganizationWorkspace();
     resetOrganizationSelection();

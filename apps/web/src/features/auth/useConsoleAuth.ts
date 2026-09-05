@@ -1,14 +1,10 @@
 import { ref, type Ref } from "vue";
 
 import { consoleApi, ConsoleApiError } from "../../api/consoleApi";
-import { clientLogger } from "../../utils/clientLogger";
-import {
-  passwordChangeValidationMessage,
-  passwordRecoveryCompletionValidationMessage,
-} from "../../utils/passwordChange";
 import { accountRegistrationValidationMessage } from "../../utils/accountRegistration";
+import { clientLogger } from "../../utils/clientLogger";
+import { passwordRecoveryCompletionValidationMessage } from "../../utils/passwordChange";
 import type { TranslationParams } from "../../i18n";
-import type { BrowserSession, LoginIdentity } from "../console/types";
 
 export type AuthProvider = "discord" | "twitch" | "telegram" | "google" | "yandex";
 
@@ -22,6 +18,8 @@ type ConsoleAuthDependencies = {
   messageFor: (error: unknown) => string;
   closeLoginModal: () => void;
   loadOrganizations: (preferredOrganizationId?: string) => Promise<void>;
+  loadBrowserSessions: () => Promise<void>;
+  loadLoginIdentities: () => Promise<void>;
   acceptInvitationIfPresent: () => Promise<void>;
 };
 
@@ -43,6 +41,8 @@ export function useConsoleAuth(dependencies: ConsoleAuthDependencies) {
     messageFor,
     closeLoginModal,
     loadOrganizations,
+    loadBrowserSessions,
+    loadLoginIdentities,
     acceptInvitationIfPresent,
   } = dependencies;
 
@@ -52,10 +52,6 @@ export function useConsoleAuth(dependencies: ConsoleAuthDependencies) {
   const registrationDisplayName = ref("");
   const registrationEmail = ref("");
   const registrationPassword = ref("");
-  const currentPassword = ref("");
-  const reauthenticationPassword = ref("");
-  const newPassword = ref("");
-  const confirmNewPassword = ref("");
   const recoveryEmail = ref("");
   const recoveryNewPassword = ref("");
   const recoveryConfirmPassword = ref("");
@@ -64,9 +60,6 @@ export function useConsoleAuth(dependencies: ConsoleAuthDependencies) {
   const registrationVerificationSent = ref(false);
   const registrationEmailVerified = ref(false);
   const availableAuthProviders = ref<AuthProvider[]>([]);
-  const browserSessions = ref<BrowserSession[]>([]);
-  const loginIdentities = ref<LoginIdentity[]>([]);
-
   const initialAuthUrl =
     typeof window !== "undefined" ? new URL(window.location.href) : null;
   const recoveryToken = ref(
@@ -347,141 +340,6 @@ export function useConsoleAuth(dependencies: ConsoleAuthDependencies) {
     }
   }
 
-  async function loadBrowserSessions(): Promise<void> {
-    if (!authenticated.value) return;
-    busy.value = true;
-    notice.value = "";
-    try {
-      const payload = await consoleApi<{ items: BrowserSession[] }>("/api/v1/auth/sessions");
-      browserSessions.value = payload.items;
-      clientLogger.info("console.security.sessions.loaded", { count: payload.items.length });
-    } catch (error) {
-      browserSessions.value = [];
-      notice.value = messageFor(error);
-      clientLogger.warn("console.security.sessions.load_failed", {
-        error_type: error instanceof Error ? error.name : "unknown",
-      });
-    } finally {
-      busy.value = false;
-    }
-  }
-
-  async function refreshSecurity(): Promise<void> {
-    await Promise.all([loadBrowserSessions(), loadLoginIdentities()]);
-  }
-
-  async function loadLoginIdentities(): Promise<void> {
-    if (!authenticated.value) return;
-    busy.value = true;
-    notice.value = "";
-    try {
-      const payload = await consoleApi<{ items: LoginIdentity[] }>("/api/v1/auth/identities");
-      loginIdentities.value = payload.items;
-      clientLogger.info("console.security.identities.loaded", { count: payload.items.length });
-    } catch (error) {
-      loginIdentities.value = [];
-      notice.value = messageFor(error);
-      clientLogger.warn("console.security.identities.load_failed", {
-        error_type: error instanceof Error ? error.name : "unknown",
-      });
-    } finally {
-      busy.value = false;
-    }
-  }
-
-  async function unlinkLoginIdentity(identity: LoginIdentity): Promise<void> {
-    busy.value = true;
-    notice.value = "";
-    clientLogger.info("console.security.identity_unlink.requested", {
-      provider: identity.provider,
-    });
-    try {
-      await consoleApi<LoginIdentity>(
-        `/api/v1/auth/identities/${encodeURIComponent(identity.id)}`,
-        { method: "DELETE" },
-      );
-      loginIdentities.value = loginIdentities.value.filter((item) => item.id !== identity.id);
-      notice.value = t("console.notice.identity_unlinked", {
-        provider: providerLabel(identity.provider),
-      });
-      clientLogger.info("console.security.identity_unlink.completed", {
-        provider: identity.provider,
-      });
-    } catch (error) {
-      notice.value = messageFor(error);
-      clientLogger.warn("console.security.identity_unlink.failed", {
-        provider: identity.provider,
-        error_type: error instanceof Error ? error.name : "unknown",
-      });
-    } finally {
-      busy.value = false;
-    }
-  }
-
-  async function changePassword(): Promise<void> {
-    const validationMessage = passwordChangeValidationMessage({
-      currentPassword: currentPassword.value,
-      newPassword: newPassword.value,
-      confirmNewPassword: confirmNewPassword.value,
-    });
-    if (validationMessage) {
-      notice.value = validationMessage;
-      return;
-    }
-    busy.value = true;
-    notice.value = "";
-    clientLogger.info("console.security.password_change.requested");
-    try {
-      await consoleApi<void>("/api/v1/auth/password", {
-        method: "PUT",
-        body: JSON.stringify({
-          current_password: currentPassword.value,
-          new_password: newPassword.value,
-        }),
-      });
-      currentPassword.value = "";
-      newPassword.value = "";
-      confirmNewPassword.value = "";
-      notice.value = t("console.notice.password_changed");
-      await loadBrowserSessions();
-      clientLogger.info("console.security.password_change.completed");
-    } catch (error) {
-      notice.value = messageFor(error);
-      clientLogger.warn("console.security.password_change.failed", {
-        error_type: error instanceof Error ? error.name : "unknown",
-      });
-    } finally {
-      busy.value = false;
-    }
-  }
-
-  async function refreshRecentAuthentication(): Promise<void> {
-    if (!reauthenticationPassword.value) {
-      notice.value = t("console.notice.enter_password");
-      return;
-    }
-    busy.value = true;
-    notice.value = "";
-    clientLogger.info("console.security.reauthentication.requested");
-    try {
-      await consoleApi<void>("/api/v1/auth/session/reauthentications", {
-        method: "POST",
-        body: JSON.stringify({ current_password: reauthenticationPassword.value }),
-      });
-      reauthenticationPassword.value = "";
-      notice.value = t("console.notice.recent_auth_refreshed");
-      await loadBrowserSessions();
-      clientLogger.info("console.security.reauthentication.completed");
-    } catch (error) {
-      notice.value = messageFor(error);
-      clientLogger.warn("console.security.reauthentication.failed", {
-        error_type: error instanceof Error ? error.name : "unknown",
-      });
-    } finally {
-      busy.value = false;
-    }
-  }
-
   function clearInvitationToken(): void {
     invitationToken.value = "";
     if (typeof window === "undefined") return;
@@ -494,12 +352,6 @@ export function useConsoleAuth(dependencies: ConsoleAuthDependencies) {
     );
   }
 
-  function providerLabel(provider: LoginIdentity["provider"]): string {
-    return provider === "email"
-      ? t("console.security.email_password")
-      : t(`console.identity_provider.${provider}`);
-  }
-
   return {
     authMode,
     email,
@@ -507,10 +359,6 @@ export function useConsoleAuth(dependencies: ConsoleAuthDependencies) {
     registrationDisplayName,
     registrationEmail,
     registrationPassword,
-    currentPassword,
-    reauthenticationPassword,
-    newPassword,
-    confirmNewPassword,
     recoveryEmail,
     recoveryToken,
     recoveryNewPassword,
@@ -521,8 +369,6 @@ export function useConsoleAuth(dependencies: ConsoleAuthDependencies) {
     invitationToken,
     identityLinkedProvider,
     availableAuthProviders,
-    browserSessions,
-    loginIdentities,
     signIn,
     requestRegistrationVerification,
     resendRegistrationVerification,
@@ -534,14 +380,7 @@ export function useConsoleAuth(dependencies: ConsoleAuthDependencies) {
     requestPasswordRecovery,
     completePasswordRecovery,
     linkExternalIdentity,
-    loadBrowserSessions,
-    refreshSecurity,
-    loadLoginIdentities,
-    unlinkLoginIdentity,
-    changePassword,
-    refreshRecentAuthentication,
     clearInvitationToken,
-    providerLabel,
   };
 }
 
