@@ -20,17 +20,12 @@ import ConnectionWizardPanel from "./features/console/ConnectionWizardPanel.vue"
 import OrganizationMembersPanel from "./features/console/OrganizationMembersPanel.vue";
 import OrganizationSwitcher from "./features/console/OrganizationSwitcher.vue";
 import SecurityPanel from "./features/console/SecurityPanel.vue";
+import { useOrganizationMembers } from "./features/console/useOrganizationMembers";
 import { useOrganizationSelection } from "./features/console/useOrganizationSelection";
+import { membershipAllows } from "./features/console/access";
 import { useI18n } from "./i18n";
 import { clientLogger } from "./utils/clientLogger";
 import { consoleErrorMessage } from "./utils/consoleError";
-import {
-  DEFAULT_MEMBER_SCOPE_OPTIONS,
-  canManageOrganizationMembers as canManageOrganizationMembersForRole,
-  memberRoleOptionsForActor,
-  membershipAllows,
-  supportedScopesForRole,
-} from "./features/console/access";
 import {
   nextConsoleTheme,
   persistConsoleTheme,
@@ -50,10 +45,7 @@ import type {
   AuditEventPage,
   ConsoleSection,
   ControlModule,
-  MembershipScopeInput,
-  OrganizationInvitation,
   OrganizationMembership,
-  OrganizationRole,
   PlatformAiModerationPolicyState,
   PlatformAiModerationSummary,
   PlatformAuditTimeline,
@@ -93,13 +85,6 @@ const theme = ref<Theme>(initialTheme);
 const activeConsoleSection = ref<ConsoleSection>("overview");
 const busy = ref(false);
 const notice = ref("");
-const organizationInvitations = ref<OrganizationInvitation[]>([]);
-const organizationMembers = ref<OrganizationMembership[]>([]);
-const newMemberEmail = ref("");
-const newMemberRole = ref<OrganizationRole>("viewer");
-const newMemberScopes = ref<MembershipScopeInput[]>([
-  { resource: "console.control_modules", action: "read" },
-]);
 const platform = ref<ConnectablePlatform>("discord");
 const connectionCandidates = ref<PlatformConnectionCandidate[]>([]);
 const connectionCandidatesIdentityLinked = ref<boolean | null>(null);
@@ -272,6 +257,32 @@ const {
 });
 
 const {
+  organizationMembers,
+  organizationInvitations,
+  newMemberEmail,
+  newMemberRole,
+  newMemberScopes,
+  canManageOrganizationMembers,
+  availableMemberRoleOptions,
+  availableNewMemberScopeOptions,
+  loadOrganizationMembers,
+  loadOrganizationInvitations,
+  addOrganizationMember,
+  revokeOrganizationInvitation,
+  saveOrganizationMember,
+  removeOrganizationMember,
+  normalizeNewMemberScopes,
+  resetOrganizationMembers,
+} = useOrganizationMembers({
+  t,
+  busy,
+  notice,
+  messageFor,
+  activeOrganizationId,
+  actorRole: computed(() => activeOrganization.value?.membership.role),
+});
+
+const {
   authMode,
   email,
   password,
@@ -350,9 +361,6 @@ const selectedDiscordConnection = computed(
 const canRunSelectedDiscordWrites = computed(
   () => selectedDiscordConnection.value?.status === "active",
 );
-const canManageOrganizationMembers = computed(
-  () => canManageOrganizationMembersForRole(activeOrganization.value?.membership.role),
-);
 const canReadPlatformConnections = computed(() =>
   membershipAllows(
     activeOrganization.value?.membership,
@@ -389,15 +397,6 @@ const currentBrowserSession = computed(
 const canRevokeAllBrowserSessions = computed(
   () => currentBrowserSession.value?.assurance_level === "recent_authentication",
 );
-const availableMemberRoleOptions = computed<OrganizationRole[]>(() =>
-  memberRoleOptionsForActor(activeOrganization.value?.membership.role),
-);
-const memberScopeOptions: MembershipScopeInput[] = DEFAULT_MEMBER_SCOPE_OPTIONS.map((scope) => ({
-  ...scope,
-}));
-const availableNewMemberScopeOptions = computed(() =>
-  supportedScopesForRole(newMemberRole.value, memberScopeOptions),
-);
 
 async function signOut() {
   busy.value = true;
@@ -411,9 +410,6 @@ async function signOut() {
     reauthenticationPassword.value = "";
     newPassword.value = "";
     confirmNewPassword.value = "";
-    connections.value = [];
-    organizationInvitations.value = [];
-    organizationMembers.value = [];
     clearInvitationToken();
     resetOrganizationWorkspace();
     resetOrganizationSelection();
@@ -488,7 +484,6 @@ async function revokeAllSessions() {
     reauthenticationPassword.value = "";
     newPassword.value = "";
     confirmNewPassword.value = "";
-    organizationInvitations.value = [];
     clearInvitationToken();
     resetOrganizationWorkspace();
     resetOrganizationSelection();
@@ -518,8 +513,7 @@ function resetOrganizationWorkspace() {
   connectionCandidatesLoading.value = false;
   connectionCandidatesUnavailable.value = false;
   selectedConnectionCandidateId.value = "";
-  organizationMembers.value = [];
-  organizationInvitations.value = [];
+  resetOrganizationMembers();
   platformHealth.value = null;
   controlModules.value = [];
   dashboardSummary.value = null;
@@ -619,165 +613,6 @@ async function loadConnectionCandidates() {
       connectionCandidatesLoading.value = false;
     }
   }
-}
-
-async function loadOrganizationMembers() {
-  if (!activeOrganizationId.value || !canManageOrganizationMembers.value) {
-    organizationMembers.value = [];
-    return;
-  }
-  busy.value = true;
-  notice.value = "";
-  try {
-    const payload = await consoleApi<{ items: OrganizationMembership[] }>(
-      `/api/v1/organizations/${encodeURIComponent(activeOrganizationId.value)}/members`,
-    );
-    organizationMembers.value = payload.items;
-  } catch (error) {
-    organizationMembers.value = [];
-    notice.value = messageFor(error);
-  } finally {
-    busy.value = false;
-  }
-}
-
-async function loadOrganizationInvitations() {
-  if (!activeOrganizationId.value || !canManageOrganizationMembers.value) {
-    organizationInvitations.value = [];
-    return;
-  }
-  busy.value = true;
-  notice.value = "";
-  try {
-    const payload = await consoleApi<{ items: OrganizationInvitation[] }>(
-      `/api/v1/organizations/${encodeURIComponent(activeOrganizationId.value)}/member-invitations`,
-    );
-    organizationInvitations.value = payload.items;
-  } catch (error) {
-    organizationInvitations.value = [];
-    notice.value = messageFor(error);
-  } finally {
-    busy.value = false;
-  }
-}
-
-async function addOrganizationMember() {
-  if (!activeOrganizationId.value || !newMemberEmail.value.trim()) return;
-  normalizeNewMemberScopes();
-  busy.value = true;
-  notice.value = "";
-  try {
-    const invitation = await consoleApi<OrganizationInvitation>(
-      `/api/v1/organizations/${encodeURIComponent(activeOrganizationId.value)}/member-invitations`,
-      {
-        method: "POST",
-        body: JSON.stringify({
-          email: newMemberEmail.value.trim(),
-          role: newMemberRole.value,
-          resource_scopes: newMemberScopes.value,
-        }),
-      },
-    );
-    organizationInvitations.value = [invitation, ...organizationInvitations.value];
-    newMemberEmail.value = "";
-    newMemberRole.value = "viewer";
-    newMemberScopes.value = [{ resource: "console.control_modules", action: "read" }];
-    notice.value =
-      invitation.delivery_status === "sent"
-        ? t("console.notice.member_invited")
-        : t("console.notice.member_invitation_delivery_unavailable");
-  } catch (error) {
-    notice.value = messageFor(error);
-  } finally {
-    busy.value = false;
-  }
-}
-
-async function revokeOrganizationInvitation(invitation: OrganizationInvitation) {
-  if (!activeOrganizationId.value || invitation.status !== "pending") return;
-  busy.value = true;
-  notice.value = "";
-  try {
-    await consoleApi<void>(
-      `/api/v1/organizations/${encodeURIComponent(activeOrganizationId.value)}/member-invitations/${encodeURIComponent(invitation.id)}`,
-      { method: "DELETE" },
-    );
-    organizationInvitations.value = organizationInvitations.value.map((current) =>
-      current.id === invitation.id
-        ? { ...current, status: "revoked", revoked_at: new Date().toISOString() }
-        : current,
-    );
-    notice.value = t("console.notice.member_invitation_revoked");
-  } catch (error) {
-    notice.value = messageFor(error);
-  } finally {
-    busy.value = false;
-  }
-}
-
-async function saveOrganizationMember(member: OrganizationMembership) {
-  if (!activeOrganizationId.value) return;
-  normalizeMemberScopes(member);
-  busy.value = true;
-  notice.value = "";
-  try {
-    const updated = await consoleApi<OrganizationMembership>(
-      `/api/v1/organizations/${encodeURIComponent(activeOrganizationId.value)}/members/${encodeURIComponent(member.user_id)}`,
-      {
-        method: "PUT",
-        body: JSON.stringify({
-          role: member.role,
-          resource_scopes: member.resource_scopes.map((scope) => ({
-            resource: scope.resource,
-            action: scope.action,
-          })),
-        }),
-      },
-    );
-    organizationMembers.value = organizationMembers.value.map((current) =>
-      current.user_id === updated.user_id ? updated : current,
-    );
-    notice.value = t("console.notice.member_updated");
-  } catch (error) {
-    notice.value = messageFor(error);
-  } finally {
-    busy.value = false;
-  }
-}
-
-async function removeOrganizationMember(member: OrganizationMembership) {
-  if (!activeOrganizationId.value) return;
-  busy.value = true;
-  notice.value = "";
-  try {
-    await consoleApi<void>(
-      `/api/v1/organizations/${encodeURIComponent(activeOrganizationId.value)}/members/${encodeURIComponent(member.user_id)}`,
-      { method: "DELETE" },
-    );
-    organizationMembers.value = organizationMembers.value.filter(
-      (current) => current.user_id !== member.user_id,
-    );
-    notice.value = t("console.notice.member_removed");
-  } catch (error) {
-    notice.value = messageFor(error);
-  } finally {
-    busy.value = false;
-  }
-}
-
-function normalizeNewMemberScopes() {
-  newMemberScopes.value = supportedScopesForRole(
-    newMemberRole.value,
-    newMemberScopes.value,
-  );
-}
-
-function normalizeMemberScopes(member: OrganizationMembership) {
-  member.resource_scopes = supportedScopesForRole(member.role, member.resource_scopes);
-}
-
-function roleLabel(role: OrganizationRole): string {
-  return t(`console.roles.${role}`);
 }
 
 async function acceptInvitationIfPresent() {
