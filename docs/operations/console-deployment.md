@@ -208,7 +208,7 @@ The final host serves static frontend assets from
 As of 2026-09-05, the temporary staging host is `beget.ame-life.com`. Its DNS
 record resolves to `138.124.119.238`, its dedicated certificate covers the
 hostname, and the active HTTPS vhost serves the Console frontend release
-`740220b`. The canonical `console.muxivo.pro` host remains separate and still
+`8e3db1b`. The canonical `console.muxivo.pro` host remains separate and still
 requires its own DNS record, certificate and final HTTPS vhost. The staging
 host is suitable for visual checks only until the API, FRP route and production
 environment are provisioned.
@@ -228,9 +228,9 @@ for `/healthz` and `/readyz`; the root `muxivo.pro` Activity returned `200` in
 the same check. The latest Console API source `79cca30` is staged at
 `/opt/muxivo-console` on the local server, and the previous source is retained
 at `/opt/muxivo-console.backup-79cca30` for
-rollback. The frontend release `740220b` is installed at
+rollback. The frontend release `8e3db1b` is installed at
 `/srv/muxivo-console/web`, and its previous web root is retained at
-`/srv/muxivo-console/web.backup-740220b` for rollback. The disabled
+`/srv/muxivo-console/web.backup-8e3db1b` for rollback. The disabled
 `muxivo-console-api.service` now has its Python runtime provisioned, but no
 Vault-rendered credential file yet, so it was not started. PostgreSQL and the
 `muxivo_console` database are present
