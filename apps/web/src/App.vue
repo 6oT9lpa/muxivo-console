@@ -20,13 +20,10 @@ import ConnectionWizardPanel from "./features/console/ConnectionWizardPanel.vue"
 import OrganizationMembersPanel from "./features/console/OrganizationMembersPanel.vue";
 import OrganizationSwitcher from "./features/console/OrganizationSwitcher.vue";
 import SecurityPanel from "./features/console/SecurityPanel.vue";
+import { useOrganizationSelection } from "./features/console/useOrganizationSelection";
 import { useI18n } from "./i18n";
 import { clientLogger } from "./utils/clientLogger";
-import {
-  ACTIVE_ORGANIZATION_STORAGE_KEY,
-  chooseActiveOrganizationId,
-  persistActiveOrganizationId,
-} from "./utils/organizations";
+import { consoleErrorMessage } from "./utils/consoleError";
 import {
   DEFAULT_MEMBER_SCOPE_OPTIONS,
   canManageOrganizationMembers as canManageOrganizationMembersForRole,
@@ -54,9 +51,7 @@ import type {
   ConsoleSection,
   ControlModule,
   MembershipScopeInput,
-  Organization,
   OrganizationInvitation,
-  OrganizationListItem,
   OrganizationMembership,
   OrganizationRole,
   PlatformAiModerationPolicyState,
@@ -81,10 +76,13 @@ import type {
 
 const { t } = useI18n();
 
+function messageFor(error: unknown): string {
+  return consoleErrorMessage(error, t);
+}
+
 const initialTheme: Theme = readConsoleTheme(
   typeof window !== "undefined" ? window.localStorage : null,
 );
-const organizationName = ref("");
 const authenticated = ref(false);
 const landingTab = ref<"overview" | "about">("overview");
 const loginOpen = ref(false);
@@ -95,14 +93,7 @@ const theme = ref<Theme>(initialTheme);
 const activeConsoleSection = ref<ConsoleSection>("overview");
 const busy = ref(false);
 const notice = ref("");
-const organizations = ref<OrganizationListItem[]>([]);
-const organizationsLoaded = ref(false);
 const organizationInvitations = ref<OrganizationInvitation[]>([]);
-const selectedOrganizationId = ref(
-  typeof window !== "undefined"
-    ? window.localStorage.getItem(ACTIVE_ORGANIZATION_STORAGE_KEY) ?? ""
-    : "",
-);
 const organizationMembers = ref<OrganizationMembership[]>([]);
 const newMemberEmail = ref("");
 const newMemberRole = ref<OrganizationRole>("viewer");
@@ -261,6 +252,26 @@ onBeforeUnmount(() => {
 });
 
 const {
+  organizationName,
+  organizations,
+  organizationsLoaded,
+  selectedOrganizationId,
+  activeOrganization,
+  activeOrganizationId,
+  loadOrganizations,
+  selectOrganization,
+  createOrganization,
+  resetOrganizationSelection,
+} = useOrganizationSelection({
+  t,
+  busy,
+  notice,
+  messageFor,
+  refreshOrganizationWorkspace,
+  resetOrganizationWorkspace,
+});
+
+const {
   authMode,
   email,
   password,
@@ -301,13 +312,13 @@ const {
   changePassword,
   refreshRecentAuthentication,
   clearInvitationToken,
-  messageFor,
   providerLabel,
 } = useConsoleAuth({
   t,
   busy,
   notice,
   authenticated,
+  messageFor,
   closeLoginModal,
   loadOrganizations,
   acceptInvitationIfPresent,
@@ -339,13 +350,6 @@ const selectedDiscordConnection = computed(
 const canRunSelectedDiscordWrites = computed(
   () => selectedDiscordConnection.value?.status === "active",
 );
-const activeOrganization = computed(
-  () =>
-    organizations.value.find(
-      (item) => item.organization.id === selectedOrganizationId.value,
-    ) ?? null,
-);
-const activeOrganizationId = computed(() => activeOrganization.value?.organization.id ?? "");
 const canManageOrganizationMembers = computed(
   () => canManageOrganizationMembersForRole(activeOrganization.value?.membership.role),
 );
@@ -408,13 +412,11 @@ async function signOut() {
     newPassword.value = "";
     confirmNewPassword.value = "";
     connections.value = [];
-    organizations.value = [];
-    organizationsLoaded.value = false;
     organizationInvitations.value = [];
-    selectedOrganizationId.value = "";
     organizationMembers.value = [];
     clearInvitationToken();
-    localStorage.removeItem(ACTIVE_ORGANIZATION_STORAGE_KEY);
+    resetOrganizationWorkspace();
+    resetOrganizationSelection();
     notice.value = t("console.notice.signed_out");
   } catch (error) {
     notice.value = messageFor(error);
@@ -486,47 +488,16 @@ async function revokeAllSessions() {
     reauthenticationPassword.value = "";
     newPassword.value = "";
     confirmNewPassword.value = "";
-    organizations.value = [];
-    organizationsLoaded.value = false;
     organizationInvitations.value = [];
-    selectedOrganizationId.value = "";
     clearInvitationToken();
     resetOrganizationWorkspace();
-    localStorage.removeItem(ACTIVE_ORGANIZATION_STORAGE_KEY);
+    resetOrganizationSelection();
     notice.value = t("console.notice.sessions_revoked", { count: payload.revoked_count });
   } catch (error) {
     notice.value = messageFor(error);
   } finally {
     busy.value = false;
   }
-}
-
-async function loadOrganizations(preferredOrganizationId = selectedOrganizationId.value) {
-  busy.value = true;
-  notice.value = "";
-  try {
-    const payload = await consoleApi<{ items: OrganizationListItem[] }>("/api/v1/organizations");
-    organizations.value = payload.items;
-    selectedOrganizationId.value = chooseActiveOrganizationId(
-      payload.items,
-      preferredOrganizationId,
-    );
-    persistActiveOrganization();
-    await refreshOrganizationWorkspace();
-  } catch (error) {
-    organizations.value = [];
-    selectedOrganizationId.value = "";
-    resetOrganizationWorkspace();
-    notice.value = messageFor(error);
-  } finally {
-    organizationsLoaded.value = true;
-    busy.value = false;
-  }
-}
-
-async function selectOrganization() {
-  persistActiveOrganization();
-  await refreshOrganizationWorkspace();
 }
 
 async function refreshOrganizationWorkspace() {
@@ -538,10 +509,6 @@ async function refreshOrganizationWorkspace() {
     loadOrganizationMembers(),
     loadOrganizationInvitations(),
   ]);
-}
-
-function persistActiveOrganization() {
-  persistActiveOrganizationId(localStorage, selectedOrganizationId.value);
 }
 
 function resetOrganizationWorkspace() {
@@ -569,27 +536,6 @@ function resetOrganizationWorkspace() {
   auditEventsNextCursor.value = null;
   selectedConnectionId.value = "";
   selectedDiscordConnectionId.value = "";
-}
-
-async function createOrganization() {
-  busy.value = true;
-  notice.value = "";
-  try {
-    const organization = await consoleApi<Organization>("/api/v1/organizations", {
-      method: "POST",
-      body: JSON.stringify({ name: organizationName.value }),
-    });
-    organizationName.value = "";
-    await loadOrganizations(organization.id);
-    notice.value = t("console.notice.organization_ready", {
-      name: organization.name,
-      slug: organization.slug,
-    });
-  } catch (error) {
-    notice.value = messageFor(error);
-  } finally {
-    busy.value = false;
-  }
 }
 
 async function loadConnections() {

@@ -19,6 +19,7 @@ type ConsoleAuthDependencies = {
   busy: Ref<boolean>;
   notice: Ref<string>;
   authenticated: Ref<boolean>;
+  messageFor: (error: unknown) => string;
   closeLoginModal: () => void;
   loadOrganizations: (preferredOrganizationId?: string) => Promise<void>;
   acceptInvitationIfPresent: () => Promise<void>;
@@ -39,6 +40,7 @@ export function useConsoleAuth(dependencies: ConsoleAuthDependencies) {
     busy,
     notice,
     authenticated,
+    messageFor,
     closeLoginModal,
     loadOrganizations,
     acceptInvitationIfPresent,
@@ -492,16 +494,6 @@ export function useConsoleAuth(dependencies: ConsoleAuthDependencies) {
     );
   }
 
-  function messageFor(error: unknown): string {
-    if (error instanceof ConsoleApiError && error.status === 401) {
-      return t("console.error.invalid_credentials");
-    }
-    if (error instanceof ConsoleApiError && error.status === 403) {
-      return t("console.error.forbidden");
-    }
-    return t("console.error.unavailable");
-  }
-
   function providerLabel(provider: LoginIdentity["provider"]): string {
     return provider === "email"
       ? t("console.security.email_password")
@@ -549,7 +541,6 @@ export function useConsoleAuth(dependencies: ConsoleAuthDependencies) {
     changePassword,
     refreshRecentAuthentication,
     clearInvitationToken,
-    messageFor,
     providerLabel,
   };
 }
