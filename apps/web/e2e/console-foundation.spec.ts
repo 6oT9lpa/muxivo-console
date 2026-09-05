@@ -83,6 +83,8 @@ test("sign-in, create organization, connect Discord, audit and revoke from the b
   await page.getByRole("button", { name: "Sign in to Console" }).click();
 
   await expect(page.getByRole("heading", { name: "Overview", level: 1 })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Link Google" })).toBeDisabled();
+  await expect(page.getByRole("button", { name: "Link Yandex ID" })).toBeDisabled();
   await page.getByRole("button", { name: "Security", exact: true }).click();
   await expect(page.locator("#console-security")).toBeVisible();
   await page.getByRole("button", { name: "Switch to light theme" }).last().click();

@@ -1950,22 +1950,38 @@ function messageFor(error: unknown): string {
         <div class="identity-link">
           <h3>{{ t("console.overview.discord_identity") }}</h3>
           <p>{{ t("console.overview.discord_description") }}</p>
-          <button type="button" :disabled="busy" @click="linkDiscord">{{ t("console.overview.link_discord") }}</button>
+          <button
+            type="button"
+            :disabled="busy || !availableAuthProviders.includes('discord')"
+            @click="linkDiscord"
+          >{{ t("console.overview.link_discord") }}</button>
         </div>
         <div class="identity-link">
           <h3>{{ t("console.overview.twitch_identity") }}</h3>
           <p>{{ t("console.overview.twitch_description") }}</p>
-          <button type="button" :disabled="busy" @click="linkTwitch">{{ t("console.overview.link_twitch") }}</button>
+          <button
+            type="button"
+            :disabled="busy || !availableAuthProviders.includes('twitch')"
+            @click="linkTwitch"
+          >{{ t("console.overview.link_twitch") }}</button>
         </div>
         <div class="identity-link">
           <h3>{{ t("console.overview.google_identity") }}</h3>
           <p>{{ t("console.overview.google_description") }}</p>
-          <button type="button" :disabled="busy" @click="linkGoogle">{{ t("console.overview.link_google") }}</button>
+          <button
+            type="button"
+            :disabled="busy || !availableAuthProviders.includes('google')"
+            @click="linkGoogle"
+          >{{ t("console.overview.link_google") }}</button>
         </div>
         <div class="identity-link">
           <h3>{{ t("console.overview.yandex_identity") }}</h3>
           <p>{{ t("console.overview.yandex_description") }}</p>
-          <button type="button" :disabled="busy" @click="linkYandex">{{ t("console.overview.link_yandex") }}</button>
+          <button
+            type="button"
+            :disabled="busy || !availableAuthProviders.includes('yandex')"
+            @click="linkYandex"
+          >{{ t("console.overview.link_yandex") }}</button>
         </div>
       </div>
     </section>
