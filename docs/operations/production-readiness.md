@@ -45,11 +45,11 @@ completed.
 | Lifecycle | Periodic platform connection reconciliation worker | Implemented; unavailable Control API probes fail closed to `DEGRADED/PLATFORM_UNREACHABLE` and do not abort the remaining batch |
 | Lifecycle | Idempotency keys for retry-safe lifecycle actions | Implemented |
 | Lifecycle | Persisted and localized reason for every connection state transition | Implemented; legacy rows remain readable with a neutral fallback, and reconciliation contracts reject reason/status mismatches |
-| Lifecycle | Browser-safe platform resource candidate discovery | Console contract/UI implemented; Discord endpoint is deployed on the Activity host; Twitch endpoint implemented in the sibling Control API service, deployment pending |
-| Lifecycle | Discord/Twitch ownership verification before registration | Discord implemented and signed end-to-end; Twitch Helix ownership verification implemented, service deployment/config pending |
-| Lifecycle | Discord/Twitch browser-safe connection health adapters | Discord implemented and signed end-to-end; Twitch Helix health probe implemented, service deployment/config pending |
+| Lifecycle | Browser-safe platform resource candidate discovery | Console contract/UI implemented; Discord endpoint is deployed on the Activity host; Twitch endpoint is deployed in the private sibling Control API service |
+| Lifecycle | Discord/Twitch ownership verification before registration | Discord implemented and signed end-to-end; Twitch Helix ownership verification is deployed and ready behind the private service boundary |
+| Lifecycle | Discord/Twitch browser-safe connection health adapters | Discord implemented and signed end-to-end; Twitch Helix health probe is deployed and `readyz` passed against Helix |
 | Lifecycle | Discord token/scope reconciliation contract | Implemented |
-| Lifecycle | Twitch token/scope reconciliation contract | Console contract and signed Twitch reconciliation endpoint implemented; service URL/signing-key deployment pending |
+| Lifecycle | Twitch token/scope reconciliation contract | Console contract and signed Twitch reconciliation endpoint implemented; staging signing key is shared through Vault and the private service is deployed; Console HTTPS service URL wiring remains pending |
 | Quality | Production composition smoke with fail-fast env checks | Implemented in CI |
 | Quality | Discord/Twitch Control API adapter contract tests | Implemented in CI with MockTransport; live sandbox fixtures pending |
 | Quality | GitHub Actions quality workflow | Implemented; backend, frontend, E2E, security scanners and Docker smoke are required on push and pull request |

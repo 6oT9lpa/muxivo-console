@@ -103,8 +103,11 @@ Discord Control API is now deployed with the Activity host and is configured as
 stored in a dedicated Vault path and rendered only to the Discord service and
 Console. The sibling `muxivo-twitch-control` service now contains the signed
 Twitch candidate, ownership-verification, health and reconciliation endpoints.
-Its staging URL remains a private loopback/service-network URL until the
-dedicated systemd unit and Vault Agent path are installed.
+Its staging unit and dedicated Vault Agent/AppRole are installed on the local
+host, it listens only on `127.0.0.1:8012`, and both `/healthz` and `/readyz`
+passed. The Console adapter remains intentionally fail-closed until that
+private service is exposed through an approved HTTPS service URL; the loopback
+HTTP listener is never put on the public edge.
 
 SMTP.BZ login/password are the SMTP relay credentials from the SMTP.BZ
 connection page. They are not the REG.RU account password and not an ordinary
