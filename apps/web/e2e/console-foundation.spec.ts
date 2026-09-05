@@ -19,8 +19,8 @@ type PlatformConnection = {
   organization_id: string;
   platform: "discord" | "twitch";
   external_resource_id: string;
-  status: "active" | "reauth_required";
-  status_reason: "healthy" | "revoked";
+  status: "active" | "reauth_required" | "disconnected";
+  status_reason: "healthy" | "revoked" | "reauthorized" | "disconnected";
   granted_scopes: PlatformConnectionGrantedScope[];
 };
 
@@ -28,10 +28,10 @@ type PlatformConnectionGrantedScope = {
   key: string;
   display_name: string;
   description: string;
-  status: "granted" | "requires_reauthorization";
+  status: "granted" | "requires_reauthorization" | "revoked";
 };
 
-test("sign-in, create organization, connect Discord, audit and revoke from the browser", async ({
+test("sign-in, organization, connection lifecycle and security from the browser", async ({
   page,
 }) => {
   const state = {
@@ -199,8 +199,23 @@ test("sign-in, create organization, connect Discord, audit and revoke from the b
   );
   expect(state.observedLifecycleIdempotencyKey).toBe(`revoke:${connectionId}`);
 
+  await connectionRow.getByRole("button", { name: "Reauthorize" }).click();
+  await expect(page.getByRole("status")).toContainText("Discord connection is now Active.");
+  await expect(connectionRow).toContainText("Active");
+  expect(state.observedLifecycleIdempotencyKey).toBe(`reauthorize:${connectionId}`);
+
+  await connectionRow.getByRole("button", { name: "Disconnect" }).click();
+  await expect(page.getByRole("status")).toContainText("Discord connection is now Disconnected.");
+  await expect(connectionRow).toContainText("Disconnected");
+  await expect(connectionRow).toContainText("Risky actions are blocked for this state.");
+  await expect(connectionRow.getByRole("button", { name: "Revoke" })).toBeDisabled();
+  await expect(connectionRow.getByRole("button", { name: "Disconnect" })).toBeDisabled();
+  expect(state.observedLifecycleIdempotencyKey).toBe(`disconnect:${connectionId}`);
+
   await page.getByRole("button", { name: "Load audit log" }).click();
   await expect(page.getByText("platform_connection.revoke")).toBeVisible();
+  await expect(page.getByText("platform_connection.reauthorize")).toBeVisible();
+  await expect(page.getByText("platform_connection.disconnect")).toBeVisible();
 
   await page.getByRole("button", { name: "Security", exact: true }).click();
   await page
@@ -806,6 +821,42 @@ async function installConsoleApiMock(
       state.connections = [updated];
       state.auditEvents.push(
         auditEvent("platform_connection.revoke", "platform_connection", connectionId),
+      );
+      return json(route, updated);
+    }
+    if (
+      method === "POST" &&
+      path ===
+        `/api/v1/organizations/${organizationId}/platform-connections/${connectionId}/reauthorizations`
+    ) {
+      state.observedLifecycleIdempotencyKey = request.headers()["idempotency-key"] ?? "";
+      const updated = {
+        ...state.connections[0],
+        status: "active" as const,
+        status_reason: "reauthorized" as const,
+        granted_scopes: discordGrantedScopes("granted"),
+      };
+      state.connections = [updated];
+      state.auditEvents.push(
+        auditEvent("platform_connection.reauthorize", "platform_connection", connectionId),
+      );
+      return json(route, updated);
+    }
+    if (
+      method === "DELETE" &&
+      path ===
+        `/api/v1/organizations/${organizationId}/platform-connections/${connectionId}`
+    ) {
+      state.observedLifecycleIdempotencyKey = request.headers()["idempotency-key"] ?? "";
+      const updated = {
+        ...state.connections[0],
+        status: "disconnected" as const,
+        status_reason: "disconnected" as const,
+        granted_scopes: discordGrantedScopes("revoked"),
+      };
+      state.connections = [updated];
+      state.auditEvents.push(
+        auditEvent("platform_connection.disconnect", "platform_connection", connectionId),
       );
       return json(route, updated);
     }

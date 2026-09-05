@@ -100,7 +100,8 @@ The same verification pass produced the following local quality evidence:
 - frontend production build: successful;
 - browser E2E suite: `7 passed`; the browser flows verify member role update,
   scoped access removal, member removal, security recent-authentication,
-  identity unlink protection, password change, session revocation and their
+  identity unlink protection, password change, session revocation, connection
+  reauthorization/disconnect transitions, risky-action blocking and their
   audit/session outcomes;
 - local development Docker Compose smoke: successful after restarting the
   Docker Desktop Linux engine; Postgres/API built and started, `/healthz` and
