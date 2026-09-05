@@ -45,7 +45,7 @@ completed.
 | Lifecycle | Periodic platform connection reconciliation worker | Implemented; unavailable Control API probes fail closed to `DEGRADED/PLATFORM_UNREACHABLE` and do not abort the remaining batch |
 | Lifecycle | Idempotency keys for retry-safe lifecycle actions | Implemented |
 | Lifecycle | Persisted and localized reason for every connection state transition | Implemented; legacy rows remain readable with a neutral fallback, and reconciliation contracts reject reason/status mismatches |
-| Lifecycle | Browser-safe platform resource candidate discovery | Console contract/UI implemented; Control API endpoints pending |
+| Lifecycle | Browser-safe platform resource candidate discovery | Console contract/UI implemented; Discord Control API endpoint implemented; Twitch Control API endpoint pending |
 | Lifecycle | Discord/Twitch ownership verification before registration | Implemented; Twitch Control API config pending |
 | Lifecycle | Discord/Twitch browser-safe connection health adapters | Implemented; Twitch Control API config pending |
 | Lifecycle | Discord token/scope reconciliation contract | Implemented |
@@ -516,9 +516,9 @@ retention, so those operational gates remain open.
 
 - Wire the installed loopback Redis service into the staging secret-manager
   environment, then provision the shared edge rate-limit backend for prod.
-- Implement the signed `/connection-candidates` endpoint in each platform
-  Control API and validate it against the contract in the Console deployment
-  runbook.
+- Implement and stage the signed `/connection-candidates` endpoint in the Twitch
+  Control API; keep the Discord endpoint contract-tested against the Console
+  deployment runbook.
 - Configure Twitch Control API service URL and signing key in staging/prod.
 - Store the verified SMTP.BZ credential in the staging/prod secret manager and run one explicitly approved recovery delivery test.
 - Load `docs/operations/prometheus-alerts.yml` into the selected metrics backend.
