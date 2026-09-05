@@ -15,17 +15,13 @@ import { consoleApi, ConsoleApiError } from "./api/consoleApi";
 import LanguageSwitcher from "./components/common/LanguageSwitcher.vue";
 import PublicFooter from "./components/common/PublicFooter.vue";
 import AuthModal from "./features/auth/AuthModal.vue";
+import { useConsoleAuth } from "./features/auth/useConsoleAuth";
 import ConnectionWizardPanel from "./features/console/ConnectionWizardPanel.vue";
 import OrganizationMembersPanel from "./features/console/OrganizationMembersPanel.vue";
 import OrganizationSwitcher from "./features/console/OrganizationSwitcher.vue";
 import SecurityPanel from "./features/console/SecurityPanel.vue";
 import { useI18n } from "./i18n";
 import { clientLogger } from "./utils/clientLogger";
-import {
-  passwordChangeValidationMessage,
-  passwordRecoveryCompletionValidationMessage,
-} from "./utils/passwordChange";
-import { accountRegistrationValidationMessage } from "./utils/accountRegistration";
 import {
   ACTIVE_ORGANIZATION_STORAGE_KEY,
   chooseActiveOrganizationId,
@@ -55,10 +51,8 @@ import type {
   AiModerationPolicy,
   AuditEvent,
   AuditEventPage,
-  BrowserSession,
   ConsoleSection,
   ControlModule,
-  LoginIdentity,
   MembershipScopeInput,
   Organization,
   OrganizationInvitation,
@@ -85,69 +79,10 @@ import type {
   Theme,
 } from "./features/console/types";
 
-type AuthProvider = "discord" | "twitch" | "telegram" | "google" | "yandex";
-type ExternalIdentityProvider = AuthProvider;
-const AUTH_PROVIDERS = new Set<AuthProvider>([
-  "discord",
-  "twitch",
-  "telegram",
-  "google",
-  "yandex",
-]);
-
 const { t } = useI18n();
 
 const initialTheme: Theme = readConsoleTheme(
   typeof window !== "undefined" ? window.localStorage : null,
-);
-const authMode = ref<"sign-in" | "create-account">("sign-in");
-const email = ref("");
-const password = ref("");
-const registrationDisplayName = ref("");
-const registrationEmail = ref("");
-const registrationPassword = ref("");
-const currentPassword = ref("");
-const reauthenticationPassword = ref("");
-const newPassword = ref("");
-const confirmNewPassword = ref("");
-const recoveryEmail = ref("");
-const initialAuthUrl =
-  typeof window !== "undefined" ? new URL(window.location.href) : null;
-const isPasswordRecoveryPath = (url: URL | null): boolean =>
-  Boolean(
-    url &&
-      ["/recover", "/reset-password"].some((path) => url.pathname.endsWith(path)),
-  );
-const recoveryToken = ref(
-  initialAuthUrl?.searchParams.get("recovery_token") ??
-    (isPasswordRecoveryPath(initialAuthUrl)
-      ? initialAuthUrl?.searchParams.get("token") ?? ""
-      : ""),
-);
-const recoveryNewPassword = ref("");
-const recoveryConfirmPassword = ref("");
-const registrationCode = ref("");
-const registrationVerificationToken = ref("");
-const registrationVerificationSent = ref(false);
-const registrationEmailVerified = ref(false);
-const invitationToken = ref(
-  initialAuthUrl && !isPasswordRecoveryPath(initialAuthUrl)
-    ? initialAuthUrl.searchParams.get("token") ?? ""
-    : "",
-);
-const identityLinkedProvider = ref<ExternalIdentityProvider | null>(
-  typeof window !== "undefined"
-    ? (() => {
-        const provider = new URL(window.location.href).searchParams.get("identity_linked");
-        return provider === "discord" ||
-          provider === "twitch" ||
-          provider === "telegram" ||
-          provider === "google" ||
-          provider === "yandex"
-          ? provider
-          : null;
-      })()
-    : null,
 );
 const organizationName = ref("");
 const authenticated = ref(false);
@@ -160,9 +95,6 @@ const theme = ref<Theme>(initialTheme);
 const activeConsoleSection = ref<ConsoleSection>("overview");
 const busy = ref(false);
 const notice = ref("");
-const availableAuthProviders = ref<AuthProvider[]>([]);
-const browserSessions = ref<BrowserSession[]>([]);
-const loginIdentities = ref<LoginIdentity[]>([]);
 const organizations = ref<OrganizationListItem[]>([]);
 const organizationsLoaded = ref(false);
 const organizationInvitations = ref<OrganizationInvitation[]>([]);
@@ -328,6 +260,59 @@ onBeforeUnmount(() => {
   if (loginCloseTimer !== null) clearTimeout(loginCloseTimer);
 });
 
+const {
+  authMode,
+  email,
+  password,
+  registrationDisplayName,
+  registrationEmail,
+  registrationPassword,
+  currentPassword,
+  reauthenticationPassword,
+  newPassword,
+  confirmNewPassword,
+  recoveryEmail,
+  recoveryToken,
+  recoveryNewPassword,
+  recoveryConfirmPassword,
+  registrationCode,
+  registrationVerificationSent,
+  registrationEmailVerified,
+  invitationToken,
+  identityLinkedProvider,
+  availableAuthProviders,
+  browserSessions,
+  loginIdentities,
+  signIn,
+  requestRegistrationVerification,
+  resendRegistrationVerification,
+  verifyRegistration,
+  resetRegistrationVerification,
+  continueToSignIn,
+  loadAuthProviders,
+  signInWithProvider,
+  requestPasswordRecovery,
+  completePasswordRecovery,
+  linkExternalIdentity,
+  loadBrowserSessions,
+  refreshSecurity,
+  loadLoginIdentities,
+  unlinkLoginIdentity,
+  changePassword,
+  refreshRecentAuthentication,
+  clearInvitationToken,
+  messageFor,
+  providerLabel,
+} = useConsoleAuth({
+  t,
+  busy,
+  notice,
+  authenticated,
+  closeLoginModal,
+  loadOrganizations,
+  acceptInvitationIfPresent,
+});
+
 const usableConnections = computed(() =>
   connections.value.filter(
     (connection) =>
@@ -410,235 +395,6 @@ const availableNewMemberScopeOptions = computed(() =>
   supportedScopesForRole(newMemberRole.value, memberScopeOptions),
 );
 
-async function signIn() {
-  busy.value = true;
-  notice.value = "";
-  try {
-    await consoleApi<void>("/api/v1/auth/email-password/sessions", {
-      method: "POST",
-      body: JSON.stringify({ email: email.value, password: password.value }),
-    });
-    authenticated.value = true;
-    closeLoginModal();
-    password.value = "";
-    notice.value = t("console.notice.signed_in");
-    await Promise.all([loadOrganizations(), loadBrowserSessions(), loadLoginIdentities()]);
-    await acceptInvitationIfPresent();
-  } catch (error) {
-    notice.value = messageFor(error);
-  } finally {
-    busy.value = false;
-  }
-}
-
-async function requestRegistrationVerification() {
-  const validationMessage = accountRegistrationValidationMessage({
-    displayName: registrationDisplayName.value,
-    email: registrationEmail.value,
-    password: registrationPassword.value,
-  });
-  if (validationMessage) {
-    notice.value = validationMessage;
-    return;
-  }
-  busy.value = true;
-  notice.value = "";
-  try {
-    const response = await consoleApi<{
-      status: "verification_required";
-      verification_token?: string;
-    }>("/api/v1/auth/email-password/registrations", {
-      method: "POST",
-      body: JSON.stringify({
-        email: registrationEmail.value,
-        password: registrationPassword.value,
-        display_name: registrationDisplayName.value,
-      }),
-    });
-    registrationVerificationToken.value = response.verification_token ?? "";
-    registrationVerificationSent.value = Boolean(response.verification_token);
-    registrationEmailVerified.value = false;
-    registrationCode.value = "";
-    notice.value = t("console.notice.verification_requested");
-    clientLogger.info("console.auth.registration.verification_requested");
-  } catch (error) {
-    notice.value = messageFor(error);
-  } finally {
-    busy.value = false;
-  }
-}
-
-async function resendRegistrationVerification() {
-  if (!registrationVerificationToken.value) {
-    await requestRegistrationVerification();
-    return;
-  }
-  busy.value = true;
-  notice.value = "";
-  try {
-    const response = await consoleApi<{ status: "verification_required"; verification_token: string }>(
-      "/api/v1/auth/email-password/registration-verifications/resend",
-      {
-        method: "POST",
-        body: JSON.stringify({ token: registrationVerificationToken.value }),
-      },
-    );
-    if (response.verification_token) registrationVerificationToken.value = response.verification_token;
-    registrationVerificationSent.value = true;
-    notice.value = t("console.notice.verification_requested");
-    clientLogger.info("console.auth.registration.verification_resent");
-  } catch (error) {
-    registrationVerificationToken.value = "";
-    registrationVerificationSent.value = false;
-    registrationCode.value = "";
-    notice.value = messageFor(error);
-  } finally {
-    busy.value = false;
-  }
-}
-
-async function verifyRegistration() {
-  if (!registrationVerificationToken.value) return;
-  busy.value = true;
-  notice.value = "";
-  try {
-    await consoleApi<{ status: "verified" }>(
-      "/api/v1/auth/email-password/registration-verifications",
-      {
-        method: "POST",
-        body: JSON.stringify({
-          token: registrationVerificationToken.value,
-          code: registrationCode.value,
-        }),
-      },
-    );
-    email.value = registrationEmail.value;
-    registrationEmailVerified.value = true;
-    registrationVerificationSent.value = true;
-    registrationVerificationToken.value = "";
-    registrationPassword.value = "";
-    notice.value = t("console.notice.email_verified");
-    clientLogger.info("console.auth.registration.verification_completed");
-  } catch (error) {
-    notice.value = messageFor(error);
-  } finally {
-    busy.value = false;
-  }
-}
-
-function resetRegistrationVerification(): void {
-  registrationVerificationToken.value = "";
-  registrationVerificationSent.value = false;
-  registrationEmailVerified.value = false;
-  registrationCode.value = "";
-  clientLogger.info("console.auth.registration.verification_reset");
-}
-
-function continueToSignIn(): void {
-  authMode.value = "sign-in";
-  password.value = "";
-  notice.value = t("console.notice.account_created");
-}
-
-function isAuthProvider(value: string): value is AuthProvider {
-  return AUTH_PROVIDERS.has(value as AuthProvider);
-}
-
-async function loadAuthProviders(): Promise<void> {
-  try {
-    const payload = await consoleApi<{ providers: string[] }>("/api/v1/auth/providers");
-    availableAuthProviders.value = payload.providers.filter(isAuthProvider);
-    clientLogger.info("console.auth.providers_loaded", {
-      providers: availableAuthProviders.value.join(","),
-    });
-  } catch (error) {
-    availableAuthProviders.value = [];
-    clientLogger.info("console.auth.providers_unavailable", {
-      error: error instanceof Error ? error.name : "unknown",
-    });
-  }
-}
-
-async function signInWithProvider(provider: AuthProvider): Promise<void> {
-  const authorizationPaths: Partial<Record<AuthProvider, string>> = {
-    discord: "/api/v1/auth/discord/authorizations",
-    twitch: "/api/v1/auth/twitch/authorizations",
-    telegram: "/api/v1/auth/telegram/authorizations",
-    google: "/api/v1/auth/google/authorizations",
-    yandex: "/api/v1/auth/yandex/authorizations",
-  };
-  const authorizationPath = authorizationPaths[provider];
-  if (!authorizationPath) {
-    notice.value = t("console.auth.provider_unavailable");
-    clientLogger.info("console.auth.provider_unavailable", { provider });
-    return;
-  }
-  busy.value = true;
-  notice.value = "";
-  try {
-    const authorization = await consoleApi<{ authorization_url: string }>(
-      authorizationPath,
-      { method: "POST" },
-    );
-    window.location.assign(authorization.authorization_url);
-  } catch (error) {
-    notice.value = messageFor(error);
-    busy.value = false;
-  }
-}
-
-async function requestPasswordRecovery() {
-  busy.value = true;
-  notice.value = "";
-  try {
-    await consoleApi<{ status: "accepted" }>("/api/v1/auth/password-recovery/requests", {
-      method: "POST",
-      body: JSON.stringify({ email: recoveryEmail.value || email.value }),
-    });
-    notice.value = t("console.notice.recovery_requested");
-  } catch (error) {
-    notice.value = messageFor(error);
-  } finally {
-    busy.value = false;
-  }
-}
-
-async function completePasswordRecovery() {
-  const validationMessage = passwordRecoveryCompletionValidationMessage({
-    token: recoveryToken.value,
-    newPassword: recoveryNewPassword.value,
-    confirmNewPassword: recoveryConfirmPassword.value,
-  });
-  if (validationMessage) {
-    notice.value = validationMessage;
-    return;
-  }
-  busy.value = true;
-  notice.value = "";
-  try {
-    await consoleApi<void>("/api/v1/auth/password-recovery/completions", {
-      method: "POST",
-      body: JSON.stringify({
-        token: recoveryToken.value,
-        new_password: recoveryNewPassword.value,
-      }),
-    });
-    recoveryToken.value = "";
-    recoveryNewPassword.value = "";
-    recoveryConfirmPassword.value = "";
-    password.value = "";
-    notice.value = t("console.notice.password_reset");
-  } catch (error) {
-    if (error instanceof ConsoleApiError && error.status === 403) {
-      notice.value = t("console.notice.recovery_invalid");
-    } else {
-      notice.value = messageFor(error);
-    }
-  } finally {
-    busy.value = false;
-  }
-}
-
 async function signOut() {
   busy.value = true;
   notice.value = "";
@@ -692,21 +448,6 @@ onMounted(async () => {
   }
 });
 
-async function linkExternalIdentity(provider: ExternalIdentityProvider) {
-  busy.value = true;
-  notice.value = "";
-  try {
-    const authorization = await consoleApi<{ authorization_url: string }>(
-      `/api/v1/identity-links/${provider}/authorizations`,
-      { method: "POST" },
-    );
-    window.location.assign(authorization.authorization_url);
-  } catch (error) {
-    notice.value = messageFor(error);
-    busy.value = false;
-  }
-}
-
 async function linkDiscord() {
   await linkExternalIdentity("discord");
 }
@@ -725,25 +466,6 @@ async function linkGoogle() {
 
 async function linkYandex() {
   await linkExternalIdentity("yandex");
-}
-
-async function loadBrowserSessions() {
-  if (!authenticated.value) return;
-  busy.value = true;
-  notice.value = "";
-  try {
-    const payload = await consoleApi<{ items: BrowserSession[] }>("/api/v1/auth/sessions");
-    browserSessions.value = payload.items;
-  } catch (error) {
-    browserSessions.value = [];
-    notice.value = messageFor(error);
-  } finally {
-    busy.value = false;
-  }
-}
-
-async function refreshSecurity() {
-  await Promise.all([loadBrowserSessions(), loadLoginIdentities()]);
 }
 
 async function revokeCurrentSession() {
@@ -772,94 +494,6 @@ async function revokeAllSessions() {
     resetOrganizationWorkspace();
     localStorage.removeItem(ACTIVE_ORGANIZATION_STORAGE_KEY);
     notice.value = t("console.notice.sessions_revoked", { count: payload.revoked_count });
-  } catch (error) {
-    notice.value = messageFor(error);
-  } finally {
-    busy.value = false;
-  }
-}
-
-async function loadLoginIdentities() {
-  if (!authenticated.value) return;
-  busy.value = true;
-  notice.value = "";
-  try {
-    const payload = await consoleApi<{ items: LoginIdentity[] }>("/api/v1/auth/identities");
-    loginIdentities.value = payload.items;
-  } catch (error) {
-    loginIdentities.value = [];
-    notice.value = messageFor(error);
-  } finally {
-    busy.value = false;
-  }
-}
-
-async function unlinkLoginIdentity(identity: LoginIdentity) {
-  busy.value = true;
-  notice.value = "";
-  try {
-    await consoleApi<LoginIdentity>(
-      `/api/v1/auth/identities/${encodeURIComponent(identity.id)}`,
-      { method: "DELETE" },
-    );
-    loginIdentities.value = loginIdentities.value.filter((item) => item.id !== identity.id);
-    notice.value = t("console.notice.identity_unlinked", {
-      provider: providerLabel(identity.provider),
-    });
-  } catch (error) {
-    notice.value = messageFor(error);
-  } finally {
-    busy.value = false;
-  }
-}
-
-async function changePassword() {
-  const validationMessage = passwordChangeValidationMessage({
-    currentPassword: currentPassword.value,
-    newPassword: newPassword.value,
-    confirmNewPassword: confirmNewPassword.value,
-  });
-  if (validationMessage) {
-    notice.value = validationMessage;
-    return;
-  }
-  busy.value = true;
-  notice.value = "";
-  try {
-    await consoleApi<void>("/api/v1/auth/password", {
-      method: "PUT",
-      body: JSON.stringify({
-        current_password: currentPassword.value,
-        new_password: newPassword.value,
-      }),
-    });
-    currentPassword.value = "";
-    newPassword.value = "";
-    confirmNewPassword.value = "";
-    notice.value = t("console.notice.password_changed");
-    await loadBrowserSessions();
-  } catch (error) {
-    notice.value = messageFor(error);
-  } finally {
-    busy.value = false;
-  }
-}
-
-async function refreshRecentAuthentication() {
-  if (!reauthenticationPassword.value) {
-    notice.value = t("console.notice.enter_password");
-    return;
-  }
-  busy.value = true;
-  notice.value = "";
-  try {
-    await consoleApi<void>("/api/v1/auth/session/reauthentications", {
-      method: "POST",
-      body: JSON.stringify({ current_password: reauthenticationPassword.value }),
-    });
-    reauthenticationPassword.value = "";
-    notice.value = t("console.notice.recent_auth_refreshed");
-    await loadBrowserSessions();
   } catch (error) {
     notice.value = messageFor(error);
   } finally {
@@ -1200,18 +834,6 @@ function roleLabel(role: OrganizationRole): string {
   return t(`console.roles.${role}`);
 }
 
-function clearInvitationToken() {
-  invitationToken.value = "";
-  if (typeof window === "undefined") return;
-  const url = new URL(window.location.href);
-  url.searchParams.delete("token");
-  window.history.replaceState(
-    window.history.state,
-    document.title,
-    `${url.pathname}${url.search}${url.hash}`,
-  );
-}
-
 async function acceptInvitationIfPresent() {
   if (authenticated.value && invitationToken.value) {
     await acceptOrganizationInvitation();
@@ -1242,12 +864,6 @@ async function acceptOrganizationInvitation() {
   } finally {
     busy.value = false;
   }
-}
-
-function providerLabel(provider: LoginIdentity["provider"]): string {
-  return provider === "email"
-    ? t("console.security.email_password")
-    : t(`console.identity_provider.${provider}`);
 }
 
 function connectionStatusLabel(status: PlatformConnection["status"]): string {
@@ -1748,15 +1364,6 @@ async function runConnectionLifecycle(
   }
 }
 
-function messageFor(error: unknown): string {
-  if (error instanceof ConsoleApiError && error.status === 401) {
-    return t("console.error.invalid_credentials");
-  }
-  if (error instanceof ConsoleApiError && error.status === 403) {
-    return t("console.error.forbidden");
-  }
-  return t("console.error.unavailable");
-}
 </script>
 
 <template>
