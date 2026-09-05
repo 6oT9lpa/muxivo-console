@@ -33,8 +33,10 @@ credential path used by `muxivo-console-api.service`.
   `beget.ame-life.com`, with placeholders for all secret-manager values.
 - `console.env.example` documents the required production variable names without
   containing usable secrets.
-- `prometheus-console.yml.example` is a same-host scrape fragment for the
-  loopback-only `/metrics` endpoint; install it only in the monitoring network.
+- `prometheus-console.yml.example` is a complete same-host Prometheus config
+  for the loopback-only `/metrics` endpoint. Install it together with
+  `docs/operations/prometheus-alerts.yml` at the referenced rules path and
+  keep both files inside the monitoring network.
 - `scripts/production_network_preflight.py` performs the final read-only public
   check for approved DNS resolution, certificate hostname validation, frontend
   reachability, API liveness/readiness and required browser security headers.

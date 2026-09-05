@@ -40,7 +40,7 @@ completed.
 | Security | Header, redaction and browser-token regression tests | Implemented in CI |
 | Security | Recent authentication refresh and gates for password change, identity unlink and sensitive writes | Implemented |
 | Security | Scheduled cleanup for expired sessions and recovery transactions | Implemented |
-| Observability | `/metrics` scraped and alert rules configured | Metrics endpoint and alert rules implemented; scraper backend pending |
+| Observability | `/metrics` scraped and alert rules configured | Metrics endpoint, complete Prometheus scrape config and alert rules implemented; Prometheus/Alertmanager service installation and notification receiver remain deployment tasks |
 | Operations | Liveness/readiness endpoints distinguish process health from database readiness | Implemented; API unit is installed but disabled until the staging credential file and environment are provisioned |
 | Lifecycle | Periodic platform connection reconciliation worker | Implemented; unavailable Control API probes fail closed to `DEGRADED/PLATFORM_UNREACHABLE` and do not abort the remaining batch |
 | Lifecycle | Idempotency keys for retry-safe lifecycle actions | Implemented |
@@ -361,11 +361,13 @@ specific records under hold.
 
 ## Alerting plan
 
-Wire `/metrics` into the selected monitoring backend using
+Install Prometheus with
 [`deploy/prometheus-console.yml.example`](../../deploy/prometheus-console.yml.example)
-as the same-host scrape reference, then load
-`docs/operations/prometheus-alerts.yml`. The API binds to loopback and the
-Nginx configuration keeps `/metrics` out of the public browser surface. Minimum
+as the same-host configuration and place
+`docs/operations/prometheus-alerts.yml` at its referenced rules path. Configure
+Alertmanager (or the selected notification backend) separately with the
+approved on-call receiver. The API binds to loopback and the Nginx
+configuration keeps `/metrics` out of the public browser surface. Minimum
 alerts:
 
 - high 5xx rate over 5 minutes;

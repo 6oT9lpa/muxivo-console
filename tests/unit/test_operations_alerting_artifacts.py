@@ -3,12 +3,15 @@ from pathlib import Path
 
 def test_prometheus_alert_rules_reference_current_console_metrics() -> None:
     metrics_source = Path("apps/api/src/muxivo_console/infrastructure/metrics.py").read_text()
+    prometheus_config = Path("deploy/prometheus-console.yml.example").read_text()
     alert_rules = Path("docs/operations/prometheus-alerts.yml").read_text()
 
     assert "muxivo_console_http_requests_total" in metrics_source
     assert "muxivo_console_http_request_duration_seconds_sum" in metrics_source
     assert "muxivo_console_http_request_duration_seconds_count" in metrics_source
     assert "muxivo_console_http_request_duration_seconds_bucket" in metrics_source
+    assert "rule_files:" in prometheus_config
+    assert "/etc/prometheus/rules/muxivo-console-alerts.yml" in prometheus_config
 
     for metric_name in (
         "muxivo_console_http_requests_total",

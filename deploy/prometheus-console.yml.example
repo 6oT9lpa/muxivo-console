@@ -1,7 +1,14 @@
-# Example Prometheus scrape fragment for a same-host Console deployment.
+# Prometheus configuration for a same-host Console deployment.
 # The API binds to loopback and Nginx keeps /metrics out of the public browser
 # surface, so Prometheus should run on this host or use an internal tunnel.
 # Do not expose this target directly to the public Internet.
+
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+rule_files:
+  - /etc/prometheus/rules/muxivo-console-alerts.yml
 
 scrape_configs:
   - job_name: muxivo-console
