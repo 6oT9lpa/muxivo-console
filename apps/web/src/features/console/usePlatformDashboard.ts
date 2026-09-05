@@ -35,6 +35,7 @@ type PlatformDashboardDependencies = {
   selectedDiscordConnectionId: Ref<string>;
   selectedConnection: ComputedRef<PlatformConnection | null>;
   canRunSelectedDiscordWrites: ComputedRef<boolean>;
+  canReadOrganizationAuditEvents: ComputedRef<boolean>;
 };
 
 type RequestOptions<T> = {
@@ -57,6 +58,7 @@ export function usePlatformDashboard(dependencies: PlatformDashboardDependencies
     selectedDiscordConnectionId,
     selectedConnection,
     canRunSelectedDiscordWrites,
+    canReadOrganizationAuditEvents,
   } = dependencies;
 
   const platformHealth = ref<PlatformHealth | null>(null);
@@ -260,9 +262,18 @@ export function usePlatformDashboard(dependencies: PlatformDashboardDependencies
 
   async function loadOrganizationAuditEvents(nextPage = false): Promise<void> {
     const path = organizationPath();
-    if (!path || (nextPage && !auditEventsNextCursor.value)) {
+    if (
+      !path ||
+      !canReadOrganizationAuditEvents.value ||
+      (nextPage && !auditEventsNextCursor.value)
+    ) {
+      if (!canReadOrganizationAuditEvents.value) {
+        auditEvents.value = [];
+        auditEventsNextCursor.value = null;
+      }
       clientLogger.info("console.dashboard.audit.load_skipped", {
         has_active_organization: Boolean(activeOrganizationId.value),
+        can_read_audit_events: canReadOrganizationAuditEvents.value,
         has_next_cursor: Boolean(auditEventsNextCursor.value),
       });
       return;

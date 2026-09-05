@@ -1,6 +1,7 @@
 import type {
   AuthorizationAction,
   AuthorizationResource,
+  ConsoleSection,
   MembershipScopeInput,
   OrganizationMembership,
   OrganizationRole,
@@ -39,6 +40,34 @@ export function membershipAllows(
 /** Keeps the member-management boundary aligned with the backend role hierarchy. */
 export function canManageOrganizationMembers(role: OrganizationRole | null | undefined): boolean {
   return role === "owner" || role === "admin";
+}
+
+export type ConsoleNavigationAccess = {
+  hasActiveOrganization: boolean;
+  canReadPlatformConnections: boolean;
+  canManageOrganizationMembers: boolean;
+  canReadAuditEvents: boolean;
+  hasDiscordConnection: boolean;
+};
+
+/** Keeps navigation aligned with the same permission boundaries as the API. */
+export function isConsoleSectionVisible(
+  section: ConsoleSection,
+  access: ConsoleNavigationAccess,
+): boolean {
+  switch (section) {
+    case "overview":
+    case "security":
+      return true;
+    case "connections":
+      return access.hasActiveOrganization && access.canReadPlatformConnections;
+    case "members":
+      return access.hasActiveOrganization && access.canManageOrganizationMembers;
+    case "discord":
+      return access.hasActiveOrganization && access.hasDiscordConnection;
+    case "audit":
+      return access.hasActiveOrganization && access.canReadAuditEvents;
+  }
 }
 
 /** Limits role assignment to roles that the current actor is allowed to grant. */

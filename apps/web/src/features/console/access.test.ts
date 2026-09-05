@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   canEditOrganizationMember,
   canManageOrganizationMembers,
+  isConsoleSectionVisible,
   memberHasScope,
   memberRoleOptionsForActor,
   membershipAllows,
@@ -90,5 +91,54 @@ describe("organization access policy", () => {
     expect(canManageOrganizationMembers("admin")).toBe(true);
     expect(canManageOrganizationMembers("analyst")).toBe(false);
     expect(canManageOrganizationMembers(undefined)).toBe(false);
+  });
+
+  it("hides organization sections that the active membership cannot open", () => {
+    const restricted = {
+      hasActiveOrganization: true,
+      canReadPlatformConnections: false,
+      canManageOrganizationMembers: false,
+      canReadAuditEvents: false,
+      hasDiscordConnection: false,
+    };
+
+    expect(isConsoleSectionVisible("overview", restricted)).toBe(true);
+    expect(isConsoleSectionVisible("security", restricted)).toBe(true);
+    expect(isConsoleSectionVisible("connections", restricted)).toBe(false);
+    expect(isConsoleSectionVisible("members", restricted)).toBe(false);
+    expect(isConsoleSectionVisible("discord", restricted)).toBe(false);
+    expect(isConsoleSectionVisible("audit", restricted)).toBe(false);
+  });
+
+  it("shows read-only organization surfaces only when the corresponding scope exists", () => {
+    const scoped = {
+      hasActiveOrganization: true,
+      canReadPlatformConnections: true,
+      canManageOrganizationMembers: false,
+      canReadAuditEvents: true,
+      hasDiscordConnection: true,
+    };
+
+    expect(isConsoleSectionVisible("connections", scoped)).toBe(true);
+    expect(isConsoleSectionVisible("audit", scoped)).toBe(true);
+    expect(isConsoleSectionVisible("discord", scoped)).toBe(true);
+    expect(isConsoleSectionVisible("members", scoped)).toBe(false);
+  });
+
+  it("does not expose organization navigation before an active organization exists", () => {
+    const empty = {
+      hasActiveOrganization: false,
+      canReadPlatformConnections: true,
+      canManageOrganizationMembers: true,
+      canReadAuditEvents: true,
+      hasDiscordConnection: true,
+    };
+
+    expect(isConsoleSectionVisible("overview", empty)).toBe(true);
+    expect(isConsoleSectionVisible("security", empty)).toBe(true);
+    expect(isConsoleSectionVisible("connections", empty)).toBe(false);
+    expect(isConsoleSectionVisible("members", empty)).toBe(false);
+    expect(isConsoleSectionVisible("discord", empty)).toBe(false);
+    expect(isConsoleSectionVisible("audit", empty)).toBe(false);
   });
 });

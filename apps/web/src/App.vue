@@ -25,7 +25,7 @@ import { useOrganizationMembers } from "./features/console/useOrganizationMember
 import { useOrganizationSelection } from "./features/console/useOrganizationSelection";
 import { usePlatformConnectionCatalog } from "./features/console/usePlatformConnectionCatalog";
 import { usePlatformDashboard } from "./features/console/usePlatformDashboard";
-import { membershipAllows } from "./features/console/access";
+import { isConsoleSectionVisible, membershipAllows } from "./features/console/access";
 import { useI18n } from "./i18n";
 import { clientLogger } from "./utils/clientLogger";
 import { consoleErrorMessage } from "./utils/consoleError";
@@ -111,12 +111,6 @@ const consoleNavItems = computed(() => [
     icon: ClipboardList,
   },
 ]);
-const activeConsoleNavItem = computed(
-  () =>
-    consoleNavItems.value.find((item) => item.key === activeConsoleSection.value) ??
-    consoleNavItems.value[0],
-);
-
 const localizedConnectionWizardOptions = computed(() =>
   connectionWizardOptions.map((option) => ({
     ...option,
@@ -318,6 +312,13 @@ const canManagePlatformConnections = computed(() =>
     "manage",
   ),
 );
+const canReadOrganizationAuditEvents = computed(() =>
+  membershipAllows(
+    activeOrganization.value?.membership,
+    "console.audit_events",
+    "read",
+  ),
+);
 const {
   platform,
   connectionCandidates,
@@ -405,7 +406,37 @@ const {
   selectedDiscordConnectionId,
   selectedConnection,
   canRunSelectedDiscordWrites,
+  canReadOrganizationAuditEvents,
 });
+
+const visibleConsoleNavItems = computed(() =>
+  consoleNavItems.value.filter((item) =>
+    isConsoleSectionVisible(item.key, {
+      hasActiveOrganization: Boolean(activeOrganizationId.value),
+      canReadPlatformConnections: canReadPlatformConnections.value,
+      canManageOrganizationMembers: canManageOrganizationMembers.value,
+      canReadAuditEvents: canReadOrganizationAuditEvents.value,
+      hasDiscordConnection: usableDiscordConnections.value.length > 0,
+    }),
+  ),
+);
+const activeConsoleNavItem = computed(
+  () =>
+    visibleConsoleNavItems.value.find((item) => item.key === activeConsoleSection.value) ??
+    visibleConsoleNavItems.value[0] ??
+    consoleNavItems.value[0],
+);
+
+watch(
+  visibleConsoleNavItems,
+  (items) => {
+    if (items.some((item) => item.key === activeConsoleSection.value)) return;
+    const fallback = items[0]?.key ?? "overview";
+    activeConsoleSection.value = fallback;
+    clientLogger.info("console.navigation.fallback_applied", { section: fallback });
+  },
+  { immediate: true },
+);
 
 async function runConnectionLifecycle(
   connection: PlatformConnection,
@@ -748,7 +779,7 @@ function connectionRiskyActionsBlocked(status: PlatformConnection["status"]): bo
 
         <nav class="console-sidebar-nav" :aria-label="t('console.sidebar.sections')">
           <button
-            v-for="item in consoleNavItems"
+            v-for="item in visibleConsoleNavItems"
             :key="item.key"
             type="button"
             class="console-nav-item"
@@ -1033,7 +1064,7 @@ function connectionRiskyActionsBlocked(status: PlatformConnection["status"]): bo
         <div class="section-heading"><div><h3 id="platform-health-heading">{{ t("console.platform.health_title", { platform: platformLabel(selectedConnection.platform) }) }}</h3><p>{{ t("console.platform.health_description") }}</p></div><button type="button" :disabled="busy" @click="loadPlatformHealth">{{ busy ? t("console.members.loading") : t("console.platform.load_health") }}</button></div>
         <ul v-if="platformHealth" class="health-signals"><li v-for="signal in platformHealth.signals" :key="signal.key"><span><strong>{{ signal.display_name }}</strong><small>{{ signal.value }}</small></span><em :data-status="signal.status">{{ signalStatusLabel(signal.status) }}</em></li></ul>
       </section>
-      <section id="console-audit" v-if="activeOrganizationId" class="platform-dashboard console-section" aria-labelledby="organization-audit-heading">
+      <section id="console-audit" v-if="activeOrganizationId && canReadOrganizationAuditEvents" class="platform-dashboard console-section" aria-labelledby="organization-audit-heading">
         <div class="section-heading"><div><h3 id="organization-audit-heading">{{ t("console.audit.title") }}</h3><p>{{ t("console.audit.description") }}</p></div><button type="button" :disabled="busy" @click="loadOrganizationAuditEvents()">{{ busy ? t("console.members.loading") : t("console.audit.load") }}</button></div>
         <ul v-if="auditEvents.length" class="health-signals audit-events"><li v-for="event in auditEvents" :key="event.id"><span><strong>{{ event.action }}</strong><small>{{ new Date(event.created_at).toLocaleString() }} · {{ event.resource_type }}{{ event.resource_id ? ` · ${event.resource_id}` : "" }}</small></span><em :data-status="event.result">{{ event.result }}</em></li></ul>
         <p v-else-if="!busy">{{ t("console.audit.empty") }}</p>

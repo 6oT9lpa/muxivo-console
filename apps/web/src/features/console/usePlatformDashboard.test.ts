@@ -2,6 +2,7 @@ import { computed, ref } from "vue";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { TranslationParams } from "../../i18n";
 import type {
+  AuditEvent,
   PlatformAiModerationPolicyState,
   PlatformConnection,
 } from "./types";
@@ -78,6 +79,7 @@ function createDashboard() {
     selectedDiscordConnectionId,
     selectedConnection: computed(() => connection),
     canRunSelectedDiscordWrites: computed(() => true),
+    canReadOrganizationAuditEvents: computed(() => true),
   });
   return { dashboard, activeOrganizationId, selectedConnectionId, busy, notice };
 }
@@ -150,6 +152,40 @@ describe("usePlatformDashboard", () => {
       2,
       "/api/v1/organizations/org-1/audit-events?after=cursor-1",
     );
+  });
+
+  it("does not request or retain audit data without the audit scope", async () => {
+    const canReadOrganizationAuditEvents = ref(false);
+    const activeOrganizationId = ref("org-1");
+    const dashboard = usePlatformDashboard({
+      t: (key: string) => key,
+      busy: ref(false),
+      notice: ref(""),
+      messageFor: vi.fn().mockReturnValue("neutral error"),
+      activeOrganizationId: computed(() => activeOrganizationId.value),
+      selectedConnectionId: ref("connection-1"),
+      selectedDiscordConnectionId: ref("connection-1"),
+      selectedConnection: computed(() => connection),
+      canRunSelectedDiscordWrites: computed(() => true),
+      canReadOrganizationAuditEvents: computed(() => canReadOrganizationAuditEvents.value),
+    });
+    dashboard.auditEvents.value = [{
+      id: "stale-event",
+      correlation_id: "correlation-1",
+      actor_id: null,
+      action: "test",
+      resource_type: "test",
+      resource_id: null,
+      result: "success",
+      created_at: "2026-01-01T00:00:00Z",
+    } satisfies AuditEvent];
+    dashboard.auditEventsNextCursor.value = "stale-cursor";
+
+    await dashboard.loadOrganizationAuditEvents();
+
+    expect(consoleApiMock).not.toHaveBeenCalled();
+    expect(dashboard.auditEvents.value).toEqual([]);
+    expect(dashboard.auditEventsNextCursor.value).toBeNull();
   });
 
   it("serializes policy editor values and keeps the saved state in sync", async () => {
