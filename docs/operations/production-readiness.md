@@ -54,7 +54,7 @@ completed.
 | Quality | Discord/Twitch Control API adapter contract tests | Implemented in CI with MockTransport; live sandbox fixtures pending |
 | Quality | GitHub Actions quality workflow | Implemented; backend, frontend, E2E, security scanners and Docker smoke are required on push and pull request |
 | Quality | Development Docker Compose smoke | CI validates compose configuration, builds the API image, starts Postgres/Redis/API with Redis-backed short-lived auth state, and checks `/healthz`, `/readyz` and `/api/v1/auth/providers` |
-| Quality | Development observability composition smoke | Local Prometheus composition starts against the internal API target, loads alert rules and verifies target health through the Prometheus API |
+| Quality | Development observability composition smoke | Local Prometheus + Alertmanager composition starts against the internal API target, loads alert rules and verifies both monitoring services and target health |
 | Compliance | Privacy policy reviewed and published | Pending legal review |
 | Compliance | Terms reviewed and published | Pending legal review |
 | Compliance | Data inventory and retention schedule approved | Draft |
@@ -372,10 +372,10 @@ specific records under hold.
 
 Install Prometheus with
 [`deploy/prometheus-console.yml.example`](../../deploy/prometheus-console.yml.example)
-as the same-host configuration and place
-`docs/operations/prometheus-alerts.yml` at its referenced rules path. Configure
-Alertmanager (or the selected notification backend) separately with the
-approved on-call receiver. The API binds to loopback and the Nginx
+and a separately managed Alertmanager service as the same-host monitoring
+configuration. Place `docs/operations/prometheus-alerts.yml` at its referenced
+rules path. Configure Alertmanager with the approved on-call receiver and keep
+that receiver configuration outside Git. The API binds to loopback and the Nginx
 configuration keeps `/metrics` out of the public browser surface. Minimum
 alerts:
 

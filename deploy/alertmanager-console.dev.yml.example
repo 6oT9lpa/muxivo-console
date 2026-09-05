@@ -1,0 +1,20 @@
+# Development-only Alertmanager configuration.
+#
+# The dev composition intentionally drops notifications. Production must use a
+# separately managed receiver with credentials outside this repository.
+
+global:
+  resolve_timeout: 5m
+
+route:
+  receiver: dev-null
+  group_by:
+    - alertname
+    - service
+    - environment
+  group_wait: 30s
+  group_interval: 5m
+  repeat_interval: 4h
+
+receivers:
+  - name: dev-null

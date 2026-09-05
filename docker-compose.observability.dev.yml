@@ -1,4 +1,20 @@
 services:
+  alertmanager:
+    image: prom/alertmanager:v0.27.0
+    command:
+      - --config.file=/etc/alertmanager/alertmanager.yml
+      - --storage.path=/alertmanager
+    ports:
+      - "127.0.0.1:9093:9093"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q --spider http://127.0.0.1:9093/-/ready"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+    volumes:
+      - ./deploy/alertmanager-console.dev.yml.example:/etc/alertmanager/alertmanager.yml:ro
+      - muxivo-console-dev-alertmanager:/alertmanager
+
   prometheus:
     image: prom/prometheus:v2.55.1
     command:
@@ -19,6 +35,9 @@ services:
     depends_on:
       api:
         condition: service_healthy
+      alertmanager:
+        condition: service_healthy
 
 volumes:
+  muxivo-console-dev-alertmanager:
   muxivo-console-dev-prometheus:

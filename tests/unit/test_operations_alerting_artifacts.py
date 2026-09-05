@@ -5,6 +5,9 @@ def test_prometheus_alert_rules_reference_current_console_metrics() -> None:
     metrics_source = Path("apps/api/src/muxivo_console/infrastructure/metrics.py").read_text()
     prometheus_config = Path("deploy/prometheus-console.yml.example").read_text()
     development_config = Path("deploy/prometheus-console.dev.yml.example").read_text()
+    development_alertmanager_config = Path(
+        "deploy/alertmanager-console.dev.yml.example"
+    ).read_text()
     alert_rules = Path("docs/operations/prometheus-alerts.yml").read_text()
 
     assert "muxivo_console_http_requests_total" in metrics_source
@@ -12,9 +15,12 @@ def test_prometheus_alert_rules_reference_current_console_metrics() -> None:
     assert "muxivo_console_http_request_duration_seconds_count" in metrics_source
     assert "muxivo_console_http_request_duration_seconds_bucket" in metrics_source
     assert "rule_files:" in prometheus_config
+    assert "127.0.0.1:9093" in prometheus_config
     assert "/etc/prometheus/rules/muxivo-console-alerts.yml" in prometheus_config
     assert "api:8000" in development_config
+    assert "alertmanager:9093" in development_config
     assert "environment: development" in development_config
+    assert "receiver: dev-null" in development_alertmanager_config
 
     for metric_name in (
         "muxivo_console_http_requests_total",
@@ -86,8 +92,11 @@ def test_deployment_proxies_readiness_without_exposing_metrics() -> None:
 def test_development_observability_composition_is_loopback_only_and_loads_rules() -> None:
     compose = Path("docker-compose.observability.dev.yml").read_text()
 
+    assert "prom/alertmanager:v0.27.0" in compose
     assert "prom/prometheus:v2.55.1" in compose
+    assert '"127.0.0.1:9093:9093"' in compose
     assert '"127.0.0.1:9090:9090"' in compose
+    assert "alertmanager-console.dev.yml.example" in compose
     assert "http://127.0.0.1:9090/-/ready" in compose
     assert "prometheus-console.dev.yml.example" in compose
     assert "prometheus-alerts.yml" in compose

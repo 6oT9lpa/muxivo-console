@@ -17,6 +17,14 @@ def test_observability_smoke_runs_compose_and_verifies_prometheus_contract(
 
     configuration = {"status": "success", "data": {"yaml": "scrape_configs:"}}
     rules = {"status": "success", "data": {"groups": [{"name": "console"}]}}
+    alertmanagers = {
+        "status": "success",
+        "data": {
+            "activeAlertmanagers": [
+                {"url": "http://alertmanager:9093/api/v2/alerts"},
+            ]
+        },
+    }
     targets = {
         "status": "success",
         "data": {
@@ -35,6 +43,8 @@ def test_observability_smoke_runs_compose_and_verifies_prometheus_contract(
         payload = (
             configuration
             if request.full_url.endswith("/status/config")
+            else alertmanagers
+            if request.full_url.endswith("/api/v1/alertmanagers")
             else rules
             if request.full_url.endswith("/api/v1/rules")
             else targets
@@ -52,11 +62,12 @@ def test_observability_smoke_runs_compose_and_verifies_prometheus_contract(
     )
 
     assert commands[0][0][-1] == "config"
-    assert commands[1][0][-5:] == (
+    assert commands[1][0][-6:] == (
         "--wait",
         "postgres",
         "redis",
         "api",
+        "alertmanager",
         "prometheus",
     )
     assert commands[-1][0][-2:] == ("down", "--remove-orphans")
@@ -85,6 +96,15 @@ def test_observability_smoke_preserves_an_existing_environment_file(tmp_path: Pa
                 ],
             },
         }
+        if request.full_url.endswith("/api/v1/alertmanagers"):
+            payload = {
+                "status": "success",
+                "data": {
+                    "activeAlertmanagers": [
+                        {"url": "http://alertmanager:9093/api/v2/alerts"},
+                    ]
+                },
+            }
         return nullcontext(
             SimpleNamespace(status=200, read=lambda: json.dumps(payload).encode("utf-8"))
         )

@@ -127,6 +127,14 @@ REQUIRED_SUPPORTING_ARTIFACTS: tuple[tuple[str, tuple[tuple[str, str], ...]], ..
             ("scrape_configs:", "Prometheus scrape configuration"),
             ("job_name: muxivo-console", "Console scrape job"),
             ("127.0.0.1:8010", "loopback API target"),
+            ("127.0.0.1:9093", "private Alertmanager target"),
+        ),
+    ),
+    (
+        "deploy/alertmanager-console.dev.yml.example",
+        (
+            ("route:", "Alertmanager route"),
+            ("receiver: dev-null", "safe development receiver"),
         ),
     ),
     (

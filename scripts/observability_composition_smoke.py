@@ -1,4 +1,4 @@
-"""Run a real development API and Prometheus composition smoke test."""
+"""Run a real development API, Prometheus and Alertmanager smoke test."""
 
 from __future__ import annotations
 
@@ -22,6 +22,10 @@ COMPOSE_PROJECT_NAME = "muxivo-console-observability-smoke"
 PROMETHEUS_ENDPOINTS = (
     "http://127.0.0.1:9090/-/ready",
     "http://127.0.0.1:9090/-/healthy",
+)
+ALERTMANAGER_ENDPOINTS = (
+    "http://127.0.0.1:9093/-/ready",
+    "http://127.0.0.1:9093/-/healthy",
 )
 
 CommandRunner = Callable[..., object]
@@ -78,12 +82,13 @@ def run_smoke(
                 "postgres",
                 "redis",
                 "api",
+                "alertmanager",
                 "prometheus",
             ),
             root=root,
             stage="startup",
         )
-        _wait_for_prometheus(
+        _wait_for_observability(
             opener=opener,
             sleep=sleep,
             max_attempts=max_attempts,
@@ -174,7 +179,7 @@ def _run_cleanup(runner: CommandRunner, command: Sequence[str], *, root: Path) -
         )
 
 
-def _wait_for_prometheus(
+def _wait_for_observability(
     *,
     opener: HttpOpener,
     sleep: Sleep,
@@ -185,15 +190,26 @@ def _wait_for_prometheus(
             statuses = {
                 endpoint: _get_status(opener, endpoint) for endpoint in PROMETHEUS_ENDPOINTS
             }
+            statuses.update(
+                {
+                    endpoint: _get_status(opener, endpoint)
+                    for endpoint in ALERTMANAGER_ENDPOINTS
+                }
+            )
             configuration = _get_json(
                 opener,
                 "http://127.0.0.1:9090/api/v1/status/config",
+            )
+            alertmanagers = _get_json(
+                opener,
+                "http://127.0.0.1:9090/api/v1/alertmanagers",
             )
             rules = _get_json(opener, "http://127.0.0.1:9090/api/v1/rules")
             targets = _get_json(opener, "http://127.0.0.1:9090/api/v1/targets")
             if (
                 all(status == 200 for status in statuses.values())
                 and _prometheus_api_succeeded(configuration)
+                and _has_active_alertmanager(alertmanagers)
                 and _prometheus_api_succeeded(rules)
                 and _has_healthy_console_target(targets)
                 and _has_loaded_rule_group(rules)
@@ -236,6 +252,18 @@ def _has_loaded_rule_group(payload: object) -> bool:
         return False
     data = payload.get("data")
     return isinstance(data, dict) and bool(data.get("groups"))
+
+
+def _has_active_alertmanager(payload: object) -> bool:
+    if not isinstance(payload, dict) or not _prometheus_api_succeeded(payload):
+        return False
+    data = payload.get("data")
+    if not isinstance(data, dict) or not isinstance(data.get("activeAlertmanagers"), list):
+        return False
+    return any(
+        isinstance(alertmanager, dict) and bool(alertmanager.get("url"))
+        for alertmanager in data["activeAlertmanagers"]
+    )
 
 
 def _has_healthy_console_target(payload: object) -> bool:

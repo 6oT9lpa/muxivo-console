@@ -7,6 +7,14 @@ global:
   scrape_interval: 15s
   evaluation_interval: 15s
 
+# Alertmanager is a same-host/private monitoring service. Configure its
+# receiver separately and keep its credentials out of this repository.
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets:
+            - 127.0.0.1:9093
+
 rule_files:
   - /etc/prometheus/rules/muxivo-console-alerts.yml
 
