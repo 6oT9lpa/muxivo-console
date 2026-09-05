@@ -62,8 +62,6 @@ function createCatalog() {
   const canManagePlatformConnections = ref(true);
   const busy = ref(false);
   const notice = ref("");
-  const resetPlatformConnectionDetails = vi.fn();
-  const resetDiscordConnectionDetails = vi.fn();
   const catalog = usePlatformConnectionCatalog({
     t: (key: string, params?: TranslationParams) =>
       params?.platform || params?.status ? `${key}:${params.platform ?? params.status}` : key,
@@ -76,8 +74,6 @@ function createCatalog() {
     localizedConnectionWizardOptions: computed(() => wizardOptions),
     platformLabel: (platform) => platform,
     connectionStatusLabel: (status) => status,
-    resetPlatformConnectionDetails,
-    resetDiscordConnectionDetails,
   });
   return {
     catalog,
@@ -86,8 +82,6 @@ function createCatalog() {
     canManagePlatformConnections,
     busy,
     notice,
-    resetPlatformConnectionDetails,
-    resetDiscordConnectionDetails,
   };
 }
 
@@ -148,12 +142,11 @@ describe("usePlatformConnectionCatalog", () => {
     expect(catalog.selectedConnectionCandidateId.value).toBe("");
   });
 
-  it("sends a stable idempotency key for lifecycle actions and resets details", async () => {
+  it("sends a stable idempotency key for lifecycle actions", async () => {
     consoleApiMock.mockResolvedValue(connection("connection-1", "disconnected"));
-    const { catalog, resetPlatformConnectionDetails, resetDiscordConnectionDetails } =
-      createCatalog();
+    const { catalog } = createCatalog();
 
-    await catalog.runConnectionLifecycle(connection("connection-1"), "disconnect");
+    const completed = await catalog.runConnectionLifecycle(connection("connection-1"), "disconnect");
 
     expect(consoleApiMock).toHaveBeenCalledWith(
       "/api/v1/organizations/org-1/platform-connections/connection-1",
@@ -162,8 +155,7 @@ describe("usePlatformConnectionCatalog", () => {
         headers: { "Idempotency-Key": "disconnect:connection-1" },
       },
     );
-    expect(resetPlatformConnectionDetails).toHaveBeenCalledOnce();
-    expect(resetDiscordConnectionDetails).toHaveBeenCalledOnce();
+    expect(completed).toBe(true);
   });
 
   it("keeps a 503 candidate catalog failure retryable without leaking details", async () => {

@@ -23,6 +23,7 @@ import SecurityPanel from "./features/console/SecurityPanel.vue";
 import { useOrganizationMembers } from "./features/console/useOrganizationMembers";
 import { useOrganizationSelection } from "./features/console/useOrganizationSelection";
 import { usePlatformConnectionCatalog } from "./features/console/usePlatformConnectionCatalog";
+import { usePlatformDashboard } from "./features/console/usePlatformDashboard";
 import { membershipAllows } from "./features/console/access";
 import { useI18n } from "./i18n";
 import { clientLogger } from "./utils/clientLogger";
@@ -38,29 +39,13 @@ import {
 import GetToKnowUs from "./views/GetToKnowUs.vue";
 import MuxivoLanding from "./views/MuxivoLanding.vue";
 import type {
-  AiModerationAction,
-  AiModerationLabelRule,
-  AiModerationPolicy,
-  AuditEvent,
-  AuditEventPage,
   ConsoleSection,
   ControlModule,
   OrganizationMembership,
-  PlatformAiModerationPolicyState,
-  PlatformAiModerationSummary,
-  PlatformAuditTimeline,
-  PlatformBotSettings,
   PlatformChannel,
-  PlatformChannelCatalog,
-  PlatformChannelPurposes,
   PlatformConnection,
   PlatformConnectionGrantedScope,
-  PlatformDashboardSummary,
-  PlatformHealth,
   PlatformHealthSignal,
-  PlatformIntegrations,
-  PlatformServerStatistics,
-  PlatformWelcomeSettings,
   Theme,
 } from "./features/console/types";
 
@@ -83,24 +68,6 @@ const theme = ref<Theme>(initialTheme);
 const activeConsoleSection = ref<ConsoleSection>("overview");
 const busy = ref(false);
 const notice = ref("");
-const platformHealth = ref<PlatformHealth | null>(null);
-const controlModules = ref<ControlModule[]>([]);
-const dashboardSummary = ref<PlatformDashboardSummary | null>(null);
-const channelCatalog = ref<PlatformChannelCatalog | null>(null);
-const botSettings = ref<PlatformBotSettings | null>(null);
-const integrations = ref<PlatformIntegrations | null>(null);
-const serverStatistics = ref<PlatformServerStatistics | null>(null);
-const auditTimeline = ref<PlatformAuditTimeline | null>(null);
-const welcomeSettings = ref<PlatformWelcomeSettings | null>(null);
-const channelPurposes = ref<PlatformChannelPurposes | null>(null);
-const aiModerationSummary = ref<PlatformAiModerationSummary | null>(null);
-const aiModerationPolicy = ref<PlatformAiModerationPolicyState | null>(null);
-const aiModerationBlacklistWords = ref("");
-const aiModerationAllowedDomains = ref("");
-const auditEvents = ref<AuditEvent[]>([]);
-const auditEventsNextCursor = ref<string | null>(null);
-const selectedPurpose = ref("welcome");
-const selectedPurposeChannelId = ref("");
 const publicNavItems = computed(() => [
   { key: "overview" as const, label: t("header.we_are_muxivo") },
   { key: "about" as const, label: t("header.get_to_know_us") },
@@ -360,7 +327,7 @@ const {
   loadConnectionCandidates,
   selectConnectionWizard,
   connectPlatform,
-  runConnectionLifecycle,
+  runConnectionLifecycle: runConnectionLifecycleRequest,
   resetPlatformConnectionCatalog,
 } = usePlatformConnectionCatalog({
   t,
@@ -373,9 +340,79 @@ const {
   localizedConnectionWizardOptions,
   platformLabel,
   connectionStatusLabel,
-  resetPlatformConnectionDetails: selectPlatformConnection,
-  resetDiscordConnectionDetails: selectDiscordConnection,
 });
+
+const {
+  platformHealth,
+  controlModules,
+  dashboardSummary,
+  channelCatalog,
+  botSettings,
+  integrations,
+  serverStatistics,
+  auditTimeline,
+  welcomeSettings,
+  channelPurposes,
+  aiModerationSummary,
+  aiModerationPolicy,
+  aiModerationBlacklistWords,
+  aiModerationAllowedDomains,
+  auditEvents,
+  auditEventsNextCursor,
+  selectedPurpose,
+  selectedPurposeChannelId,
+  loadControlModules,
+  loadPlatformDashboard,
+  loadPlatformChannels,
+  loadPlatformBotSettings,
+  loadPlatformIntegrations,
+  loadPlatformServerStatistics,
+  loadPlatformAuditTimeline,
+  resetPlatformConnectionDetails,
+  loadDiscordDashboard,
+  loadOrganizationAuditEvents,
+  loadDiscordChannels,
+  loadDiscordChannelPurposes,
+  loadDiscordAiModerationSummary,
+  loadDiscordAiModerationPolicy,
+  saveDiscordAiModerationPolicy,
+  saveDiscordChannelPurpose,
+  loadDiscordWelcomeSettings,
+  saveDiscordWelcomeSettings,
+  resetDiscordConnectionDetails,
+  loadPlatformHealth,
+  resetPlatformDashboard,
+} = usePlatformDashboard({
+  t,
+  busy,
+  notice,
+  messageFor,
+  activeOrganizationId,
+  selectedConnectionId,
+  selectedDiscordConnectionId,
+  selectedConnection,
+  canRunSelectedDiscordWrites,
+});
+
+async function runConnectionLifecycle(
+  connection: PlatformConnection,
+  action: "reauthorize" | "revoke" | "disconnect",
+): Promise<void> {
+  const completed = await runConnectionLifecycleRequest(connection, action);
+  if (completed) {
+    resetPlatformConnectionDetails();
+    resetDiscordConnectionDetails();
+  }
+}
+
+function selectPlatformConnection(): void {
+  resetPlatformConnectionDetails();
+}
+
+function selectDiscordConnection(): void {
+  resetDiscordConnectionDetails();
+}
+
 const currentBrowserSession = computed(
   () => browserSessions.value.find((session) => session.is_current) ?? null,
 );
@@ -494,20 +531,7 @@ async function refreshOrganizationWorkspace() {
 function resetOrganizationWorkspace() {
   resetPlatformConnectionCatalog();
   resetOrganizationMembers();
-  platformHealth.value = null;
-  controlModules.value = [];
-  dashboardSummary.value = null;
-  channelCatalog.value = null;
-  botSettings.value = null;
-  integrations.value = null;
-  serverStatistics.value = null;
-  auditTimeline.value = null;
-  welcomeSettings.value = null;
-  channelPurposes.value = null;
-  aiModerationSummary.value = null;
-  aiModerationPolicy.value = null;
-  auditEvents.value = [];
-  auditEventsNextCursor.value = null;
+  resetPlatformDashboard();
 }
 
 async function acceptInvitationIfPresent() {
@@ -608,344 +632,6 @@ function connectionStatusDescription(connection: PlatformConnection): string {
 
 function connectionRiskyActionsBlocked(status: PlatformConnection["status"]): boolean {
   return ["degraded", "reauth_required", "disconnected"].includes(status);
-}
-
-async function loadControlModules() {
-  if (!activeOrganizationId.value) return;
-  busy.value = true;
-  notice.value = "";
-  try {
-    const payload = await consoleApi<{ items: ControlModule[] }>(
-      `/api/v1/organizations/${encodeURIComponent(activeOrganizationId.value)}/control-modules`,
-    );
-    controlModules.value = payload.items;
-  } catch (error) {
-    controlModules.value = [];
-    notice.value = messageFor(error);
-  } finally {
-    busy.value = false;
-  }
-}
-
-async function loadPlatformDashboard() {
-  if (!activeOrganizationId.value || !selectedConnectionId.value) return;
-  busy.value = true;
-  notice.value = "";
-  try {
-    dashboardSummary.value = await consoleApi<PlatformDashboardSummary>(
-      `/api/v1/organizations/${encodeURIComponent(activeOrganizationId.value)}/platform-connections/${encodeURIComponent(selectedConnectionId.value)}/dashboard`,
-    );
-  } catch (error) {
-    dashboardSummary.value = null;
-    notice.value = messageFor(error);
-  } finally {
-    busy.value = false;
-  }
-}
-
-async function loadPlatformChannels() {
-  if (!activeOrganizationId.value || !selectedConnectionId.value) return;
-  busy.value = true;
-  notice.value = "";
-  try {
-    channelCatalog.value = await consoleApi<PlatformChannelCatalog>(
-      `/api/v1/organizations/${encodeURIComponent(activeOrganizationId.value)}/platform-connections/${encodeURIComponent(selectedConnectionId.value)}/channels`,
-    );
-  } catch (error) {
-    channelCatalog.value = null;
-    notice.value = messageFor(error);
-  } finally {
-    busy.value = false;
-  }
-}
-
-async function loadPlatformBotSettings() {
-  if (!activeOrganizationId.value || !selectedConnectionId.value) return;
-  busy.value = true;
-  notice.value = "";
-  try {
-    botSettings.value = await consoleApi<PlatformBotSettings>(
-      `/api/v1/organizations/${encodeURIComponent(activeOrganizationId.value)}/platform-connections/${encodeURIComponent(selectedConnectionId.value)}/bot-settings`,
-    );
-  } catch (error) {
-    botSettings.value = null;
-    notice.value = messageFor(error);
-  } finally {
-    busy.value = false;
-  }
-}
-
-async function loadPlatformIntegrations() {
-  if (!activeOrganizationId.value || !selectedConnectionId.value) return;
-  busy.value = true;
-  notice.value = "";
-  try {
-    integrations.value = await consoleApi<PlatformIntegrations>(
-      `/api/v1/organizations/${encodeURIComponent(activeOrganizationId.value)}/platform-connections/${encodeURIComponent(selectedConnectionId.value)}/integrations`,
-    );
-  } catch (error) {
-    integrations.value = null;
-    notice.value = messageFor(error);
-  } finally {
-    busy.value = false;
-  }
-}
-
-async function loadPlatformServerStatistics() {
-  if (!activeOrganizationId.value || !selectedConnectionId.value) return;
-  busy.value = true;
-  notice.value = "";
-  try {
-    serverStatistics.value = await consoleApi<PlatformServerStatistics>(
-      `/api/v1/organizations/${encodeURIComponent(activeOrganizationId.value)}/platform-connections/${encodeURIComponent(selectedConnectionId.value)}/server-statistics`,
-    );
-  } catch (error) {
-    serverStatistics.value = null;
-    notice.value = messageFor(error);
-  } finally {
-    busy.value = false;
-  }
-}
-
-async function loadPlatformAuditTimeline() {
-  if (!activeOrganizationId.value || !selectedConnectionId.value) return;
-  busy.value = true;
-  notice.value = "";
-  try {
-    auditTimeline.value = await consoleApi<PlatformAuditTimeline>(
-      `/api/v1/organizations/${encodeURIComponent(activeOrganizationId.value)}/platform-connections/${encodeURIComponent(selectedConnectionId.value)}/audit-timeline`,
-    );
-  } catch (error) {
-    auditTimeline.value = null;
-    notice.value = messageFor(error);
-  } finally {
-    busy.value = false;
-  }
-}
-
-function selectPlatformConnection() {
-  dashboardSummary.value = null;
-  channelCatalog.value = null;
-  botSettings.value = null;
-  integrations.value = null;
-  platformHealth.value = null;
-}
-
-async function loadDiscordDashboard() {
-  if (!activeOrganizationId.value || !selectedDiscordConnectionId.value) return;
-  busy.value = true;
-  notice.value = "";
-  try {
-    dashboardSummary.value = await consoleApi<PlatformDashboardSummary>(
-      `/api/v1/organizations/${encodeURIComponent(activeOrganizationId.value)}/platform-connections/${encodeURIComponent(selectedDiscordConnectionId.value)}/dashboard`,
-    );
-  } catch (error) {
-    dashboardSummary.value = null;
-    notice.value = messageFor(error);
-  } finally {
-    busy.value = false;
-  }
-}
-
-async function loadOrganizationAuditEvents(nextPage = false) {
-  if (!activeOrganizationId.value) return;
-  if (nextPage && !auditEventsNextCursor.value) return;
-  busy.value = true;
-  notice.value = "";
-  try {
-    const query = nextPage ? `?after=${encodeURIComponent(auditEventsNextCursor.value ?? "")}` : "";
-    const page = await consoleApi<AuditEventPage>(
-      `/api/v1/organizations/${encodeURIComponent(activeOrganizationId.value)}/audit-events${query}`,
-    );
-    auditEvents.value = nextPage ? [...auditEvents.value, ...page.items] : page.items;
-    auditEventsNextCursor.value = page.next_cursor;
-  } catch (error) {
-    if (!nextPage) auditEvents.value = [];
-    notice.value = messageFor(error);
-  } finally {
-    busy.value = false;
-  }
-}
-
-async function loadDiscordChannels() {
-  if (!activeOrganizationId.value || !selectedDiscordConnectionId.value) return;
-  busy.value = true;
-  notice.value = "";
-  try {
-    channelCatalog.value = await consoleApi<PlatformChannelCatalog>(
-      `/api/v1/organizations/${encodeURIComponent(activeOrganizationId.value)}/platform-connections/${encodeURIComponent(selectedDiscordConnectionId.value)}/channels`,
-    );
-  } catch (error) {
-    channelCatalog.value = null;
-    notice.value = messageFor(error);
-  } finally {
-    busy.value = false;
-  }
-}
-
-async function loadDiscordChannelPurposes() {
-  if (!activeOrganizationId.value || !selectedDiscordConnectionId.value) return;
-  busy.value = true;
-  notice.value = "";
-  try {
-    channelPurposes.value = await consoleApi<PlatformChannelPurposes>(
-      `/api/v1/organizations/${encodeURIComponent(activeOrganizationId.value)}/platform-connections/${encodeURIComponent(selectedDiscordConnectionId.value)}/channel-purposes`,
-    );
-  } catch (error) {
-    channelPurposes.value = null;
-    notice.value = messageFor(error);
-  } finally {
-    busy.value = false;
-  }
-}
-
-async function loadDiscordAiModerationSummary() {
-  if (!activeOrganizationId.value || !selectedDiscordConnectionId.value) return;
-  busy.value = true;
-  notice.value = "";
-  try {
-    aiModerationSummary.value = await consoleApi<PlatformAiModerationSummary>(
-      `/api/v1/organizations/${encodeURIComponent(activeOrganizationId.value)}/platform-connections/${encodeURIComponent(selectedDiscordConnectionId.value)}/ai-moderation-summary`,
-    );
-  } catch (error) {
-    aiModerationSummary.value = null;
-    notice.value = messageFor(error);
-  } finally {
-    busy.value = false;
-  }
-}
-
-async function loadDiscordAiModerationPolicy() {
-  if (!activeOrganizationId.value || !selectedDiscordConnectionId.value || !canRunSelectedDiscordWrites.value) return;
-  busy.value = true;
-  notice.value = "";
-  try {
-    const state = await consoleApi<PlatformAiModerationPolicyState>(
-      `/api/v1/organizations/${encodeURIComponent(activeOrganizationId.value)}/platform-connections/${encodeURIComponent(selectedDiscordConnectionId.value)}/ai-moderation-policy`,
-    );
-    aiModerationPolicy.value = state;
-    aiModerationBlacklistWords.value = state.policy.blacklist_words.join("\n");
-    aiModerationAllowedDomains.value = state.policy.allowed_domains.join("\n");
-  } catch (error) {
-    aiModerationPolicy.value = null;
-    notice.value = messageFor(error);
-  } finally {
-    busy.value = false;
-  }
-}
-
-async function saveDiscordAiModerationPolicy() {
-  if (!activeOrganizationId.value || !selectedDiscordConnectionId.value || !aiModerationPolicy.value || !canRunSelectedDiscordWrites.value) return;
-  busy.value = true;
-  notice.value = "";
-  try {
-    const policy = {
-      ...aiModerationPolicy.value.policy,
-      blacklist_words: splitPolicyValues(aiModerationBlacklistWords.value),
-      allowed_domains: splitPolicyValues(aiModerationAllowedDomains.value),
-    };
-    aiModerationSummary.value = await consoleApi<PlatformAiModerationSummary>(
-      `/api/v1/organizations/${encodeURIComponent(activeOrganizationId.value)}/platform-connections/${encodeURIComponent(selectedDiscordConnectionId.value)}/ai-moderation-policy`,
-      { method: "PUT", body: JSON.stringify(policy) },
-    );
-    aiModerationPolicy.value = { ...aiModerationPolicy.value, policy, is_default_policy: false };
-    notice.value = t("console.notice.policy_saved");
-  } catch (error) {
-    notice.value = messageFor(error);
-  } finally {
-    busy.value = false;
-  }
-}
-
-function splitPolicyValues(value: string): string[] {
-  return [...new Set(value.split(/[\n,]/).map((item) => item.trim()).filter(Boolean))];
-}
-
-async function saveDiscordChannelPurpose() {
-  if (!activeOrganizationId.value || !selectedDiscordConnectionId.value || !selectedPurposeChannelId.value || !canRunSelectedDiscordWrites.value) return;
-  busy.value = true;
-  notice.value = "";
-  try {
-    channelPurposes.value = await consoleApi<PlatformChannelPurposes>(
-      `/api/v1/organizations/${encodeURIComponent(activeOrganizationId.value)}/platform-connections/${encodeURIComponent(selectedDiscordConnectionId.value)}/channel-purposes`,
-      { method: "PUT", body: JSON.stringify({ purpose: selectedPurpose.value, channel_id: selectedPurposeChannelId.value }) },
-    );
-    notice.value = t("console.notice.purpose_saved");
-  } catch (error) { notice.value = messageFor(error); } finally { busy.value = false; }
-}
-
-async function loadDiscordWelcomeSettings() {
-  if (!activeOrganizationId.value || !selectedDiscordConnectionId.value) return;
-  busy.value = true;
-  notice.value = "";
-  try {
-    welcomeSettings.value = await consoleApi<PlatformWelcomeSettings>(
-      `/api/v1/organizations/${encodeURIComponent(activeOrganizationId.value)}/platform-connections/${encodeURIComponent(selectedDiscordConnectionId.value)}/welcome-settings`,
-    );
-  } catch (error) {
-    welcomeSettings.value = null;
-    notice.value = messageFor(error);
-  } finally {
-    busy.value = false;
-  }
-}
-
-async function saveDiscordWelcomeSettings() {
-  if (!activeOrganizationId.value || !selectedDiscordConnectionId.value || !welcomeSettings.value || !canRunSelectedDiscordWrites.value) return;
-  busy.value = true;
-  notice.value = "";
-  try {
-    const settings = welcomeSettings.value;
-    welcomeSettings.value = await consoleApi<PlatformWelcomeSettings>(
-      `/api/v1/organizations/${encodeURIComponent(activeOrganizationId.value)}/platform-connections/${encodeURIComponent(selectedDiscordConnectionId.value)}/welcome-settings`,
-      {
-        method: "PUT",
-        body: JSON.stringify({
-          title: settings.title,
-          description: settings.description,
-          thumbnail_url: settings.thumbnail_url,
-          footer_text: settings.footer_text,
-          footer_icon_url: settings.footer_icon_url,
-          color: settings.color,
-          is_enabled: settings.is_enabled,
-          rules_channel_id: settings.rules_channel_id?.trim() || null,
-          roles_channel_id: settings.roles_channel_id?.trim() || null,
-        }),
-      },
-    );
-    notice.value = t("console.notice.welcome_saved");
-  } catch (error) {
-    notice.value = messageFor(error);
-  } finally {
-    busy.value = false;
-  }
-}
-
-function selectDiscordConnection() {
-  dashboardSummary.value = null;
-  channelCatalog.value = null;
-  welcomeSettings.value = null;
-  channelPurposes.value = null;
-  aiModerationSummary.value = null;
-  aiModerationPolicy.value = null;
-  auditEvents.value = [];
-  auditEventsNextCursor.value = null;
-}
-
-async function loadPlatformHealth() {
-  if (!activeOrganizationId.value || !selectedConnection.value) return;
-  busy.value = true;
-  notice.value = "";
-  try {
-    platformHealth.value = await consoleApi<PlatformHealth>(
-      `/api/v1/organizations/${encodeURIComponent(activeOrganizationId.value)}/platforms/${selectedConnection.value.platform}/health`,
-    );
-  } catch (error) {
-    platformHealth.value = null;
-    notice.value = messageFor(error);
-  } finally {
-    busy.value = false;
-  }
 }
 
 </script>

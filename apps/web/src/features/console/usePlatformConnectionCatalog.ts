@@ -27,8 +27,6 @@ type PlatformConnectionCatalogDependencies = {
   localizedConnectionWizardOptions: ComputedRef<ConnectionWizardCopy[]>;
   platformLabel: (platform: PlatformConnection["platform"]) => string;
   connectionStatusLabel: (status: PlatformConnection["status"]) => string;
-  resetPlatformConnectionDetails: () => void;
-  resetDiscordConnectionDetails: () => void;
 };
 
 /** Owns browser-safe connection discovery, selection and lifecycle actions. */
@@ -46,8 +44,6 @@ export function usePlatformConnectionCatalog(
     localizedConnectionWizardOptions,
     platformLabel,
     connectionStatusLabel,
-    resetPlatformConnectionDetails,
-    resetDiscordConnectionDetails,
   } = dependencies;
 
   const platform = ref<ConnectablePlatform>("discord");
@@ -248,8 +244,8 @@ export function usePlatformConnectionCatalog(
   async function runConnectionLifecycle(
     connection: PlatformConnection,
     action: ConnectionLifecycleAction,
-  ): Promise<void> {
-    if (!activeOrganizationId.value) return;
+  ): Promise<boolean> {
+    if (!activeOrganizationId.value) return false;
     const suffix =
       action === "reauthorize"
         ? "reauthorizations"
@@ -274,8 +270,6 @@ export function usePlatformConnectionCatalog(
       connections.value = connections.value.map((item) =>
         item.id === updated.id ? updated : item,
       );
-      resetPlatformConnectionDetails();
-      resetDiscordConnectionDetails();
       notice.value = t("console.notice.connection_state", {
         platform: platformLabel(updated.platform),
         status: connectionStatusLabel(updated.status),
@@ -285,12 +279,14 @@ export function usePlatformConnectionCatalog(
         platform: updated.platform,
         status: updated.status,
       });
+      return true;
     } catch (error) {
       notice.value = messageFor(error);
       clientLogger.warn("console.connection.lifecycle.failed", {
         action,
         error_type: error instanceof Error ? error.name : "unknown",
       });
+      return false;
     } finally {
       busy.value = false;
     }
