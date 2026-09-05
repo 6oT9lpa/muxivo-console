@@ -11,6 +11,7 @@ from muxivo_console.application.register_platform_connection import (
 from muxivo_console.domain.activity import Platform
 from muxivo_console.domain.audit import AuditEvent
 from muxivo_console.domain.authorization import AuthorizationDecision, AuthorizationRequest
+from muxivo_console.domain.connection_status_reason import ConnectionStatusReason
 from muxivo_console.domain.connections import ConnectionStatus, PlatformConnection
 
 
@@ -81,6 +82,7 @@ async def test_registers_only_a_platform_verified_non_secret_pending_connection(
 
     assert connection.id == connection_id
     assert connection.status is ConnectionStatus.PENDING
+    assert connection.status_reason is ConnectionStatusReason.INITIAL_PENDING
     assert connection.external_resource_id == "123456789012345678"
     assert verifier.arguments == {
         "actor_id": requested.actor_id,

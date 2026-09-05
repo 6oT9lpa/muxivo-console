@@ -4,6 +4,7 @@ from uuid import UUID
 from pydantic import BaseModel, Field, field_validator
 
 from muxivo_console.domain.activity import Platform
+from muxivo_console.domain.connection_status_reason import ConnectionStatusReason
 from muxivo_console.domain.connections import ConnectionStatus
 
 
@@ -33,6 +34,7 @@ class PlatformConnectionResponse(BaseModel):
     platform: Platform
     external_resource_id: str
     status: ConnectionStatus
+    status_reason: ConnectionStatusReason | None = None
     granted_scopes: list[PlatformConnectionGrantedScopeResponse] = Field(default_factory=list)
 
 

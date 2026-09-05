@@ -123,6 +123,7 @@ def test_connection_registration_uses_session_actor_and_neutral_contract() -> No
         "platform": "discord",
         "external_resource_id": "123456789012345678",
         "status": "pending",
+        "status_reason": None,
         "granted_scopes": [
             {
                 "key": "discord.guild.read",
@@ -203,6 +204,7 @@ def test_connection_list_returns_cursor_paginated_neutral_contract() -> None:
                 "platform": "discord",
                 "external_resource_id": "123",
                 "status": "active",
+                "status_reason": None,
                 "granted_scopes": [
                     {
                         "key": "discord.guild.read",

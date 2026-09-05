@@ -11,6 +11,7 @@ from muxivo_console.application.manage_platform_connection_lifecycle import (
 from muxivo_console.domain.activity import Platform
 from muxivo_console.domain.audit import AuditEvent
 from muxivo_console.domain.authorization import AuthorizationDecision, AuthorizationRequest
+from muxivo_console.domain.connection_status_reason import ConnectionStatusReason
 from muxivo_console.domain.connections import (
     ConnectionStatus,
     PlatformConnection,
@@ -124,6 +125,7 @@ async def test_revoke_moves_active_connection_to_reauth_required_and_records_aud
     updated = await use_case.execute(command(existing, PlatformConnectionLifecycleAction.REVOKE))
 
     assert updated.status is ConnectionStatus.REAUTH_REQUIRED
+    assert updated.status_reason is ConnectionStatusReason.REVOKED
     assert writer.connection == updated
     assert writer.audit_event is not None
     assert writer.audit_event.id == audit_id
@@ -175,6 +177,7 @@ async def test_reauthorize_moves_connection_to_active_and_records_audit() -> Non
     )
 
     assert updated.status is ConnectionStatus.ACTIVE
+    assert updated.status_reason is ConnectionStatusReason.REAUTHORIZED
     assert writer.audit_event is not None
     assert writer.audit_event.id == audit_id
     assert writer.audit_event.action == "platform_connection.reauthorize"
@@ -199,6 +202,7 @@ async def test_disconnect_moves_connection_to_disconnected_and_records_audit() -
     )
 
     assert updated.status is ConnectionStatus.DISCONNECTED
+    assert updated.status_reason is ConnectionStatusReason.DISCONNECTED
     assert writer.audit_event is not None
     assert writer.audit_event.id == audit_id
     assert writer.audit_event.action == "platform_connection.disconnect"

@@ -469,6 +469,7 @@ def _platform_connection_response(connection: PlatformConnection) -> PlatformCon
         platform=connection.platform,
         external_resource_id=connection.external_resource_id,
         status=connection.status,
+        status_reason=connection.status_reason,
         granted_scopes=[
             PlatformConnectionGrantedScopeResponse(
                 key=key,

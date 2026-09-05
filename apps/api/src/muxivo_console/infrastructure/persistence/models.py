@@ -328,6 +328,7 @@ class PlatformConnectionRecord(Base):
     platform: Mapped[str] = mapped_column(String(32), nullable=False)
     external_resource_id: Mapped[str] = mapped_column(String(255), nullable=False)
     status: Mapped[str] = mapped_column(String(32), nullable=False)
+    status_reason: Mapped[str | None] = mapped_column(String(64))
     granted_capabilities: Mapped[dict] = mapped_column(JSONB, nullable=False, server_default="{}")
     last_checked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     reauthorization_required_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
@@ -366,6 +367,7 @@ class PlatformConnectionLifecycleIdempotencyRecord(Base):
     )
     action: Mapped[str] = mapped_column(String(32), nullable=False)
     result_status: Mapped[str] = mapped_column(String(32), nullable=False)
+    result_reason: Mapped[str | None] = mapped_column(String(64))
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()
     )

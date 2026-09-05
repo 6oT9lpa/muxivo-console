@@ -10,6 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from muxivo_console.domain.activity import Platform
 from muxivo_console.domain.audit import AuditEvent
+from muxivo_console.domain.connection_status_reason import ConnectionStatusReason
 from muxivo_console.domain.connections import (
     ConnectionStatus,
     PlatformConnection,
@@ -42,6 +43,11 @@ class SqlAlchemyPlatformConnectionWriter:
                                 platform=connection.platform.value,
                                 external_resource_id=connection.external_resource_id,
                                 status=connection.status.value,
+                                status_reason=(
+                                    connection.status_reason.value
+                                    if connection.status_reason is not None
+                                    else None
+                                ),
                             ),
                             AuditEventRecord(
                                 id=audit_event.id,
@@ -77,7 +83,14 @@ class SqlAlchemyPlatformConnectionWriter:
                             PlatformConnectionRecord.id == connection.id,
                             PlatformConnectionRecord.organization_id == connection.organization_id,
                         )
-                        .values(status=connection.status.value)
+                        .values(
+                            status=connection.status.value,
+                            status_reason=(
+                                connection.status_reason.value
+                                if connection.status_reason is not None
+                                else None
+                            ),
+                        )
                     )
                     if result.rowcount != 1:
                         return False
@@ -89,6 +102,11 @@ class SqlAlchemyPlatformConnectionWriter:
                                 connection_id=connection.id,
                                 action=idempotency_action,
                                 result_status=connection.status.value,
+                                result_reason=(
+                                    connection.status_reason.value
+                                    if connection.status_reason is not None
+                                    else None
+                                ),
                             )
                         )
                     session.add(
@@ -125,6 +143,11 @@ class SqlAlchemyPlatformConnectionWriter:
                 connection_id=record.connection_id,
                 action=record.action,
                 result_status=ConnectionStatus(record.result_status),
+                result_reason=(
+                    ConnectionStatusReason(record.result_reason)
+                    if record.result_reason is not None
+                    else None
+                ),
             )
         except ValueError:
             return None
@@ -162,6 +185,11 @@ class SqlAlchemyPlatformConnectionReader:
                         platform=Platform(record.platform),
                         external_resource_id=record.external_resource_id,
                         status=ConnectionStatus(record.status),
+                        status_reason=(
+                            ConnectionStatusReason(record.status_reason)
+                            if record.status_reason is not None
+                            else None
+                        ),
                     )
                 )
             except ValueError:
@@ -186,6 +214,11 @@ class SqlAlchemyPlatformConnectionReader:
                 platform=Platform(record.platform),
                 external_resource_id=record.external_resource_id,
                 status=ConnectionStatus(record.status),
+                status_reason=(
+                    ConnectionStatusReason(record.status_reason)
+                    if record.status_reason is not None
+                    else None
+                ),
             )
         except ValueError:
             return None
@@ -210,6 +243,11 @@ class SqlAlchemyPlatformConnectionReader:
                         platform=Platform(record.platform),
                         external_resource_id=record.external_resource_id,
                         status=ConnectionStatus(record.status),
+                        status_reason=(
+                            ConnectionStatusReason(record.status_reason)
+                            if record.status_reason is not None
+                            else None
+                        ),
                     )
                 )
             except ValueError:

@@ -20,6 +20,7 @@ from muxivo_console.application.reconcile_platform_connections_result import (
 )
 from muxivo_console.domain.audit import AuditEvent
 from muxivo_console.domain.connection_reconciliation import ConnectionReconciliationDecision
+from muxivo_console.domain.connection_status_reason import ConnectionStatusReason
 from muxivo_console.domain.connections import ConnectionStatus, PlatformConnection
 
 logger = logging.getLogger("muxivo_console.application.reconcile_platform_connections")
@@ -114,7 +115,10 @@ class ReconcilePlatformConnections:
             )
             return False
         try:
-            updated = connection.transition_to(decision.target_status)
+            updated = connection.transition_to(
+                decision.target_status,
+                reason=ConnectionStatusReason(decision.reason.value),
+            )
         except ValueError:
             logger.warning(
                 "platform_connection.reconciliation.invalid_transition",

@@ -15,6 +15,7 @@ type PlatformConnection = {
   platform: "discord" | "twitch";
   external_resource_id: string;
   status: "active" | "reauth_required";
+  status_reason: "healthy" | "revoked";
   granted_scopes: PlatformConnectionGrantedScope[];
 };
 
@@ -166,6 +167,9 @@ test("sign-in, create organization, connect Discord, audit and revoke from the b
     "Discord connection is now Reauthorization required.",
   );
   await expect(connectionRow).toContainText("Reauthorization required");
+  await expect(connectionRow).toContainText(
+    "Reason: Platform access was revoked by an organization manager.",
+  );
   expect(state.observedLifecycleIdempotencyKey).toBe(`revoke:${connectionId}`);
 
   await page.getByRole("button", { name: "Load audit log" }).click();
@@ -567,6 +571,7 @@ async function installConsoleApiMock(
         platform: JSON.parse(request.postData() ?? "{}").platform,
         external_resource_id: externalResourceId,
         status: "active",
+        status_reason: "healthy",
         granted_scopes: discordGrantedScopes("granted"),
       };
       state.connections = [connection];
@@ -590,6 +595,7 @@ async function installConsoleApiMock(
       const updated = {
         ...state.connections[0],
         status: "reauth_required" as const,
+        status_reason: "revoked" as const,
         granted_scopes: discordGrantedScopes("requires_reauthorization"),
       };
       state.connections = [updated];

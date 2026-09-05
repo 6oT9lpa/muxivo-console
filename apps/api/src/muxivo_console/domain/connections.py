@@ -5,6 +5,7 @@ from enum import StrEnum
 from uuid import UUID
 
 from muxivo_console.domain.activity import Platform
+from muxivo_console.domain.connection_status_reason import ConnectionStatusReason
 
 
 class ConnectionStatus(StrEnum):
@@ -54,12 +55,22 @@ class PlatformConnection:
     platform: Platform
     external_resource_id: str
     status: ConnectionStatus
+    status_reason: ConnectionStatusReason | None = None
 
     def __post_init__(self) -> None:
         if not self.external_resource_id.strip() or len(self.external_resource_id) > 255:
             raise ValueError("External resource identifier must contain 1 to 255 characters.")
+        if self.status_reason is not None and not isinstance(
+            self.status_reason, ConnectionStatusReason
+        ):
+            raise ValueError("Connection status reason is invalid.")
 
-    def transition_to(self, target: ConnectionStatus) -> "PlatformConnection":
+    def transition_to(
+        self,
+        target: ConnectionStatus,
+        *,
+        reason: ConnectionStatusReason | None = None,
+    ) -> "PlatformConnection":
         if target not in _ALLOWED_TRANSITIONS[self.status]:
             raise ValueError(f"Cannot transition connection from {self.status} to {target}.")
         return PlatformConnection(
@@ -68,6 +79,7 @@ class PlatformConnection:
             platform=self.platform,
             external_resource_id=self.external_resource_id,
             status=target,
+            status_reason=reason,
         )
 
 
@@ -79,6 +91,7 @@ class PlatformConnectionLifecycleIdempotencyResult:
     connection_id: UUID
     action: str
     result_status: ConnectionStatus
+    result_reason: ConnectionStatusReason | None = None
 
     def __post_init__(self) -> None:
         if not self.action.strip():

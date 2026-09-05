@@ -2,6 +2,7 @@ from uuid import uuid4
 
 import pytest
 from muxivo_console.domain.activity import Platform
+from muxivo_console.domain.connection_status_reason import ConnectionStatusReason
 from muxivo_console.domain.connections import ConnectionStatus, PlatformConnection
 
 
@@ -58,4 +59,25 @@ def test_rejects_blank_external_resource_identifier() -> None:
             platform=Platform.TWITCH,
             external_resource_id=" ",
             status=ConnectionStatus.PENDING,
+        )
+
+
+def test_transition_preserves_a_typed_reason_for_browser_explanation() -> None:
+    transitioned = connection(ConnectionStatus.PENDING).transition_to(
+        ConnectionStatus.DEGRADED,
+        reason=ConnectionStatusReason.PREFLIGHT_FAILED,
+    )
+
+    assert transitioned.status_reason is ConnectionStatusReason.PREFLIGHT_FAILED
+
+
+def test_rejects_an_untyped_connection_status_reason() -> None:
+    with pytest.raises(ValueError, match="Connection status reason"):
+        PlatformConnection(
+            id=uuid4(),
+            organization_id=uuid4(),
+            platform=Platform.TWITCH,
+            external_resource_id="channel-1",
+            status=ConnectionStatus.DEGRADED,
+            status_reason="provider leaked detail",  # type: ignore[arg-type]
         )

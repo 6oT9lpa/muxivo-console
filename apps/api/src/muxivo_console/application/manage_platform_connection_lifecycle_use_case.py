@@ -116,6 +116,7 @@ class ManagePlatformConnectionLifecycle:
                     platform=current.platform,
                     external_resource_id=current.external_resource_id,
                     status=idempotent_result.result_status,
+                    status_reason=idempotent_result.result_reason,
                 )
 
         current = await self.connections.find_for_organization(
@@ -150,7 +151,10 @@ class ManagePlatformConnectionLifecycle:
             )
             return current
         try:
-            updated = current.transition_to(target_status)
+            updated = current.transition_to(
+                target_status,
+                reason=command.action.status_reason,
+            )
         except ValueError as error:
             logger.warning(
                 "platform_connection.lifecycle.invalid_transition",

@@ -1232,7 +1232,7 @@ function formatSeconds(value: number): string {
   return t("console.time.seconds", { value });
 }
 
-function connectionStatusDescription(status: PlatformConnection["status"]): string {
+function connectionStatusDescription(connection: PlatformConnection): string {
   const descriptions: Record<PlatformConnection["status"], string> = {
     pending: t("console.connection_status_description.pending"),
     active: t("console.connection_status_description.active"),
@@ -1240,7 +1240,10 @@ function connectionStatusDescription(status: PlatformConnection["status"]): stri
     reauth_required: t("console.connection_status_description.reauth_required"),
     disconnected: t("console.connection_status_description.disconnected"),
   };
-  return descriptions[status];
+  const statusDescription = descriptions[connection.status];
+  if (!connection.status_reason) return statusDescription;
+  const reasonDescription = t(`console.connection_reason.${connection.status_reason}`);
+  return `${statusDescription} ${t("console.connection_reason_prefix", { reason: reasonDescription })}`;
 }
 
 function connectionRiskyActionsBlocked(status: PlatformConnection["status"]): boolean {
@@ -1963,7 +1966,7 @@ function messageFor(error: unknown): string {
           <strong>{{ platformLabel(connection.platform) }}</strong>
           <span>
             {{ connection.external_resource_id }}
-            <small>{{ connectionStatusDescription(connection.status) }}</small>
+            <small>{{ connectionStatusDescription(connection) }}</small>
           </span>
           <em :data-status="connection.status">{{ connectionStatusLabel(connection.status) }}</em>
           <button type="button" :disabled="busy || connection.status === 'active'" @click="runConnectionLifecycle(connection, 'reauthorize')">{{ t("console.connections.reauthorize") }}</button>

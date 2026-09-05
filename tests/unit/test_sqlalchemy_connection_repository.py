@@ -7,6 +7,7 @@ from uuid import uuid4
 import pytest
 from muxivo_console.domain.activity import Platform
 from muxivo_console.domain.audit import AuditEvent
+from muxivo_console.domain.connection_status_reason import ConnectionStatusReason
 from muxivo_console.domain.connections import ConnectionStatus, PlatformConnection
 from muxivo_console.infrastructure.persistence.connection_repository import (
     SqlAlchemyPlatformConnectionWriter,
@@ -131,7 +132,10 @@ async def test_conflict_becomes_safe_non_partial_failure() -> None:
 @pytest.mark.asyncio
 async def test_status_update_persists_idempotency_result_and_audit_atomically() -> None:
     database_session = FakeSession()
-    stored = connection().transition_to(ConnectionStatus.ACTIVE)
+    stored = connection().transition_to(
+        ConnectionStatus.ACTIVE,
+        reason=ConnectionStatusReason.HEALTHY,
+    )
 
     saved = await SqlAlchemyPlatformConnectionWriter(lambda: database_session).update_status(
         connection=stored,
@@ -151,3 +155,4 @@ async def test_status_update_persists_idempotency_result_and_audit_atomically() 
     assert idempotency_record.idempotency_key == "retry-1"
     assert idempotency_record.action == "reauthorize"
     assert idempotency_record.result_status == "active"
+    assert idempotency_record.result_reason == "healthy"

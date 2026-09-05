@@ -89,12 +89,25 @@ export type PlatformConnectionGrantedScope = {
   status: "pending" | "granted" | "requires_reauthorization" | "revoked";
 };
 
+export type PlatformConnectionStatusReason =
+  | "initial_pending"
+  | "healthy"
+  | "preflight_failed"
+  | "token_expired"
+  | "scopes_missing"
+  | "platform_unreachable"
+  | "resource_removed"
+  | "reauthorized"
+  | "revoked"
+  | "disconnected";
+
 export type PlatformConnection = {
   id: string;
   organization_id: string;
   platform: "discord" | "twitch" | "telegram";
   external_resource_id: string;
   status: "pending" | "active" | "degraded" | "reauth_required" | "disconnected";
+  status_reason: PlatformConnectionStatusReason | null;
   granted_scopes: PlatformConnectionGrantedScope[];
 };
 

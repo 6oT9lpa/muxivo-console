@@ -12,6 +12,7 @@ from muxivo_console.domain.connection_reconciliation import (
     ConnectionReconciliationDecision,
     ConnectionReconciliationReason,
 )
+from muxivo_console.domain.connection_status_reason import ConnectionStatusReason
 from muxivo_console.domain.connections import ConnectionStatus, PlatformConnection
 
 
@@ -105,6 +106,10 @@ async def test_reconciliation_updates_connection_statuses_and_records_audit() ->
         ConnectionStatus.REAUTH_REQUIRED,
         ConnectionStatus.ACTIVE,
     ]
+    assert [saved[0].status_reason for saved in lifecycle.saved] == [
+        ConnectionStatusReason.TOKEN_EXPIRED,
+        ConnectionStatusReason.HEALTHY,
+    ]
     assert {saved[1].action for saved in lifecycle.saved} == {"platform_connection.reconciled"}
 
 
@@ -159,3 +164,4 @@ async def test_reconciliation_moves_pending_connection_to_degraded_after_preflig
     assert result.changed == 1
     assert result.skipped == 0
     assert lifecycle.saved[0][0].status is ConnectionStatus.DEGRADED
+    assert lifecycle.saved[0][0].status_reason is ConnectionStatusReason.PREFLIGHT_FAILED

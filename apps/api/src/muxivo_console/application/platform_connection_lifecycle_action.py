@@ -2,6 +2,7 @@
 
 from enum import StrEnum
 
+from muxivo_console.domain.connection_status_reason import ConnectionStatusReason
 from muxivo_console.domain.connections import ConnectionStatus
 
 
@@ -23,3 +24,11 @@ class PlatformConnectionLifecycleAction(StrEnum):
     @property
     def audit_action(self) -> str:
         return f"platform_connection.{self.value}"
+
+    @property
+    def status_reason(self) -> ConnectionStatusReason:
+        if self is PlatformConnectionLifecycleAction.REAUTHORIZE:
+            return ConnectionStatusReason.REAUTHORIZED
+        if self is PlatformConnectionLifecycleAction.REVOKE:
+            return ConnectionStatusReason.REVOKED
+        return ConnectionStatusReason.DISCONNECTED
