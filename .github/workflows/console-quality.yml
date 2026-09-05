@@ -145,5 +145,5 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Validate Docker Compose configuration
-        run: docker compose -f docker-compose.dev.yml config
+      - name: Run development Docker Compose smoke
+        run: python scripts/development_composition_smoke.py

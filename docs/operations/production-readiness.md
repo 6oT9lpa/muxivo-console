@@ -49,7 +49,7 @@ completed.
 | Lifecycle | Discord token/scope reconciliation contract | Implemented |
 | Lifecycle | Twitch token/scope reconciliation contract | Implemented; service URL/signing key pending |
 | Quality | Production composition smoke with fail-fast env checks | Implemented in CI |
-| Quality | Development Docker Compose smoke | Implemented in CI |
+| Quality | Development Docker Compose smoke | CI validates compose configuration, builds the API image, starts Postgres/API, and checks `/healthz` plus `/readyz` |
 | Compliance | Privacy policy reviewed and published | Pending legal review |
 | Compliance | Terms reviewed and published | Pending legal review |
 | Compliance | Data inventory and retention schedule approved | Draft |

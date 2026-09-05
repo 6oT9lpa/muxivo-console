@@ -186,7 +186,10 @@ REQUIRED_CI_MARKERS: tuple[tuple[str, str], ...] = (
     ("npm run test:e2e", "frontend E2E command"),
     ("npm run build", "frontend production build command"),
     ("python -m alembic downgrade base", "migration rollback command"),
-    ("docker compose -f docker-compose.dev.yml config", "development compose smoke command"),
+    (
+        "python scripts/development_composition_smoke.py",
+        "development compose runtime smoke command",
+    ),
 )
 
 
