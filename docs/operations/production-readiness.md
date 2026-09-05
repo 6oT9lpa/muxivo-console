@@ -61,7 +61,7 @@ completed.
 | Operations | Incident runbook approved and exercised | Draft |
 | Operations | Backup/restore drill completed | Isolated database restore, migration rollback and restored-data application smoke passed on 2026-09-05; measured RTO/RPO and scheduled backup retention remain pending |
 | Deployment | Staging/prod domains provisioned | `beget.ame-life.com` remains the visual-check staging host; `muxivo.pro` now serves Console at `/` and Discord Activity at `/activity/`; API activation remains pending SMTP/Vault completion |
-| Deployment | Staging/prod OAuth credentials provisioned | Existing Discord/Twitch client credentials are staged in Vault with the new staging callback URLs; those callback URLs still need to be added in the provider dashboards |
+| Deployment | Staging/prod OAuth credentials provisioned | Staging callback values are staged in Vault; provider-dashboard registration is still required for both `beget.ame-life.com` and `muxivo.pro`, with production credentials kept in the production Vault path |
 | Secrets | KMS/secret manager selected and wired | HashiCorp Vault + Vault Agent selected; loopback TLS Vault, audit log, AppRole policies, generated application keys and Discord Control Agent are provisioned; Console activation awaits SMTP |
 
 ## Latest staging verification
@@ -430,9 +430,11 @@ Before staging:
 - optionally create staging Telegram Login OAuth credentials when Telegram sign-in is enabled;
 - optionally create production Telegram Login OAuth credentials when Telegram sign-in is enabled;
 - configure exact Discord redirect URI per environment:
-  `/api/v1/auth/discord/callback`;
+  `https://beget.ame-life.com/api/v1/auth/discord/callback` for staging and
+  `https://muxivo.pro/api/v1/auth/discord/callback` for production;
 - configure exact Twitch redirect URI per environment:
-  `/api/v1/auth/twitch/callback`;
+  `https://beget.ame-life.com/api/v1/auth/twitch/callback` for staging and
+  `https://muxivo.pro/api/v1/auth/twitch/callback` for production;
 - configure exact Google redirect URI per environment when enabled:
   `/api/v1/auth/google/callback`;
 - configure exact Yandex ID redirect URI per environment when enabled:
