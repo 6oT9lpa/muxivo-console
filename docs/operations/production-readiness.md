@@ -58,7 +58,7 @@ completed.
 | Compliance | Data inventory and retention schedule approved | Draft |
 | Operations | Incident runbook approved and exercised | Draft |
 | Operations | Backup/restore drill completed | Isolated database restore, migration rollback and restored-data application smoke passed on 2026-09-05; measured RTO/RPO and scheduled backup retention remain pending |
-| Deployment | Staging/prod domains provisioned | Temporary staging `beget.ame-life.com` serves frontend release `8e3db1b`; API source release `79cca30` and its Python runtime are staged, but the service remains stopped pending credential activation, and canonical production host is pending |
+| Deployment | Staging/prod domains provisioned | Temporary staging `beget.ame-life.com` serves frontend release `8e3db1b`; API source release `d22e079` and its Python runtime are staged, but the service remains stopped pending credential activation, and canonical production host is pending |
 | Deployment | Staging/prod OAuth credentials provisioned | Discord/Twitch OAuth enforced; Google/Yandex ID and Telegram Login adapters are implemented and remain disabled until their values are supplied |
 | Secrets | KMS/secret manager selected and wired | HashiCorp Vault + Vault Agent selected; Vault instance, AppRole policy and runtime wiring pending |
 
@@ -80,8 +80,8 @@ On 2026-09-05 the deployment was checked without changing application data:
   is absent;
 - `https://muxivo.pro/` returned HTTP `200`, confirming the existing Discord
   Activity host remained reachable;
-- the latest API source `79cca30` was staged at `/opt/muxivo-console` on the
-  local server, with a rollback copy at `/opt/muxivo-console.backup-79cca30`;
+- the latest API source `d22e079` was staged at `/opt/muxivo-console` on the
+  local server, with a rollback copy at `/opt/muxivo-console.backup-d22e079`;
 - the API runtime `/opt/muxivo-console/venv` was provisioned from the current
   `pyproject.toml`; imports and the Alembic CLI passed without starting the
   service;

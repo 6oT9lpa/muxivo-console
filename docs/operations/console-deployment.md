@@ -225,9 +225,9 @@ FRP exposes the existing Activity route on `18080` and the Console API route on
 local API service receives a complete staging credential set. A read-only
 verification on 2026-09-05 returned `200` for the staging frontend and `502`
 for `/healthz` and `/readyz`; the root `muxivo.pro` Activity returned `200` in
-the same check. The latest Console API source `79cca30` is staged at
+the same check. The latest Console API source `d22e079` is staged at
 `/opt/muxivo-console` on the local server, and the previous source is retained
-at `/opt/muxivo-console.backup-79cca30` for
+at `/opt/muxivo-console.backup-d22e079` for
 rollback. The frontend release `8e3db1b` is installed at
 `/srv/muxivo-console/web`, and its previous web root is retained at
 `/srv/muxivo-console/web.backup-8e3db1b` for rollback. The disabled
