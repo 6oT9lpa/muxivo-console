@@ -66,6 +66,7 @@ def test_smoke_runs_real_compose_stages_and_cleans_generated_environment(tmp_pat
         assert request.full_url in {
             "http://127.0.0.1:8000/healthz",
             "http://127.0.0.1:8000/readyz",
+            "http://127.0.0.1:8000/api/v1/auth/providers",
         }
         assert timeout > 0
         return nullcontext(SimpleNamespace(status=200))

@@ -17,7 +17,13 @@ logger = logging.getLogger("muxivo_console.development_composition_smoke")
 DEFAULT_MAX_ATTEMPTS = 60
 DEFAULT_POLL_INTERVAL_SECONDS = 1.0
 DEFAULT_HTTP_TIMEOUT_SECONDS = 2.0
-DEVELOPMENT_HEALTH_ENDPOINTS = ("/healthz", "/readyz")
+# Keep the smoke contract aligned with the endpoints a browser-facing Console
+# needs before it can render an authenticated surface.
+DEVELOPMENT_RUNTIME_ENDPOINTS = (
+    "/healthz",
+    "/readyz",
+    "/api/v1/auth/providers",
+)
 
 CommandRunner = Callable[..., object]
 HttpOpener = Callable[..., object]
@@ -79,7 +85,7 @@ def run_smoke(
         )
         logger.info(
             "development_composition_smoke.completed",
-            extra={"endpoint_count": len(DEVELOPMENT_HEALTH_ENDPOINTS)},
+            extra={"endpoint_count": len(DEVELOPMENT_RUNTIME_ENDPOINTS)},
         )
     finally:
         logger.info("development_composition_smoke.cleanup_started")
@@ -176,7 +182,7 @@ def _wait_for_health(
     for attempt in range(1, max_attempts + 1):
         statuses: dict[str, int] = {}
         try:
-            for endpoint in DEVELOPMENT_HEALTH_ENDPOINTS:
+            for endpoint in DEVELOPMENT_RUNTIME_ENDPOINTS:
                 statuses[endpoint] = _get_status(opener, endpoint)
             if all(status == 200 for status in statuses.values()):
                 logger.info(
