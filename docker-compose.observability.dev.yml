@@ -1,0 +1,19 @@
+services:
+  prometheus:
+    image: prom/prometheus:v2.55.1
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+      - --web.enable-lifecycle
+    ports:
+      - "127.0.0.1:9090:9090"
+    volumes:
+      - ./deploy/prometheus-console.dev.yml.example:/etc/prometheus/prometheus.yml:ro
+      - ./docs/operations/prometheus-alerts.yml:/etc/prometheus/rules/muxivo-console-alerts.yml:ro
+      - muxivo-console-dev-prometheus:/prometheus
+    depends_on:
+      api:
+        condition: service_healthy
+
+volumes:
+  muxivo-console-dev-prometheus:

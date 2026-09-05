@@ -104,6 +104,7 @@ def test_development_compose_keeps_redis_internal_and_binds_auth_state_to_it() -
     assert "MUXIVO_CONSOLE_RATE_LIMIT_BACKEND: redis" in compose
     assert "MUXIVO_CONSOLE_RATE_LIMIT_REDIS_URL: redis://redis:6379/0" in compose
     assert '"6379:6379"' not in compose
+    assert "http://127.0.0.1:8000/healthz" in compose
     assert "condition: service_healthy" in compose
 
 

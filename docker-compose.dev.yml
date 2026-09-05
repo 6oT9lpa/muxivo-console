@@ -38,6 +38,15 @@ services:
       - "8000:8000"
     volumes:
       - ./:/workspace
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "python -c \"import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/healthz', timeout=2)\"",
+        ]
+      interval: 2s
+      timeout: 3s
+      retries: 30
     depends_on:
       postgres:
         condition: service_healthy

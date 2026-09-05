@@ -54,6 +54,7 @@ completed.
 | Quality | Discord/Twitch Control API adapter contract tests | Implemented in CI with MockTransport; live sandbox fixtures pending |
 | Quality | GitHub Actions quality workflow | Implemented; backend, frontend, E2E, security scanners and Docker smoke are required on push and pull request |
 | Quality | Development Docker Compose smoke | CI validates compose configuration, builds the API image, starts Postgres/Redis/API with Redis-backed short-lived auth state, and checks `/healthz`, `/readyz` and `/api/v1/auth/providers` |
+| Quality | Development observability composition smoke | Local Prometheus composition starts against the internal API target, loads alert rules and verifies target health through the Prometheus API |
 | Compliance | Privacy policy reviewed and published | Pending legal review |
 | Compliance | Terms reviewed and published | Pending legal review |
 | Compliance | Data inventory and retention schedule approved | Draft |
@@ -109,6 +110,9 @@ The same verification pass produced the following local quality evidence:
   API bound to the internal Redis rate-limit and one-time-token store,
   `/healthz` and `/readyz` returned `200`, and the compose cleanup left no
   Console containers;
+- local observability composition smoke: Prometheus `v2.55.1` became ready,
+  `api:8000/metrics` reported target `health=up`, and the Prometheus rules API
+  exposed `MuxivoConsoleMetricsScrapeMissing`;
 - migration rollback smoke: successful on an isolated Postgres 16 container;
   migrations upgraded to head, downgraded to base, upgraded to head again,
   and the temporary container was removed;
