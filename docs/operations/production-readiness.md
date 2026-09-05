@@ -164,7 +164,8 @@ Before staging, fill in actual subprocessors:
 - Database provider: TBD.
 - Email delivery provider for verification/recovery: SMTP.BZ domain verification and non-delivery authentication probe passed; production secret-manager wiring and approved delivery test pending.
 - Error/metrics/logging provider: TBD.
-- KMS/secret manager provider: TBD.
+- KMS/secret manager provider: HashiCorp Vault selected; instance, region and
+  production policy wiring remain pending.
 
 ### User rights and requests
 

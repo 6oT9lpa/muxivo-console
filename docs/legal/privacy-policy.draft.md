@@ -51,9 +51,11 @@ contractual basis:
 
 - hosting provider: `TBD`;
 - database provider: `TBD`;
-- SMTP.BZ or another approved recovery-mail provider: `TBD`;
+- SMTP.BZ: recovery-mail delivery provider; processing region and contractual
+  terms require confirmation before publication;
 - monitoring, metrics and error provider: `TBD`;
-- secret manager/KMS provider: `TBD`.
+- HashiCorp Vault: selected secret-manager/KMS boundary; deployment region and
+  contractual terms require confirmation before publication.
 
 No provider may receive Console secrets through frontend code or unredacted
 application logs.
