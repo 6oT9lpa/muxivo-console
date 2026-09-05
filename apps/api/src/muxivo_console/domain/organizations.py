@@ -79,10 +79,13 @@ class OrganizationMembership:
         """Evaluate a policy request without consulting a platform service."""
         if request.actor_id != self.actor_id or request.organization_id != self.organization_id:
             return False
-        if not _role_supports(self.role, request):
-            return False
+        # Owners are the organization-wide administrative authority.  Resolve
+        # this before the role-specific capability matrix so a resource added
+        # to the matrix cannot accidentally exclude the owner role.
         if self.role is OrganizationRole.OWNER:
             return True
+        if not _role_supports(self.role, request):
+            return False
         return any(scope.allows(request) for scope in self.resource_scopes)
 
 

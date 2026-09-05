@@ -57,7 +57,7 @@ completed.
 | Compliance | Terms reviewed and published | Pending legal review |
 | Compliance | Data inventory and retention schedule approved | Draft |
 | Operations | Incident runbook approved and exercised | Draft |
-| Operations | Backup/restore drill completed | Isolated database restore and migration rollback probe passed on 2026-09-05; restored-data application smoke and RTO/RPO record pending |
+| Operations | Backup/restore drill completed | Isolated database restore, migration rollback and restored-data application smoke passed on 2026-09-05; measured RTO/RPO and scheduled backup retention remain pending |
 | Deployment | Staging/prod domains provisioned | Temporary staging `beget.ame-life.com` serves frontend release `8e3db1b`; API source release `79cca30` and its Python runtime are staged, but the service remains stopped pending credential activation, and canonical production host is pending |
 | Deployment | Staging/prod OAuth credentials provisioned | Discord/Twitch OAuth enforced; Google/Yandex ID and Telegram Login adapters are implemented and remain disabled until their values are supplied |
 | Secrets | KMS/secret manager selected and wired | HashiCorp Vault + Vault Agent selected; Vault instance, AppRole policy and runtime wiring pending |
@@ -455,9 +455,32 @@ changing the live `muxivo_console` database:
 
 This proves the database backup format, encryption boundary, isolated restore
 and migration rollback path. It is not the complete production gate yet:
-restored-data application smoke (login, organizations, memberships,
-connections, audit timeline and revoked-session behavior), plus measured RTO,
-RPO and scheduled backup retention, remain pending.
+measured RTO, RPO and scheduled backup retention remain pending.
+
+### Verified restored-data application smoke (2026-09-05)
+
+The same local-server drill was extended against a separate temporary database
+created from the encrypted restore. The application ran only on loopback and
+used synthetic fixture records; the live `muxivo_console` database and public
+services were not changed. The following checks passed:
+
+- `/healthz` returned `200` and `/readyz` returned `200` after the restored copy
+  was migrated to Alembic head;
+- e-mail/password login returned `204`;
+- organization listing, organization member listing, platform connection
+  listing and audit timeline each returned `200` and contained the restored
+  fixture data;
+- connection revoke returned `200` and persisted the safe
+  `reauth_required` state plus its audit event;
+- logout returned `204`, and the same browser session was rejected with `403`
+  after revocation;
+- the temporary database, login role, encrypted/decrypted backup material,
+  application log, loopback process and drill directory were verified absent
+  after cleanup.
+
+This closes the restored-data application smoke portion of the backup/restore
+gate. It does not provide a measured RTO/RPO result or prove scheduled backup
+retention, so those operational gates remain open.
 
 ## Remaining engineering follow-up
 

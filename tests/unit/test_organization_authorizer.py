@@ -142,3 +142,18 @@ def test_admin_can_manage_platform_connections_only_with_an_explicit_scope() -> 
 
     assert without_scope.allows(request) is False
     assert with_scope.allows(request) is True
+
+
+def test_owner_can_manage_platform_connections_without_an_explicit_scope() -> None:
+    actor_id = uuid4()
+    organization_id = uuid4()
+    request = AuthorizationRequest(
+        actor_id=actor_id,
+        organization_id=organization_id,
+        resource=AuthorizationResource.PLATFORM_CONNECTIONS,
+        action=AuthorizationAction.MANAGE,
+    )
+
+    owner = OrganizationMembership(actor_id, organization_id, OrganizationRole.OWNER)
+
+    assert owner.allows(request) is True
