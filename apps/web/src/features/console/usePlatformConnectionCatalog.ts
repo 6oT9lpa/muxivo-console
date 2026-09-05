@@ -223,6 +223,10 @@ export function usePlatformConnectionCatalog(
       );
       selectedConnectionCandidateId.value = "";
       connections.value = [connection, ...connections.value];
+      selectedConnectionId.value = connection.id;
+      if (connection.platform === "discord") {
+        selectedDiscordConnectionId.value = connection.id;
+      }
       syncSelectedConnectionCandidate();
       notice.value = t("console.notice.connection_pending", {
         platform: platformLabel(connection.platform),

@@ -139,6 +139,7 @@ describe("usePlatformConnectionCatalog", () => {
       },
     );
     expect(catalog.connections.value[0]?.status).toBe("pending");
+    expect(catalog.selectedConnectionId.value).toBe("server-1");
     expect(catalog.selectedConnectionCandidateId.value).toBe("");
   });
 

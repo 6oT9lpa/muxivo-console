@@ -108,6 +108,30 @@ describe("usePlatformDashboard", () => {
     expect(busy.value).toBe(false);
   });
 
+  it("loads read-only platform health through the selected connection boundary", async () => {
+    consoleApiMock.mockResolvedValue({
+      organization_id: "org-1",
+      platform: "discord",
+      signals: [
+        {
+          key: "discord.bot-latency",
+          display_name: "Bot latency",
+          value: "12 ms",
+          status: "operational",
+          latency_ms: 12,
+        },
+      ],
+    });
+    const { dashboard } = createDashboard();
+
+    await dashboard.loadPlatformHealth();
+
+    expect(consoleApiMock).toHaveBeenCalledWith(
+      "/api/v1/organizations/org-1/platforms/discord/health",
+    );
+    expect(dashboard.platformHealth.value?.signals[0]?.value).toBe("12 ms");
+  });
+
   it("appends audit pages without losing the active cursor", async () => {
     consoleApiMock
       .mockResolvedValueOnce({ items: [{ id: "event-1" }], next_cursor: "cursor-1" })

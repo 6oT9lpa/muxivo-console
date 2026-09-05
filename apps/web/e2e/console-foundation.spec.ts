@@ -181,6 +181,9 @@ test("sign-in, organization, connection lifecycle and security from the browser"
   await expect(connectionRow).toContainText("Read Discord server metadata");
   await expect(connectionRow).toContainText("Manage Discord server settings");
   await expect(connectionRow).toContainText("Granted");
+  await page.getByRole("button", { name: "Load health" }).click();
+  await expect(page.getByText("Bot latency")).toBeVisible();
+  await expect(page.getByText("12 ms")).toBeVisible();
 
   await page.getByRole("button", { name: "Load audit log" }).click();
   await expect(page.getByText("organization.created")).toBeVisible();
@@ -780,6 +783,24 @@ async function installConsoleApiMock(
       path === `/api/v1/organizations/${organizationId}/platform-connections`
     ) {
       return json(route, { items: state.connections, next_cursor: null });
+    }
+    if (
+      method === "GET" &&
+      path === `/api/v1/organizations/${organizationId}/platforms/discord/health`
+    ) {
+      return json(route, {
+        organization_id: organizationId,
+        platform: "discord",
+        signals: [
+          {
+            key: "discord.bot-latency",
+            display_name: "Bot latency",
+            value: "12 ms",
+            status: "operational",
+            latency_ms: 12,
+          },
+        ],
+      });
     }
     if (
       method === "POST" &&
