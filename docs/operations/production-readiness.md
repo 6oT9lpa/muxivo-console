@@ -105,6 +105,9 @@ The same verification pass produced the following local quality evidence:
 - migration rollback smoke: successful on an isolated Postgres 16 container;
   migrations upgraded to head, downgraded to base, upgraded to head again,
   and the temporary container was removed;
+- live development API probe: `/healthz`, `/readyz` and the authentication
+  provider catalog returned `200`; the development response also exposed the
+  expected CSP, `nosniff` and `no-referrer` browser headers;
 - legacy-auth, secret, browser-token, audit-coverage, readiness-artifact,
   application-layout and production-composition checks: all passed;
 - read-only host preflight confirmed active Nginx/FRP on the VPS and active
