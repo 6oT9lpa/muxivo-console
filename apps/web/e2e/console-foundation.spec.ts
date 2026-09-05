@@ -4,6 +4,9 @@ import { expect, test, type Page, type Route } from "@playwright/test";
 const organizationId = "11111111-1111-4111-8111-111111111111";
 const ownerMembershipId = "22222222-2222-4222-8222-222222222222";
 const ownerUserId = "33333333-3333-4333-8333-333333333333";
+const memberMembershipId = "77777777-7777-4777-8777-777777777777";
+const memberUserId = "88888888-8888-4888-8888-888888888888";
+const memberScopeId = "99999999-9999-4999-8999-999999999999";
 const connectionId = "44444444-4444-4444-8444-444444444444";
 const browserSessionId = "55555555-5555-4555-8555-555555555555";
 const invitationId = "66666666-6666-4666-8666-666666666666";
@@ -33,6 +36,7 @@ test("sign-in, create organization, connect Discord, audit and revoke from the b
     authenticated: false,
     registeredEmail: "",
     organizations: [] as unknown[],
+    organizationMembers: [] as unknown[],
     invitations: [] as unknown[],
     connections: [] as PlatformConnection[],
     auditEvents: [] as unknown[],
@@ -126,6 +130,20 @@ test("sign-in, create organization, connect Discord, audit and revoke from the b
   await expect(page.getByRole("status")).toContainText("Organization invitation revoked.");
   await expect(membersSection).toContainText("Revoked");
 
+  const memberRow = membersSection.locator("li").filter({ hasText: "Scoped member" });
+  await expect(memberRow).toContainText("Viewer");
+  await memberRow.locator("select").selectOption("moderator");
+  await expect(page.getByRole("status")).toContainText("Organization member updated.");
+  await expect(memberRow).toContainText("Moderator");
+  const memberScope = memberRow.getByRole("checkbox").first();
+  await expect(memberScope).toBeChecked();
+  await memberScope.uncheck();
+  await expect(page.getByRole("status")).toContainText("Organization member updated.");
+  await expect(memberRow).toContainText("0 scopes");
+  await memberRow.getByRole("button", { name: "Remove" }).click();
+  await expect(page.getByRole("status")).toContainText("Organization member removed.");
+  await expect(memberRow).toHaveCount(0);
+
   const connectionWizard = page.locator(
     "section[aria-labelledby='connection-wizard-heading']",
   );
@@ -164,6 +182,8 @@ test("sign-in, create organization, connect Discord, audit and revoke from the b
 
   await page.getByRole("button", { name: "Load audit log" }).click();
   await expect(page.getByText("organization.created")).toBeVisible();
+  await expect(page.getByText("organization.member.update")).toHaveCount(2);
+  await expect(page.getByText("organization.member.remove")).toHaveCount(1);
   await expect(page.getByText("platform_connection.connect")).toBeVisible();
 
   await connectionRow.getByRole("button", { name: "Revoke" }).click();
@@ -226,6 +246,7 @@ test("authenticated Console shell stays usable in a narrow viewport", async ({ p
         },
       },
     ],
+    organizationMembers: [],
     invitations: [],
     connections: [],
     auditEvents: [],
@@ -268,6 +289,7 @@ test("sign-in dialog keeps the Activity-style black surface in light theme", asy
     authenticated: false,
     registeredEmail: "",
     organizations: [],
+    organizationMembers: [],
     invitations: [],
     connections: [],
     auditEvents: [],
@@ -312,6 +334,7 @@ test("auth modal exposes the anti-enumeration recovery flow", async ({ page }) =
     authenticated: false,
     registeredEmail: "",
     organizations: [] as unknown[],
+    organizationMembers: [],
     invitations: [] as unknown[],
     connections: [] as PlatformConnection[],
     auditEvents: [],
@@ -378,6 +401,7 @@ async function installConsoleApiMock(
     authenticated: boolean;
     registeredEmail: string;
     organizations: unknown[];
+    organizationMembers: unknown[];
     invitations: unknown[];
     connections: PlatformConnection[];
     auditEvents: unknown[];
@@ -495,22 +519,68 @@ async function installConsoleApiMock(
           },
         },
       ];
+      state.organizationMembers = [
+        {
+          id: ownerMembershipId,
+          organization_id: organizationId,
+          user_id: ownerUserId,
+          display_name: "Creator",
+          role: "owner",
+          resource_scopes: [],
+        },
+        {
+          id: memberMembershipId,
+          organization_id: organizationId,
+          user_id: memberUserId,
+          display_name: "Scoped member",
+          role: "viewer",
+          resource_scopes: [
+            {
+              id: memberScopeId,
+              resource: "console.control_modules",
+              action: "read",
+            },
+          ],
+        },
+      ];
       state.auditEvents.push(auditEvent("organization.created", "organization", organizationId));
       return json(route, organization, 201);
     }
     if (method === "GET" && path === `/api/v1/organizations/${organizationId}/members`) {
-      return json(route, {
-        items: [
-          {
-            id: ownerMembershipId,
-            organization_id: organizationId,
-            user_id: ownerUserId,
-            display_name: "Creator",
-            role: "owner",
-            resource_scopes: [],
-          },
-        ],
-      });
+      return json(route, { items: state.organizationMembers });
+    }
+    if (method === "PUT" && path === `/api/v1/organizations/${organizationId}/members/${memberUserId}`) {
+      const payload = JSON.parse(request.postData() ?? "{}");
+      expect(payload.role).toBe("moderator");
+      const updated = {
+        ...(state.organizationMembers.find(
+          (item) => (item as { user_id?: string }).user_id === memberUserId,
+        ) as Record<string, unknown>),
+        role: payload.role,
+        resource_scopes: payload.resource_scopes.map(
+          (scope: { resource: string; action: string }) => ({
+            id: payload.resource_scopes.length ? memberScopeId : null,
+            resource: scope.resource,
+            action: scope.action,
+          }),
+        ),
+      };
+      state.organizationMembers = state.organizationMembers.map((item) =>
+        (item as { user_id?: string }).user_id === memberUserId ? updated : item,
+      );
+      state.auditEvents.push(
+        auditEvent("organization.member.update", "organization_member", memberUserId),
+      );
+      return json(route, updated);
+    }
+    if (method === "DELETE" && path === `/api/v1/organizations/${organizationId}/members/${memberUserId}`) {
+      state.organizationMembers = state.organizationMembers.filter(
+        (item) => (item as { user_id?: string }).user_id !== memberUserId,
+      );
+      state.auditEvents.push(
+        auditEvent("organization.member.remove", "organization_member", memberUserId),
+      );
+      return empty(route);
     }
     if (method === "GET" && path === `/api/v1/organizations/${organizationId}/member-invitations`) {
       return json(route, { items: state.invitations });
