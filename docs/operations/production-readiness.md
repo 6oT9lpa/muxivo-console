@@ -102,6 +102,9 @@ The same verification pass produced the following local quality evidence:
   Docker Desktop Linux engine; Postgres/API built and started, `/healthz` and
   `/readyz` returned `200`, and the compose cleanup left no Console
   containers;
+- migration rollback smoke: successful on an isolated Postgres 16 container;
+  migrations upgraded to head, downgraded to base, upgraded to head again,
+  and the temporary container was removed;
 - legacy-auth, secret, browser-token, audit-coverage, readiness-artifact,
   application-layout and production-composition checks: all passed;
 - read-only host preflight confirmed active Nginx/FRP on the VPS and active
