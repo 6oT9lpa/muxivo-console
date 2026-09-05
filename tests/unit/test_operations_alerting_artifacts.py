@@ -117,6 +117,16 @@ def test_vault_templates_and_policies_cannot_cross_environment_boundaries() -> N
     assert 'path "secret/data/muxivo-console/production"' not in staging_policy
     assert 'path "secret/data/muxivo-console/production"' in production_policy
     assert 'path "secret/data/muxivo-console/staging"' not in production_policy
+    for template in (staging_template, production_template):
+        assert 'printf "%q" (printf "%v" .Data.data.smtp_port)' in template
+        assert 'printf "%q" (printf "%v" .Data.data.smtp_starttls)' in template
+        assert (
+            'printf "%q" (printf "%v" '
+            '.Data.data.connection_reconciliation_enabled)'
+        ) in template
+        assert (
+            'printf "%q" (printf "%v" .Data.data.security_cleanup_enabled)'
+        ) in template
 
 
 def test_staging_vault_server_is_loopback_tls_and_persistent() -> None:
