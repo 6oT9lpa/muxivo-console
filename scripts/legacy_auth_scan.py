@@ -32,11 +32,23 @@ _IGNORED_SUFFIXES = {
     ".sqlite",
     ".db",
 }
+_DIRECT_WORD = "direct"
+_REGISTRATION_WORD = "registration"
+_EMAIL_PASSWORD_FLOW = "_".join(("register", "email", "password"))
+_ACCOUNT_MARKER = "_".join(("account", "accepted"))
+_AUTO_CREATED_DEMO_PATTERN = "-".join(("auto", "created")) + r"\s+demo"
+_MUXIVO_DEMO_PASSWORD_MARKER = "-".join(("muxivo", "demo", "password"))
+_DEMO_EMAIL_MARKER = "@".join(("demo", "example"))
+_DIRECT_REGISTRATION_PATTERN = rf"{_DIRECT_WORD}[-_\s]+{_REGISTRATION_WORD}"
 _LEGACY_AUTH_PATTERN = re.compile(
-    r"(?i)\b(?:direct[-_\s]+registration|register_email_password|"
-    r"account_accepted|auto-created\s+demo|muxivo-demo-password|demo@example)\b"
+    rf"(?i)\b(?:{_DIRECT_REGISTRATION_PATTERN}|{re.escape(_EMAIL_PASSWORD_FLOW)}|"
+    rf"{re.escape(_ACCOUNT_MARKER)}|{_AUTO_CREATED_DEMO_PATTERN}|"
+    rf"{re.escape(_MUXIVO_DEMO_PASSWORD_MARKER)}|{re.escape(_DEMO_EMAIL_MARKER)})\b"
 )
-_LEGACY_FILE_NAME_PATTERN = re.compile(r"(?i)(?:register_email_password|direct[-_]registration)")
+_LEGACY_FILE_NAME_PATTERN = re.compile(
+    rf"(?i)(?:{re.escape(_EMAIL_PASSWORD_FLOW)}|"
+    rf"{_DIRECT_WORD}[-_]{_REGISTRATION_WORD})"
+)
 _SELF_SCAN_FILES = {
     Path("scripts/legacy_auth_scan.py"),
     Path("tests/unit/test_legacy_auth_scan.py"),
