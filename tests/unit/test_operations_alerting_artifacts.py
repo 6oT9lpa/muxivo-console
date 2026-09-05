@@ -130,6 +130,6 @@ def test_staging_vault_server_is_loopback_tls_and_persistent() -> None:
     assert 'tls_min_version = "tls13"' in server_config
     assert "User=vault" in server_unit
     assert "ExecStart=/usr/local/bin/vault server -config=/etc/vault.d/vault.hcl" in server_unit
-    assert "ReadWritePaths=/var/lib/vault" in server_unit
+    assert "ReadWritePaths=/var/lib/vault /var/log/vault" in server_unit
     assert "CapabilityBoundingSet=CAP_IPC_LOCK" in server_unit
     assert "ExecStart=/usr/local/bin/vault agent" in agent_unit

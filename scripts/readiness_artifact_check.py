@@ -157,7 +157,10 @@ REQUIRED_SUPPORTING_ARTIFACTS: tuple[tuple[str, tuple[tuple[str, str], ...]], ..
         "deploy/vault-server.service",
         (
             ("User=vault", "dedicated Vault service user"),
-            ("ReadWritePaths=/var/lib/vault", "isolated Vault data path"),
+            (
+                "ReadWritePaths=/var/lib/vault /var/log/vault",
+                "isolated Vault data and audit paths",
+            ),
             ("ExecStart=/usr/local/bin/vault server", "Vault server process"),
         ),
     ),

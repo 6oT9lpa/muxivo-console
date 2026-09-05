@@ -34,7 +34,7 @@ RestrictSUIDSGID=true
 RestrictNamespaces=true
 CapabilityBoundingSet=CAP_IPC_LOCK
 AmbientCapabilities=CAP_IPC_LOCK
-ReadWritePaths=/var/lib/vault
+ReadWritePaths=/var/lib/vault /var/log/vault
 RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
 
 [Install]
