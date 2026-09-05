@@ -147,9 +147,40 @@ REQUIRED_SUPPORTING_ARTIFACTS: tuple[tuple[str, tuple[tuple[str, str], ...]], ..
         ),
     ),
     (
+        "deploy/console.env.production.ctmpl.example",
+        (
+            (
+                'secret "secret/data/muxivo-console/production"',
+                "production Vault KV path",
+            ),
+            (
+                "MUXIVO_CONSOLE_EMAIL_ENCRYPTION_KEY",
+                "encrypted e-mail key mapping",
+            ),
+            (
+                "MUXIVO_CONSOLE_SESSION_TOKEN_PEPPER",
+                "session pepper mapping",
+            ),
+            (
+                "MUXIVO_CONSOLE_PASSWORD_RECOVERY_SMTP_PASSWORD",
+                "SMTP password mapping",
+            ),
+        ),
+    ),
+    (
         "deploy/vault-policy.hcl.example",
         (
             ('path "secret/data/muxivo-console/staging"', "staging Vault policy path"),
+            ('capabilities = ["read"]', "read-only Vault policy"),
+        ),
+    ),
+    (
+        "deploy/vault-policy.production.hcl.example",
+        (
+            (
+                'path "secret/data/muxivo-console/production"',
+                "production Vault policy path",
+            ),
             ('capabilities = ["read"]', "read-only Vault policy"),
         ),
     ),

@@ -156,10 +156,15 @@ Required boundaries:
 
 The repository artifacts are
 `deploy/vault-agent.hcl.example`, `deploy/console.env.ctmpl.example`,
-`deploy/vault-policy.hcl.example` and
-`deploy/muxivo-console-vault-agent.service`. The decision is recorded; the
-external Vault instance, AppRole bootstrap and real secret population remain
-deployment actions.
+`deploy/console.env.production.ctmpl.example`,
+`deploy/vault-policy.hcl.example`, `deploy/vault-policy.production.hcl.example`
+and `deploy/muxivo-console-vault-agent.service`. The staging template/policy
+are restricted to the staging KV path, while the production template/policy
+are restricted to the production KV path. The deployment procedure must copy
+only the matching template to `/etc/muxivo-console/console.env.ctmpl`; a
+staging template is never a valid production secret source. The decision is
+recorded; the external Vault instance, AppRole bootstrap and real secret
+population remain deployment actions.
 
 E-mail ownership verification is part of the current Console authentication
 flow. The public registration endpoint creates only a short-lived pending

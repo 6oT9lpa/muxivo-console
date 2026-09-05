@@ -92,3 +92,19 @@ def test_development_observability_composition_is_loopback_only_and_loads_rules(
     assert "prometheus-console.dev.yml.example" in compose
     assert "prometheus-alerts.yml" in compose
     assert "condition: service_healthy" in compose
+
+
+def test_vault_templates_and_policies_cannot_cross_environment_boundaries() -> None:
+    staging_template = Path("deploy/console.env.ctmpl.example").read_text()
+    production_template = Path("deploy/console.env.production.ctmpl.example").read_text()
+    staging_policy = Path("deploy/vault-policy.hcl.example").read_text()
+    production_policy = Path("deploy/vault-policy.production.hcl.example").read_text()
+
+    assert 'secret "secret/data/muxivo-console/staging"' in staging_template
+    assert 'secret "secret/data/muxivo-console/production"' not in staging_template
+    assert 'secret "secret/data/muxivo-console/production"' in production_template
+    assert 'secret "secret/data/muxivo-console/staging"' not in production_template
+    assert 'path "secret/data/muxivo-console/staging"' in staging_policy
+    assert 'path "secret/data/muxivo-console/production"' not in staging_policy
+    assert 'path "secret/data/muxivo-console/production"' in production_policy
+    assert 'path "secret/data/muxivo-console/staging"' not in production_policy

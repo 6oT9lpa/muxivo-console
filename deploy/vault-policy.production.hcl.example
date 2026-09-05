@@ -1,0 +1,6 @@
+# Read-only policy for the Muxivo Console production Vault Agent role.
+# Keep this role and path separate from staging; never grant a shared policy.
+
+path "secret/data/muxivo-console/production" {
+  capabilities = ["read"]
+}
