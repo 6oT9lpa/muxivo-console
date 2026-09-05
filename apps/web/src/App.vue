@@ -164,6 +164,7 @@ const availableAuthProviders = ref<AuthProvider[]>([]);
 const browserSessions = ref<BrowserSession[]>([]);
 const loginIdentities = ref<LoginIdentity[]>([]);
 const organizations = ref<OrganizationListItem[]>([]);
+const organizationsLoaded = ref(false);
 const organizationInvitations = ref<OrganizationInvitation[]>([]);
 const selectedOrganizationId = ref(
   typeof window !== "undefined"
@@ -652,6 +653,7 @@ async function signOut() {
     confirmNewPassword.value = "";
     connections.value = [];
     organizations.value = [];
+    organizationsLoaded.value = false;
     organizationInvitations.value = [];
     selectedOrganizationId.value = "";
     organizationMembers.value = [];
@@ -763,6 +765,7 @@ async function revokeAllSessions() {
     newPassword.value = "";
     confirmNewPassword.value = "";
     organizations.value = [];
+    organizationsLoaded.value = false;
     organizationInvitations.value = [];
     selectedOrganizationId.value = "";
     clearInvitationToken();
@@ -882,6 +885,7 @@ async function loadOrganizations(preferredOrganizationId = selectedOrganizationI
     resetOrganizationWorkspace();
     notice.value = messageFor(error);
   } finally {
+    organizationsLoaded.value = true;
     busy.value = false;
   }
 }
@@ -1949,9 +1953,30 @@ function messageFor(error: unknown): string {
           <p>{{ t("console.overview.description") }}</p>
         </div>
       </div>
-      <h2>{{ t("console.overview.create_title") }}</h2>
-      <p>{{ t("console.overview.create_description") }}</p>
-      <form @submit.prevent="createOrganization"><label>{{ t("console.overview.name") }}<input v-model="organizationName" maxlength="128" required /></label><button :disabled="busy">{{ busy ? t("console.overview.creating") : t("console.overview.create_button") }}</button></form>
+      <div v-if="!organizationsLoaded" class="identity-link" role="status">
+        <h2>{{ t("console.overview.loading_title") }}</h2>
+        <p>{{ t("console.overview.loading_description") }}</p>
+      </div>
+      <div v-else-if="!organizations.length" class="identity-link">
+        <h2>{{ t("console.overview.create_title") }}</h2>
+        <p>{{ t("console.overview.create_description") }}</p>
+        <form @submit.prevent="createOrganization"><label>{{ t("console.overview.name") }}<input v-model="organizationName" maxlength="128" required /></label><button :disabled="busy">{{ busy ? t("console.overview.creating") : t("console.overview.create_button") }}</button></form>
+      </div>
+      <div v-else class="identity-link">
+        <span class="eyebrow">{{ t("console.overview.active_eyebrow") }}</span>
+        <h2>{{ activeOrganization?.organization.name }}</h2>
+        <p>{{ t("console.overview.active_description", { slug: activeOrganization?.organization.slug ?? "" }) }}</p>
+        <OrganizationSwitcher
+          id="console-overview-organization-select"
+          v-model="selectedOrganizationId"
+          :organizations="organizations"
+          :disabled="busy"
+          @change="selectOrganization"
+        />
+        <button type="button" :disabled="busy" @click="scrollToConsoleSection('connections')">
+          {{ t("console.overview.open_connections") }}
+        </button>
+      </div>
       <div class="identity-provider-grid">
         <div class="identity-link">
           <h3>{{ t("console.overview.discord_identity") }}</h3>

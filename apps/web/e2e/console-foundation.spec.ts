@@ -103,10 +103,13 @@ test("sign-in, create organization, connect Discord, audit and revoke from the b
   await expect(page.getByRole("status")).toContainText(
     "Organization Creator community is ready",
   );
-  const organizationSwitcher = page
-    .locator(".identity-link")
-    .filter({ hasText: "Active organization" })
-    .locator("select");
+  await expect(
+    page.locator("#console-overview").getByRole("heading", { name: "Create an organization" }),
+  ).toHaveCount(0);
+  await expect(
+    page.locator("#console-overview").getByRole("heading", { name: "Creator community" }),
+  ).toBeVisible();
+  const organizationSwitcher = page.locator("#console-connections-organization-select");
   await expect(organizationSwitcher).toHaveValue(organizationId);
   await expect
     .poll(() =>
