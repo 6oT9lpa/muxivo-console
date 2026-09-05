@@ -37,6 +37,7 @@ completed.
 | Security | Browser contracts checked for platform token exposure | Implemented in CI |
 | Security | Secret scan in CI | Implemented |
 | Security | Audit coverage review for sensitive Foundation actions | Implemented in CI |
+| Security | Header, redaction and browser-token regression tests | Implemented in CI |
 | Security | Recent authentication refresh and gates for password change, identity unlink and sensitive writes | Implemented |
 | Security | Scheduled cleanup for expired sessions and recovery transactions | Implemented |
 | Observability | `/metrics` scraped and alert rules configured | Metrics endpoint and alert rules implemented; scraper backend pending |
@@ -49,6 +50,7 @@ completed.
 | Lifecycle | Discord token/scope reconciliation contract | Implemented |
 | Lifecycle | Twitch token/scope reconciliation contract | Implemented; service URL/signing key pending |
 | Quality | Production composition smoke with fail-fast env checks | Implemented in CI |
+| Quality | Discord/Twitch Control API adapter contract tests | Implemented in CI with MockTransport; live sandbox fixtures pending |
 | Quality | Development Docker Compose smoke | CI validates compose configuration, builds the API image, starts Postgres/API, and checks `/healthz` plus `/readyz` |
 | Compliance | Privacy policy reviewed and published | Pending legal review |
 | Compliance | Terms reviewed and published | Pending legal review |
