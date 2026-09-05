@@ -6176,6 +6176,179 @@ input[type="checkbox"]:disabled { cursor: not-allowed; opacity: 0.46; }
   font-weight: 700;
 }
 
+/* Keep the authentication surface in the same theme as the Console shell. */
+.theme-light .login-overlay {
+  background: rgba(246, 247, 251, 0.86);
+}
+
+.theme-light .login-panel {
+  color: #18181b;
+  background:
+    radial-gradient(circle at 16% 0%, rgba(88, 101, 242, 0.08), transparent 35%),
+    #ffffff;
+  border-color: #e4e4e7;
+  box-shadow:
+    0 32px 100px rgba(15, 23, 42, 0.18),
+    0 0 0 1px rgba(15, 23, 42, 0.035) inset;
+}
+
+.theme-light .login-panel h2 {
+  color: #09090b;
+}
+
+.theme-light .auth-panel-heading > p {
+  color: #52525b;
+}
+
+.theme-light .auth-mode-tabs {
+  border-bottom-color: #e4e4e7;
+}
+
+.theme-light .auth-mode-tabs .auth-mode-tab {
+  color: #71717a;
+}
+
+.theme-light .auth-mode-tabs .auth-mode-tab.active,
+.theme-light .auth-mode-tabs .auth-mode-tab[aria-selected="true"] {
+  color: #18181b;
+}
+
+.theme-light .auth-field-control {
+  background: #fafafa;
+  border-color: #d4d4d8;
+}
+
+.theme-light .auth-field-control:focus-within {
+  background: #ffffff;
+  border-color: color-mix(in srgb, var(--accent) 80%, #a1a1aa);
+}
+
+.theme-light .auth-field input {
+  color: #18181b;
+}
+
+.theme-light .auth-field input::placeholder {
+  color: #a1a1aa;
+}
+
+.theme-light .auth-field input:disabled {
+  color: #71717a;
+}
+
+.theme-light .auth-field label {
+  color: #71717a;
+}
+
+.theme-light .auth-field.is-focused label {
+  color: #4f46e5;
+}
+
+.theme-light .auth-field-action {
+  color: #3730a3;
+  background: rgba(88, 101, 242, 0.1);
+  border-color: rgba(88, 101, 242, 0.35);
+}
+
+.theme-light .auth-field-action:hover:not(:disabled) {
+  color: #312e81;
+  background: rgba(88, 101, 242, 0.18);
+}
+
+.theme-light .auth-field-error {
+  color: #b91c1c;
+}
+
+.theme-light .auth-field-hint,
+.theme-light .auth-success-message {
+  color: #15803d;
+}
+
+.theme-light .auth-secondary-submit {
+  color: #18181b;
+  background: #f4f4f5;
+  border-color: #d4d4d8;
+}
+
+.theme-light .auth-secondary-submit:hover:not(:disabled) {
+  background: #e4e4e7;
+  border-color: #a1a1aa;
+}
+
+.theme-light .auth-secondary-submit .auth-spinner {
+  border-color: rgba(24, 24, 27, 0.22);
+}
+
+.theme-light .auth-inline-link {
+  color: #4f46e5;
+}
+
+.theme-light .auth-inline-link:hover {
+  color: #3730a3;
+}
+
+.theme-light .auth-notice,
+.theme-light .auth-provider-notice {
+  color: #1d4ed8;
+  background: rgba(59, 130, 246, 0.08);
+  border-color: rgba(96, 165, 250, 0.3);
+}
+
+.theme-light .auth-verification-block,
+.theme-light .auth-subflow {
+  background: #f8fafc;
+  border-color: #d4d4d8;
+}
+
+.theme-light .auth-subflow-heading h3,
+.theme-light .auth-providers h3 {
+  color: #18181b;
+}
+
+.theme-light .auth-subflow-heading p,
+.theme-light .auth-providers > p {
+  color: #52525b;
+}
+
+.theme-light .auth-or {
+  color: #71717a;
+}
+
+.theme-light .auth-or::before,
+.theme-light .auth-or::after {
+  background: #e4e4e7;
+}
+
+.theme-light .auth-provider-button {
+  color: #52525b;
+  background: #fafafa;
+  border-color: #e4e4e7;
+}
+
+.theme-light .auth-provider-button:hover:not(:disabled) {
+  color: #18181b;
+  background: #ffffff;
+  border-color: #a1a1aa;
+}
+
+.theme-light .auth-provider-button.is-available {
+  color: #18181b;
+  border-color: rgba(88, 101, 242, 0.42);
+}
+
+.theme-light .auth-provider-button small {
+  color: #71717a;
+}
+
+.theme-light .close-login {
+  color: #71717a;
+}
+
+.theme-light .close-login:hover {
+  color: #18181b;
+  background: #f4f4f5;
+  border-color: #d4d4d8;
+}
+
 .close-login {
   position: absolute;
   top: 18px;

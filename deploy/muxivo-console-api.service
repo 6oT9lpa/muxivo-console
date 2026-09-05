@@ -4,6 +4,7 @@ Documentation=https://muxivo.pro/healthz
 Wants=network-online.target
 Requires=muxivo-console-vault-agent.service
 After=network-online.target postgresql.service muxivo-console-vault-agent.service
+ConditionPathExists=/run/muxivo-console-vault-agent/console.env
 
 [Service]
 Type=simple
@@ -12,7 +13,6 @@ Group=muxivo-console
 WorkingDirectory=/opt/muxivo-console
 Environment=PYTHONUNBUFFERED=1
 Environment=PYTHONDONTWRITEBYTECODE=1
-ConditionPathExists=/run/muxivo-console-vault-agent/console.env
 LoadCredential=console_env:/run/muxivo-console-vault-agent/console.env
 EnvironmentFile=/run/credentials/%N/console_env
 ExecStartPre=/opt/muxivo-console/venv/bin/python -m alembic -c /opt/muxivo-console/alembic.ini upgrade head

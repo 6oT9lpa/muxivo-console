@@ -388,7 +388,7 @@ test("authenticated Console shell stays usable in a narrow viewport", async ({ p
   ).toBe(false);
 });
 
-test("sign-in dialog keeps the Activity-style black surface in light theme", async ({ page }) => {
+test("sign-in dialog follows the selected light theme", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await installConsoleApiMock(page, {
     authenticated: false,
@@ -426,10 +426,10 @@ test("sign-in dialog keeps the Activity-style black surface in light theme", asy
     };
   });
 
-  expect(styleState.panelBackgroundColor).toBe("rgb(5, 5, 5)");
-  expect(styleState.panelColor).toBe("rgb(244, 244, 245)");
-  expect(styleState.titleColor).toBe("rgb(250, 250, 250)");
-  expect(styleState.descriptionColor).toBe("rgb(161, 161, 170)");
+  expect(styleState.panelBackgroundColor).toBe("rgb(255, 255, 255)");
+  expect(styleState.panelColor).toBe("rgb(24, 24, 27)");
+  expect(styleState.titleColor).toBe("rgb(9, 9, 11)");
+  expect(styleState.descriptionColor).toBe("rgb(82, 82, 91)");
   expect(styleState.shaderBackgroundImage).toContain("radial-gradient");
   expect(
     await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth),
