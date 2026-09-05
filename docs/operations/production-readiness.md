@@ -52,7 +52,8 @@ completed.
 | Lifecycle | Twitch token/scope reconciliation contract | Implemented; service URL/signing key pending |
 | Quality | Production composition smoke with fail-fast env checks | Implemented in CI |
 | Quality | Discord/Twitch Control API adapter contract tests | Implemented in CI with MockTransport; live sandbox fixtures pending |
-| Quality | Development Docker Compose smoke | CI validates compose configuration, builds the API image, starts Postgres/API, and checks `/healthz` plus `/readyz` |
+| Quality | GitHub Actions quality workflow | Implemented; backend, frontend, E2E, security scanners and Docker smoke are required on push and pull request |
+| Quality | Development Docker Compose smoke | CI validates compose configuration, builds the API image, starts Postgres/API, and checks `/healthz`, `/readyz` and `/api/v1/auth/providers` |
 | Compliance | Privacy policy reviewed and published | Pending legal review |
 | Compliance | Terms reviewed and published | Pending legal review |
 | Compliance | Data inventory and retention schedule approved | Draft |
@@ -94,7 +95,7 @@ On 2026-09-05 the deployment was checked without changing application data:
 
 The same verification pass produced the following local quality evidence:
 
-- backend regression: `489 passed`;
+- backend regression: `490 passed`;
 - frontend unit suite: `64 passed`;
 - frontend production build: successful;
 - browser E2E suite: `6 passed`;
