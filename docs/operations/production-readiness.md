@@ -110,7 +110,7 @@ The same verification pass produced the following local quality evidence:
   reauthorization/disconnect transitions, connection health loading after a
   newly connected resource is selected automatically, risky-action blocking
   and their audit/session outcomes;
-- sibling Twitch Control API contract and service tests: `22 passed`, including
+- sibling Twitch Control API contract and service tests: `23 passed`, including
   signed assertion rejection, Helix app-token caching/refresh, ownership
   verification, candidate discovery, health and reconciliation;
 - local development Docker Compose smoke: successful after restarting the
