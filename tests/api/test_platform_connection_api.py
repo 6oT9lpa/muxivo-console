@@ -1,12 +1,12 @@
 from uuid import UUID, uuid4
 
 from fastapi.testclient import TestClient
+from muxivo_console.application.connect_platform_connection import (
+    PlatformConnectionConnectRejectedError,
+)
 from muxivo_console.application.list_platform_connections import PlatformConnectionPage
 from muxivo_console.application.manage_platform_connection_lifecycle import (
     PlatformConnectionLifecycleRejectedError,
-)
-from muxivo_console.application.connect_platform_connection import (
-    PlatformConnectionConnectRejectedError,
 )
 from muxivo_console.application.resolve_browser_session import BrowserSessionPrincipal
 from muxivo_console.domain.activity import Platform

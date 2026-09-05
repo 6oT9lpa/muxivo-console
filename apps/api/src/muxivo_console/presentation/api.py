@@ -48,6 +48,11 @@ from muxivo_console.application.complete_password_recovery import (
     CompletePasswordRecoveryCommand,
     PasswordRecoveryCompletionRejectedError,
 )
+from muxivo_console.application.connect_platform_connection import (
+    ConnectPlatformConnection,
+    ConnectPlatformConnectionCommand,
+    PlatformConnectionConnectRejectedError,
+)
 from muxivo_console.application.create_browser_session import IssuedBrowserSession
 from muxivo_console.application.create_organization import (
     CreateOrganization,
@@ -153,11 +158,6 @@ from muxivo_console.application.reauthenticate_browser_session import (
     BrowserSessionReauthenticationRejectedError,
     ReauthenticateBrowserSession,
     ReauthenticateBrowserSessionCommand,
-)
-from muxivo_console.application.connect_platform_connection import (
-    PlatformConnectionConnectRejectedError,
-    ConnectPlatformConnection,
-    ConnectPlatformConnectionCommand,
 )
 from muxivo_console.application.request_password_recovery import (
     RequestPasswordRecovery,

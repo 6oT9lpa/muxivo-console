@@ -3,10 +3,10 @@ from uuid import UUID, uuid4
 
 import pytest
 from muxivo_console.application.connect_platform_connection import (
-    PlatformConnectionConnectRejectedError,
-    PlatformConnectionVerifierRouter,
     ConnectPlatformConnection,
     ConnectPlatformConnectionCommand,
+    PlatformConnectionConnectRejectedError,
+    PlatformConnectionVerifierRouter,
 )
 from muxivo_console.domain.activity import Platform
 from muxivo_console.domain.audit import AuditEvent

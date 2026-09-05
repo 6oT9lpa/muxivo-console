@@ -3,6 +3,9 @@
 import logging
 from dataclasses import dataclass
 
+from muxivo_console.application.connect_platform_connection_command import (
+    ConnectPlatformConnectionCommand,
+)
 from muxivo_console.application.platform_connection_connect_error import (
     PlatformConnectionConnectRejectedError,
 )
@@ -11,9 +14,6 @@ from muxivo_console.application.ports import (
     OrganizationAuthorizer,
     PlatformConnectionVerifier,
     PlatformConnectionWriter,
-)
-from muxivo_console.application.connect_platform_connection_command import (
-    ConnectPlatformConnectionCommand,
 )
 from muxivo_console.domain.audit import AuditEvent
 from muxivo_console.domain.authorization import (
@@ -58,7 +58,7 @@ class ConnectPlatformConnection:
         )
         if not decision.allowed:
             logger.warning(
-            "platform_connection.connect.denied_rbac",
+                "platform_connection.connect.denied_rbac",
                 extra={
                     "actor_id": str(command.actor_id),
                     "organization_id": str(command.organization_id),
@@ -78,7 +78,7 @@ class ConnectPlatformConnection:
         )
         if not verified:
             logger.warning(
-            "platform_connection.connect.denied_ownership",
+                "platform_connection.connect.denied_ownership",
                 extra={
                     "actor_id": str(command.actor_id),
                     "organization_id": str(command.organization_id),
@@ -112,7 +112,7 @@ class ConnectPlatformConnection:
         )
         if not created:
             logger.warning(
-            "platform_connection.connect.conflict",
+                "platform_connection.connect.conflict",
                 extra={
                     "actor_id": str(command.actor_id),
                     "organization_id": str(command.organization_id),

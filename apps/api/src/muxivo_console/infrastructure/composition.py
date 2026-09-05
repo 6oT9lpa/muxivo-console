@@ -12,6 +12,10 @@ from muxivo_console.application.complete_email_password_registration import (
 from muxivo_console.application.complete_identity_link import CompleteIdentityLink
 from muxivo_console.application.complete_oauth_login import CompleteOAuthLogin
 from muxivo_console.application.complete_password_recovery import CompletePasswordRecovery
+from muxivo_console.application.connect_platform_connection import (
+    ConnectPlatformConnection,
+    PlatformConnectionVerifierRouter,
+)
 from muxivo_console.application.create_browser_session import CreateBrowserSession
 from muxivo_console.application.create_organization import CreateOrganization
 from muxivo_console.application.get_platform_ai_moderation_policy import (
@@ -67,10 +71,6 @@ from muxivo_console.application.platform_connection_candidate_catalog_router imp
 )
 from muxivo_console.application.reauthenticate_browser_session import ReauthenticateBrowserSession
 from muxivo_console.application.reconcile_platform_connections import ReconcilePlatformConnections
-from muxivo_console.application.connect_platform_connection import (
-    PlatformConnectionVerifierRouter,
-    ConnectPlatformConnection,
-)
 from muxivo_console.application.request_password_recovery import RequestPasswordRecovery
 from muxivo_console.application.require_recent_authentication import RequireRecentAuthentication
 from muxivo_console.application.resolve_browser_session import ResolveBrowserSession
