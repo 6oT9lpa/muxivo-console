@@ -11,7 +11,14 @@ from pathlib import Path
 from urllib.error import URLError
 from urllib.request import Request, urlopen
 
-from scripts.development_composition_smoke import development_environment_content
+try:
+    from scripts.development_composition_smoke import development_environment_content
+except ModuleNotFoundError as error:
+    # CI invokes this file directly, where the repository root is not on
+    # sys.path. Keep module imports working for unit tests as well.
+    if error.name != "scripts":
+        raise
+    from development_composition_smoke import development_environment_content
 
 logger = logging.getLogger("muxivo_console.observability_composition_smoke")
 
