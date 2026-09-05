@@ -45,11 +45,11 @@ completed.
 | Lifecycle | Periodic platform connection reconciliation worker | Implemented; unavailable Control API probes fail closed to `DEGRADED/PLATFORM_UNREACHABLE` and do not abort the remaining batch |
 | Lifecycle | Idempotency keys for retry-safe lifecycle actions | Implemented |
 | Lifecycle | Persisted and localized reason for every connection state transition | Implemented; legacy rows remain readable with a neutral fallback, and reconciliation contracts reject reason/status mismatches |
-| Lifecycle | Browser-safe platform resource candidate discovery | Console contract/UI implemented; Discord Control API endpoint is deployed on the Activity host; Twitch Control API endpoint pending |
-| Lifecycle | Discord/Twitch ownership verification before registration | Discord implemented and signed end-to-end; Twitch Control API config pending |
-| Lifecycle | Discord/Twitch browser-safe connection health adapters | Discord implemented and signed end-to-end; Twitch Control API config pending |
+| Lifecycle | Browser-safe platform resource candidate discovery | Console contract/UI implemented; Discord endpoint is deployed on the Activity host; Twitch endpoint implemented in the sibling Control API service, deployment pending |
+| Lifecycle | Discord/Twitch ownership verification before registration | Discord implemented and signed end-to-end; Twitch Helix ownership verification implemented, service deployment/config pending |
+| Lifecycle | Discord/Twitch browser-safe connection health adapters | Discord implemented and signed end-to-end; Twitch Helix health probe implemented, service deployment/config pending |
 | Lifecycle | Discord token/scope reconciliation contract | Implemented |
-| Lifecycle | Twitch token/scope reconciliation contract | Implemented; signing key generated and staged, service URL/implementation pending |
+| Lifecycle | Twitch token/scope reconciliation contract | Console contract and signed Twitch reconciliation endpoint implemented; service URL/signing-key deployment pending |
 | Quality | Production composition smoke with fail-fast env checks | Implemented in CI |
 | Quality | Discord/Twitch Control API adapter contract tests | Implemented in CI with MockTransport; live sandbox fixtures pending |
 | Quality | GitHub Actions quality workflow | Implemented; backend, frontend, E2E, security scanners and Docker smoke are required on push and pull request |
@@ -60,7 +60,7 @@ completed.
 | Compliance | Data inventory and retention schedule approved | Draft |
 | Operations | Incident runbook approved and exercised | Draft |
 | Operations | Backup/restore drill completed | Isolated database restore, migration rollback and restored-data application smoke passed on 2026-09-05; measured RTO/RPO and scheduled backup retention remain pending |
-| Deployment | Staging/prod domains provisioned | Temporary staging `beget.ame-life.com` serves frontend release `35c7fab`; API source release `4247079` and its Python runtime are staged, but the service remains stopped pending credential activation, and canonical production host is pending |
+| Deployment | Staging/prod domains provisioned | `beget.ame-life.com` remains the visual-check staging host; `muxivo.pro` now serves Console at `/` and Discord Activity at `/activity/`; API activation remains pending SMTP/Vault completion |
 | Deployment | Staging/prod OAuth credentials provisioned | Existing Discord/Twitch client credentials are staged in Vault with the new staging callback URLs; those callback URLs still need to be added in the provider dashboards |
 | Secrets | KMS/secret manager selected and wired | HashiCorp Vault + Vault Agent selected; loopback TLS Vault, audit log, AppRole policies, generated application keys and Discord Control Agent are provisioned; Console activation awaits SMTP |
 
@@ -68,7 +68,7 @@ completed.
 
 On 2026-09-05 the deployment was checked without changing application data:
 
-- `https://beget.ame-life.com/` served the Console frontend release `35c7fab`
+- `https://beget.ame-life.com/` served the Console frontend release `89e8002`
   with HTTP `200`;
 - the current asset `assets/index-trFUJZKv.js` returned HTTP `200`, the public
   HTML referenced it, the security orchestration and locale logging markers
@@ -81,8 +81,9 @@ On 2026-09-05 the deployment was checked without changing application data:
 - `https://beget.ame-life.com/healthz` and `/readyz` returned HTTP `502` because
   the API unit is intentionally disabled while `/etc/muxivo-console/console.env`
   is absent;
-- `https://muxivo.pro/` returned HTTP `200`, confirming the existing Discord
-  Activity host remained reachable;
+- `https://muxivo.pro/` returned HTTP `200` for the Console root;
+- `https://muxivo.pro/activity/` returned HTTP `200` for the Discord Activity,
+  and its current `/activity/assets/` JavaScript and CSS returned HTTP `200`;
 - the latest API source `4247079` was staged at `/opt/muxivo-console` on the
   local server, with a rollback source copy at
   `/opt/muxivo-console.backup-4247079`;
@@ -93,15 +94,15 @@ On 2026-09-05 the deployment was checked without changing application data:
 - the API runtime `/opt/muxivo-console/venv` was provisioned from the current
   `pyproject.toml`; imports and the Alembic CLI passed without starting the
   service;
-- the frontend release `35c7fab` was installed at `/srv/muxivo-console/web`,
-  with a rollback copy at `/srv/muxivo-console/web.backup-35c7fab`;
+- the frontend release `89e8002` was installed at `/srv/muxivo-console/web`,
+  with a rollback copy at `/srv/muxivo-console/web.backup-console-root-20260905`;
 - a source scan found no deprecated registration implementation markers in the
   deployed `apps` and `tests` trees.
 
 The same verification pass produced the following local quality evidence:
 
-- backend regression: `498 passed`;
-- frontend unit suite: `65 passed`;
+- backend regression: `510 passed`;
+- frontend unit suite: `73 passed`;
 - frontend production build: successful;
 - browser E2E suite: `7 passed`; the browser flows verify member role update,
   scoped access removal, member removal, security recent-authentication,
@@ -109,6 +110,9 @@ The same verification pass produced the following local quality evidence:
   reauthorization/disconnect transitions, connection health loading after a
   newly connected resource is selected automatically, risky-action blocking
   and their audit/session outcomes;
+- sibling Twitch Control API contract and service tests: `22 passed`, including
+  signed assertion rejection, Helix app-token caching/refresh, ownership
+  verification, candidate discovery, health and reconciliation;
 - local development Docker Compose smoke: successful after restarting the
   Docker Desktop Linux engine; Postgres/Redis/API built and started with the
   API bound to the internal Redis rate-limit and one-time-token store,
@@ -145,9 +149,10 @@ The same verification pass produced the following local quality evidence:
   returns the expected fail-closed `502`.
 
 The `502` responses are an intentional readiness boundary, not a successful
-production deployment. The remaining activation inputs are the SMTP.BZ
+production API deployment. The remaining activation inputs are the SMTP.BZ
 credentials, provider-dashboard callback registration for Discord/Twitch, and
-an implemented/reachable Twitch Control API.
+deployment of the now-implemented Twitch Control API with its dedicated Vault
+path and private service URL.
 
 ## Secret-manager decision
 
@@ -534,10 +539,11 @@ retention, so those operational gates remain open.
 
 - Wire the installed loopback Redis service into the staging secret-manager
   environment, then provision the shared edge rate-limit backend for prod.
-- Implement and stage the signed `/connection-candidates` endpoint in the Twitch
-  Control API; keep the Discord endpoint contract-tested against the Console
-  deployment runbook.
-- Configure Twitch Control API service URL and signing key in staging/prod.
+- Deploy and stage the signed Twitch Control API endpoints from the sibling
+  `muxivo-twitch-control` service; keep the Discord endpoint contract-tested
+  against the Console deployment runbook.
+- Configure the private Twitch Control API service URL and signing key in
+  staging/prod through its dedicated Vault Agent path.
 - Store the verified SMTP.BZ credential in the staging/prod secret manager and run one explicitly approved recovery delivery test.
 - Load `docs/operations/prometheus-alerts.yml` into the selected metrics backend.
 - Expand Discord/Twitch contract tests against live sandbox Control API fixtures

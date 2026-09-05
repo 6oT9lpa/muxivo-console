@@ -13,6 +13,7 @@ Browser
   -> FRP remote port 18081
   -> local FRP client
   -> 127.0.0.1:8010 Muxivo Console API
+  -> 127.0.0.1:8012 Muxivo Twitch Control API (private)
   -> 127.0.0.1:5432 dedicated muxivo_console database
 ```
 
@@ -98,9 +99,10 @@ The Control API URL is the URL of the platform service, not an OAuth URL. The
 Discord Control API is now deployed with the Activity host and is configured as
 `https://muxivo.pro`; its HMAC signing key is a new random 32-byte secret,
 stored in a dedicated Vault path and rendered only to the Discord service and
-Console. The Twitch signing key has also been generated and staged, but the
-Twitch repository currently has no deployable Control API service, so a Twitch
-Control API URL cannot be invented or activated until that service exists.
+Console. The sibling `muxivo-twitch-control` service now contains the signed
+Twitch candidate, ownership-verification, health and reconciliation endpoints.
+Its staging URL remains a private loopback/service-network URL until the
+dedicated systemd unit and Vault Agent path are installed.
 
 SMTP.BZ login/password are the SMTP relay credentials from the SMTP.BZ
 connection page. They are not the REG.RU account password and not an ordinary
@@ -236,12 +238,14 @@ upstreams.
 The final host serves Console static assets from `/srv/muxivo-console/web`,
 proxies Activity under `/activity/` and its non-versioned `/api/*` paths to FRP
 `18080`, proxies Console `/api/v1`, `/healthz` and `/readyz` to FRP `18081`,
-and does not expose `/metrics` publicly.
+and does not expose `/metrics` publicly. The Twitch Control API is a separate
+loopback service on the local host; it is not mounted into the public Nginx
+surface and is called by Console through an approved private HTTPS service URL.
 
 As of 2026-09-05, the temporary staging host is `beget.ame-life.com`. Its DNS
 record resolves to `138.124.119.238`, its dedicated certificate covers the
 hostname, and the active HTTPS vhost serves the Console frontend release
-`35c7fab`. The canonical production Console host is `muxivo.pro`; it shares the
+`89e8002`. The canonical production Console host is `muxivo.pro`; it shares the
 verified domain certificate with Activity and is not the staging host. The
 staging host is suitable for visual checks only until the API, FRP route and
 production environment are provisioned.
@@ -257,13 +261,14 @@ FRP exposes the existing Activity route on `18080` and the Console API route on
 `18081`, and the API route is intentionally failing closed with `502` until the
 local API service receives a complete staging credential set. A read-only
 verification on 2026-09-05 returned `200` for the staging frontend and `502`
-for `/healthz` and `/readyz`; the root `muxivo.pro` Activity returned `200` in
-the same check. The latest Console API source `4247079` is staged at
+for `/healthz` and `/readyz`; `muxivo.pro/` returned the Console frontend and
+`muxivo.pro/activity/` returned the Activity frontend with `200` in the same
+check. The latest Console API source `4247079` is staged at
 `/opt/muxivo-console` on the local server, and the previous source is retained
 at `/opt/muxivo-console.backup-4247079` for
-rollback. The frontend release `35c7fab` is installed at
+rollback. The frontend release `89e8002` is installed at
 `/srv/muxivo-console/web`, and its previous web root is retained at
-`/srv/muxivo-console/web.backup-35c7fab` for rollback. The disabled
+`/srv/muxivo-console/web.backup-console-root-20260905` for rollback. The disabled
 `muxivo-console-api.service` now has its Python runtime provisioned, but no
 Vault-rendered credential file yet, because the staging Vault record is still
 missing the SMTP.BZ credentials. PostgreSQL and the `muxivo_console` database
@@ -334,8 +339,8 @@ public deployment still requires external values and services:
 - registration of the staging callback URLs in the Discord and Twitch OAuth
   provider dashboards (the existing host client credentials are already staged
   in Vault);
-- a reachable signed Twitch Control API and its service URL; the Twitch source
-  directory currently contains no deployable Control API implementation;
+- deployment of the signed Twitch Control API service and its private service
+  URL through the dedicated Vault Agent path;
 - monitoring backend, measured RTO/RPO and scheduled backup retention, plus
   legal approval of the policy and terms drafts. The isolated database
   restore/migration and restored-data application smoke are recorded in the
