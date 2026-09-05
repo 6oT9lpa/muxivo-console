@@ -2,6 +2,7 @@
 import { Check, Languages } from "@lucide/vue";
 import { computed, nextTick, onBeforeUnmount, onMounted, ref } from "vue";
 import { type Locale, useI18n } from "../../i18n";
+import { clientLogger } from "../../utils/clientLogger";
 
 const { locale, setLocale, t } = useI18n();
 const menuRoot = ref<HTMLElement | null>(null);
@@ -15,7 +16,7 @@ const localeOptions = computed<Array<{ code: Locale; label: string }>>(() => [
 
 function toggleMenu(): void {
   isOpen.value = !isOpen.value;
-  console.debug(`[i18n] Locale menu ${isOpen.value ? "opened" : "closed"}`);
+  clientLogger.info("i18n.locale_menu.toggled", { is_open: isOpen.value });
 }
 
 async function selectLocale(selectedLocale: Locale): Promise<void> {

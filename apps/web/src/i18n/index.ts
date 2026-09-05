@@ -1,6 +1,7 @@
 import { readonly, ref } from "vue";
 import en from "./locales/en.json";
 import ru from "./locales/ru.json";
+import { clientLogger } from "../utils/clientLogger";
 
 export type Locale = "en" | "ru";
 export type TranslationParams = Record<string, string | number>;
@@ -29,7 +30,7 @@ export function t(key: string, params: TranslationParams = {}): string {
   if (!message) {
     if (!missingKeys.has(key)) {
       missingKeys.add(key);
-      console.warn(`[i18n] Missing translation key: ${key}`);
+      clientLogger.warn("i18n.translation.missing", { key });
     }
     return key;
   }
@@ -40,7 +41,7 @@ export function setLocale(locale: Locale): void {
   activeLocale.value = locale;
   if (typeof document !== "undefined") document.documentElement.lang = locale;
   if (typeof window !== "undefined") window.localStorage.setItem(STORAGE_KEY, locale);
-  console.info(`[Muxivo Console] locale.changed`, { locale });
+  clientLogger.info("i18n.locale.changed", { locale });
 }
 
 export function initializeLocale(): void {
