@@ -86,7 +86,7 @@ import type {
 } from "./features/console/types";
 
 type AuthProvider = "discord" | "twitch" | "telegram" | "google" | "yandex";
-type ExternalIdentityProvider = Exclude<AuthProvider, "telegram">;
+type ExternalIdentityProvider = AuthProvider;
 const AUTH_PROVIDERS = new Set<AuthProvider>([
   "discord",
   "twitch",
@@ -141,6 +141,7 @@ const identityLinkedProvider = ref<ExternalIdentityProvider | null>(
         const provider = new URL(window.location.href).searchParams.get("identity_linked");
         return provider === "discord" ||
           provider === "twitch" ||
+          provider === "telegram" ||
           provider === "google" ||
           provider === "yandex"
           ? provider
@@ -561,6 +562,7 @@ async function signInWithProvider(provider: AuthProvider): Promise<void> {
   const authorizationPaths: Partial<Record<AuthProvider, string>> = {
     discord: "/api/v1/auth/discord/authorizations",
     twitch: "/api/v1/auth/twitch/authorizations",
+    telegram: "/api/v1/auth/telegram/authorizations",
     google: "/api/v1/auth/google/authorizations",
     yandex: "/api/v1/auth/yandex/authorizations",
   };
@@ -709,6 +711,10 @@ async function linkDiscord() {
 
 async function linkTwitch() {
   await linkExternalIdentity("twitch");
+}
+
+async function linkTelegram() {
+  await linkExternalIdentity("telegram");
 }
 
 async function linkGoogle() {
@@ -1964,6 +1970,15 @@ function messageFor(error: unknown): string {
             :disabled="busy || !availableAuthProviders.includes('twitch')"
             @click="linkTwitch"
           >{{ t("console.overview.link_twitch") }}</button>
+        </div>
+        <div class="identity-link">
+          <h3>{{ t("console.overview.telegram_identity") }}</h3>
+          <p>{{ t("console.overview.telegram_description") }}</p>
+          <button
+            type="button"
+            :disabled="busy || !availableAuthProviders.includes('telegram')"
+            @click="linkTelegram"
+          >{{ t("console.overview.link_telegram") }}</button>
         </div>
         <div class="identity-link">
           <h3>{{ t("console.overview.google_identity") }}</h3>

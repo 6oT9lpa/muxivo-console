@@ -33,7 +33,7 @@ def test_prometheus_alert_rules_cover_foundation_operational_risks() -> None:
 def test_auth_failure_alert_covers_all_configured_oauth_callbacks() -> None:
     alert_rules = Path("docs/operations/prometheus-alerts.yml").read_text()
 
-    assert "(discord|twitch)/.*" in alert_rules
+    assert "(discord|twitch|telegram|google|yandex)/.*" in alert_rules
 
 
 def test_development_bootstrap_does_not_bypass_registration_lifecycle() -> None:

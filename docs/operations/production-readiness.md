@@ -59,7 +59,7 @@ completed.
 | Operations | Incident runbook approved and exercised | Draft |
 | Operations | Backup/restore drill completed | Drill procedure documented; staging exercise pending |
 | Deployment | Staging/prod domains provisioned | Temporary staging `beget.ame-life.com` serves frontend release `eb08bd6`; API source is staged at `fc221a2`, pending credential/service activation, and canonical production host is pending |
-| Deployment | Staging/prod OAuth credentials provisioned | Discord/Twitch OAuth enforced; Google/Yandex ID adapters are implemented and remain disabled until their values are supplied |
+| Deployment | Staging/prod OAuth credentials provisioned | Discord/Twitch OAuth enforced; Google/Yandex ID and Telegram Login adapters are implemented and remain disabled until their values are supplied |
 | Secrets | KMS/secret manager selected and wired | HashiCorp Vault + Vault Agent selected; Vault instance, AppRole policy and runtime wiring pending |
 
 ## Latest staging verification
@@ -348,6 +348,8 @@ Before staging:
 - optionally create production Google OAuth credentials when Google sign-in is enabled;
 - optionally create staging Yandex ID OAuth credentials when Yandex sign-in is enabled;
 - optionally create production Yandex ID OAuth credentials when Yandex sign-in is enabled;
+- optionally create staging Telegram Login OAuth credentials when Telegram sign-in is enabled;
+- optionally create production Telegram Login OAuth credentials when Telegram sign-in is enabled;
 - configure exact Discord redirect URI per environment:
   `/api/v1/auth/discord/callback`;
 - configure exact Twitch redirect URI per environment:
@@ -356,6 +358,11 @@ Before staging:
   `/api/v1/auth/google/callback`;
 - configure exact Yandex ID redirect URI per environment when enabled:
   `/api/v1/auth/yandex/callback`;
+- configure the exact Telegram Login redirect URI per environment when enabled:
+  /api/v1/auth/telegram/callback;
+- configure the Telegram Login bot's allowed domain with BotFather before
+  enabling the provider; the API validates the signed ID token issuer,
+  audience, expiry and JWKS signature server-side;
 - store OAuth client secrets in the selected secret manager only.
 
 ## KMS/secret manager decision

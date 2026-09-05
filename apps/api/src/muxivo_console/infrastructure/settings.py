@@ -24,6 +24,7 @@ from muxivo_console.infrastructure.security_cleanup_settings import SecurityClea
 from muxivo_console.infrastructure.smtp_password_recovery_settings import (
     SmtpPasswordRecoverySettings,
 )
+from muxivo_console.infrastructure.telegram_oauth_settings import TelegramOAuthSettings
 from muxivo_console.infrastructure.twitch_control_settings import TwitchControlSettings
 from muxivo_console.infrastructure.twitch_oauth_settings import TwitchOAuthSettings
 from muxivo_console.infrastructure.yandex_oauth_settings import YandexOAuthSettings
@@ -38,6 +39,7 @@ __all__ = [
     "RateLimitSettings",
     "SecurityCleanupSettings",
     "SmtpPasswordRecoverySettings",
+    "TelegramOAuthSettings",
     "TwitchControlSettings",
     "TwitchOAuthSettings",
     "YandexOAuthSettings",
@@ -58,6 +60,7 @@ class ConsoleSettings:
     twitch_oauth: TwitchOAuthSettings | None = None
     google_oauth: GoogleOAuthSettings | None = None
     yandex_oauth: YandexOAuthSettings | None = None
+    telegram_oauth: TelegramOAuthSettings | None = None
     rate_limit: RateLimitSettings | None = None
     cors_allowed_origins: tuple[str, ...] = ()
     password_recovery_smtp: SmtpPasswordRecoverySettings | None = None
@@ -94,6 +97,7 @@ class ConsoleSettings:
         twitch_oauth = _twitch_oauth_settings(values, environment=runtime_environment)
         google_oauth = _google_oauth_settings(values, environment=runtime_environment)
         yandex_oauth = _yandex_oauth_settings(values, environment=runtime_environment)
+        telegram_oauth = _telegram_oauth_settings(values, environment=runtime_environment)
         password_recovery_smtp = _optional_password_recovery_smtp(
             values, environment=runtime_environment
         )
@@ -116,6 +120,7 @@ class ConsoleSettings:
             twitch_oauth=twitch_oauth,
             google_oauth=google_oauth,
             yandex_oauth=yandex_oauth,
+            telegram_oauth=telegram_oauth,
             rate_limit=rate_limit,
             cors_allowed_origins=_optional_cors_allowed_origins(
                 values,
@@ -278,6 +283,25 @@ def _yandex_oauth_settings(
     if oauth_values is None:
         return None
     return YandexOAuthSettings(*oauth_values)
+
+
+def _telegram_oauth_settings(
+    values: Mapping[str, str], *, environment: str
+) -> TelegramOAuthSettings | None:
+    oauth_values = _optional_external_oauth_values(
+        values,
+        environment=environment,
+        names=(
+            "MUXIVO_TELEGRAM_OAUTH_CLIENT_ID",
+            "MUXIVO_TELEGRAM_OAUTH_CLIENT_SECRET",
+            "MUXIVO_TELEGRAM_OAUTH_REDIRECT_URI",
+        ),
+        provider_label="Telegram OAuth",
+        expected_path="/api/v1/auth/telegram/callback",
+    )
+    if oauth_values is None:
+        return None
+    return TelegramOAuthSettings(*oauth_values)
 
 
 def _optional_external_oauth_values(

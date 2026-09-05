@@ -215,6 +215,7 @@ from muxivo_console.infrastructure.security_cleanup_worker import (
 from muxivo_console.infrastructure.session_fingerprint import HmacSessionFingerprintHasher
 from muxivo_console.infrastructure.settings import ConsoleSettings
 from muxivo_console.infrastructure.structured_logging import install_structured_logging
+from muxivo_console.infrastructure.telegram_oauth import TelegramOAuthClient
 from muxivo_console.infrastructure.twitch_connection_candidate_catalog import (
     TwitchPlatformConnectionCandidateCatalog,
 )
@@ -714,10 +715,15 @@ def create_production_app(
     yandex_identity_link_complete = None
     yandex_login_start = None
     yandex_login_complete = None
+    telegram_identity_link_start = None
+    telegram_identity_link_complete = None
+    telegram_login_start = None
+    telegram_login_complete = None
     discord_authorization_url = None
     twitch_authorization_url = None
     google_authorization_url = None
     yandex_authorization_url = None
+    telegram_authorization_url = None
     identity_linker = None
     opaque_secrets = None
     if any(
@@ -727,6 +733,7 @@ def create_production_app(
             settings.twitch_oauth,
             settings.google_oauth,
             settings.yandex_oauth,
+            settings.telegram_oauth,
         )
     ):
         identity_linker = LinkVerifiedIdentity(
@@ -910,6 +917,47 @@ def create_production_app(
             sessions=session_creator,
         )
         yandex_authorization_url = yandex_oauth_client.authorization_url
+    if settings.telegram_oauth is not None:
+        telegram_oauth_client = TelegramOAuthClient(
+            client_id=settings.telegram_oauth.client_id,
+            client_secret=settings.telegram_oauth.client_secret,
+            redirect_uri=settings.telegram_oauth.redirect_uri,
+        )
+        telegram_identity_link_start = BeginIdentityLink(
+            identifiers=identifiers,
+            clock=clock,
+            user_statuses=user_statuses,
+            token_issuer=SecureOpaqueSessionTokenIssuer(),
+            token_hasher=session_hasher,
+            secrets=opaque_secrets,
+            transactions=SqlAlchemyIdentityLinkTransactionWriter(sessions),
+        )
+        telegram_identity_link_complete = CompleteIdentityLink(
+            clock=clock,
+            token_hasher=session_hasher,
+            secrets=opaque_secrets,
+            transactions=SqlAlchemyIdentityLinkTransactionConsumer(sessions),
+            provider_client=telegram_oauth_client,
+            linker=identity_linker,
+        )
+        telegram_login_start = BeginOAuthLogin(
+            identifiers=identifiers,
+            clock=clock,
+            token_issuer=SecureOpaqueSessionTokenIssuer(),
+            token_hasher=session_hasher,
+            secrets=opaque_secrets,
+            transactions=SqlAlchemyOAuthLoginTransactionWriter(sessions),
+        )
+        telegram_login_complete = CompleteOAuthLogin(
+            clock=clock,
+            token_hasher=session_hasher,
+            secrets=opaque_secrets,
+            transactions=SqlAlchemyOAuthLoginTransactionConsumer(sessions),
+            provider_client=telegram_oauth_client,
+            identities=SqlAlchemyLoginIdentityReader(sessions),
+            sessions=session_creator,
+        )
+        telegram_authorization_url = telegram_oauth_client.authorization_url
     return create_app(
         control_modules_use_case=modules,
         registration_verification_start_use_case=registration_verification_start,
@@ -960,10 +1008,15 @@ def create_production_app(
         yandex_identity_link_complete=yandex_identity_link_complete,
         yandex_login_start=yandex_login_start,
         yandex_login_complete=yandex_login_complete,
+        telegram_identity_link_start=telegram_identity_link_start,
+        telegram_identity_link_complete=telegram_identity_link_complete,
+        telegram_login_start=telegram_login_start,
+        telegram_login_complete=telegram_login_complete,
         discord_authorization_url=discord_authorization_url,
         twitch_authorization_url=twitch_authorization_url,
         google_authorization_url=google_authorization_url,
         yandex_authorization_url=yandex_authorization_url,
+        telegram_authorization_url=telegram_authorization_url,
         session_resolver=ResolveBrowserSession(
             clock=clock,
             token_hasher=session_hasher,

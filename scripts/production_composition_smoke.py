@@ -32,6 +32,11 @@ def production_smoke_environment() -> dict[str, str]:
         "MUXIVO_TWITCH_OAUTH_REDIRECT_URI": (
             "https://console.muxivo.test/api/v1/auth/twitch/callback"
         ),
+        "MUXIVO_TELEGRAM_OAUTH_CLIENT_ID": "telegram-bot-client-id",
+        "MUXIVO_TELEGRAM_OAUTH_CLIENT_SECRET": "telegram-client-secret",
+        "MUXIVO_TELEGRAM_OAUTH_REDIRECT_URI": (
+            "https://console.muxivo.test/api/v1/auth/telegram/callback"
+        ),
         "MUXIVO_CONSOLE_RATE_LIMIT_REDIS_URL": "redis://rate-limit.internal:6379/0",
         "MUXIVO_CONSOLE_PASSWORD_RECOVERY_SMTP_HOST": "smtp.internal",
         "MUXIVO_CONSOLE_PASSWORD_RECOVERY_SMTP_PORT": "587",
@@ -62,6 +67,7 @@ def run_production_composition_smoke(
         "/api/v1/organizations",
         "/api/v1/auth/discord/callback",
         "/api/v1/auth/twitch/callback",
+        "/api/v1/auth/telegram/callback",
     ):
         if required_route not in route_paths:
             raise AssertionError(f"Production composition is missing {required_route}.")
@@ -85,6 +91,11 @@ def run_fail_fast_smoke() -> None:
             "unsupported Twitch OAuth redirect path",
             "MUXIVO_TWITCH_OAUTH_REDIRECT_URI",
             "https://console.muxivo.test/api/v1/identity-links/twitch/callback",
+        ),
+        (
+            "unsupported Telegram OAuth redirect path",
+            "MUXIVO_TELEGRAM_OAUTH_REDIRECT_URI",
+            "https://console.muxivo.test/api/v1/identity-links/telegram/callback",
         ),
     )
     for label, variable, value in unsafe_cases:

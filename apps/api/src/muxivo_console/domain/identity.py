@@ -1,8 +1,8 @@
 """First-party identity entities owned by Muxivo Console.
 
-These objects deliberately contain only data that Console owns. A Discord or
-Twitch login is a future ``LoginIdentity`` provider, never a platform
-connection or a platform-role grant.
+These objects deliberately contain only data that Console owns. External
+provider logins are ``LoginIdentity`` records, never platform connections or
+platform-role grants.
 """
 
 from dataclasses import dataclass
@@ -22,6 +22,7 @@ class LoginIdentityProvider(StrEnum):
     EMAIL = "email"
     DISCORD = "discord"
     TWITCH = "twitch"
+    TELEGRAM = "telegram"
     GOOGLE = "google"
     YANDEX = "yandex"
 

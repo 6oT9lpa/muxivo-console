@@ -91,7 +91,7 @@ class IdentityLinkTransactionRecord(Base):
 
     __table_args__ = (
         CheckConstraint(
-            "provider IN ('discord', 'twitch', 'google', 'yandex')",
+            "provider IN ('discord', 'twitch', 'telegram', 'google', 'yandex')",
             name="ck_identity_link_transactions_provider",
         ),
         Index("ix_identity_link_transactions_state_expires", "state_hash", "expires_at"),
@@ -113,7 +113,7 @@ class OAuthLoginTransactionRecord(Base):
 
     __table_args__ = (
         CheckConstraint(
-            "provider IN ('discord', 'twitch', 'google', 'yandex')",
+            "provider IN ('discord', 'twitch', 'telegram', 'google', 'yandex')",
             name="ck_oauth_login_transactions_provider",
         ),
         Index("ix_oauth_login_transactions_state_expires", "state_hash", "expires_at"),

@@ -339,6 +339,7 @@ CSRF_EXEMPT_PATHS = frozenset(
         "/api/v1/auth/email-password/sessions",
         "/api/v1/auth/discord/authorizations",
         "/api/v1/auth/twitch/authorizations",
+        "/api/v1/auth/telegram/authorizations",
         "/api/v1/auth/google/authorizations",
         "/api/v1/auth/yandex/authorizations",
         "/api/v1/auth/password-recovery/requests",
@@ -644,10 +645,15 @@ def create_app(
     yandex_identity_link_complete: CompleteIdentityLink | None = None,
     yandex_login_start: BeginOAuthLogin | None = None,
     yandex_login_complete: CompleteOAuthLogin | None = None,
+    telegram_identity_link_start: BeginIdentityLink | None = None,
+    telegram_identity_link_complete: CompleteIdentityLink | None = None,
+    telegram_login_start: BeginOAuthLogin | None = None,
+    telegram_login_complete: CompleteOAuthLogin | None = None,
     discord_authorization_url: Callable[..., str] | None = None,
     twitch_authorization_url: Callable[..., str] | None = None,
     google_authorization_url: Callable[..., str] | None = None,
     yandex_authorization_url: Callable[..., str] | None = None,
+    telegram_authorization_url: Callable[..., str] | None = None,
     session_resolver: ResolveBrowserSession | None = None,
     session_revoker: RevokeBrowserSession | None = None,
     session_list_use_case: ListBrowserSessions | None = None,
@@ -1602,6 +1608,19 @@ def create_app(
             provider_label="Yandex ID",
         )
 
+    @app.post(
+        "/api/v1/identity-links/telegram/authorizations",
+        tags=["identity-links"],
+    )
+    async def begin_telegram_identity_link(request: Request) -> dict[str, str | int]:
+        return await begin_external_identity_link(
+            request=request,
+            provider=LoginIdentityProvider.TELEGRAM,
+            start_use_case=telegram_identity_link_start,
+            authorization_url=telegram_authorization_url,
+            provider_label="Telegram",
+        )
+
     @app.get(
         "/api/v1/auth/providers",
         response_model=OAuthProviderCatalogResponse,
@@ -1620,6 +1639,11 @@ def create_app(
                     LoginIdentityProvider.TWITCH,
                     twitch_login_start,
                     twitch_authorization_url,
+                ),
+                (
+                    LoginIdentityProvider.TELEGRAM,
+                    telegram_login_start,
+                    telegram_authorization_url,
                 ),
                 (
                     LoginIdentityProvider.GOOGLE,
@@ -1661,6 +1685,16 @@ def create_app(
             start_use_case=twitch_login_start,
             authorization_url=twitch_authorization_url,
             provider_label="Twitch",
+        )
+
+    @app.post("/api/v1/auth/telegram/authorizations", tags=["authentication"])
+    async def begin_telegram_oauth_login(request: Request) -> dict[str, str | int]:
+        return await begin_oauth_login(
+            request=request,
+            provider=LoginIdentityProvider.TELEGRAM,
+            start_use_case=telegram_login_start,
+            authorization_url=telegram_authorization_url,
+            provider_label="Telegram",
         )
 
     @app.post("/api/v1/auth/google/authorizations", tags=["authentication"])
@@ -1735,6 +1769,19 @@ def create_app(
             login_completion=yandex_login_complete,
             identity_link_completion=yandex_identity_link_complete,
             provider_label="Yandex ID",
+        )
+
+    @app.get("/api/v1/auth/telegram/callback", tags=["authentication"])
+    @app.get("/api/v1/identity-links/telegram/callback", tags=["identity-links"])
+    async def complete_telegram_oauth_callback(code: str, state: str, request: Request) -> Response:
+        return await complete_external_identity_link_callback(
+            request=request,
+            provider=LoginIdentityProvider.TELEGRAM,
+            state=state,
+            authorization_code=code,
+            login_completion=telegram_login_complete,
+            identity_link_completion=telegram_identity_link_complete,
+            provider_label="Telegram",
         )
 
     @app.get(

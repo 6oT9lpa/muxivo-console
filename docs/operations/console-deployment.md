@@ -30,8 +30,10 @@ FRP mapping. Console must not reuse its port or its deployment directory.
   of truth outside development.
 - Provision Redis for the shared rate-limit backend.
 - Provision the real Discord and Twitch OAuth applications and the signed
-  Discord/Twitch Control API endpoints. Google and Yandex ID OAuth clients are
-  optional and are enabled only when their complete credentials are present.
+  Discord/Twitch Control API endpoints. Google, Yandex ID and Telegram Login
+  OAuth clients are optional and are enabled only when their complete
+  credentials are present. Telegram uses the OIDC Authorization Code + PKCE
+  flow and must have the exact callback registered with BotFather.
 - Decide whether `security@muxivo.pro` is the approved recovery sender.
 
 The DNS and certificate changes are external mutations. Confirm the exact DNS
@@ -291,8 +293,8 @@ public deployment still requires external values and services:
 - a dedicated production database credential;
 - Redis credential/configuration wiring in the staging environment (the
   loopback service is installed and healthy);
-- real Discord/Twitch OAuth credentials, plus optional Google/Yandex ID OAuth
-  credentials when those login methods are enabled;
+- real Discord/Twitch OAuth credentials, plus optional Google/Yandex ID and
+  Telegram Login OAuth credentials when those login methods are enabled;
 - a reachable signed Discord Control API and Twitch Control API;
 - production secret-manager wiring for the verified SMTP.BZ credential and an explicitly approved delivery mailbox;
 - monitoring backend, backup/restore drill and legal approval of the policy and

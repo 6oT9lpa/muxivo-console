@@ -26,7 +26,7 @@ export type BrowserSession = {
 
 export type LoginIdentity = {
   id: string;
-  provider: "email" | "discord" | "twitch" | "google" | "yandex";
+  provider: "email" | "discord" | "twitch" | "telegram" | "google" | "yandex";
   linked_at: string;
   last_used_at: string | null;
   can_unlink: boolean;
