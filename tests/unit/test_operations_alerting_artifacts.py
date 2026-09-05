@@ -88,6 +88,7 @@ def test_development_observability_composition_is_loopback_only_and_loads_rules(
 
     assert "prom/prometheus:v2.55.1" in compose
     assert '"127.0.0.1:9090:9090"' in compose
+    assert "http://127.0.0.1:9090/-/ready" in compose
     assert "prometheus-console.dev.yml.example" in compose
     assert "prometheus-alerts.yml" in compose
     assert "condition: service_healthy" in compose
