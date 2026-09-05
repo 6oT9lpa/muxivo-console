@@ -84,6 +84,19 @@ On 2026-09-05 the deployment was checked without changing application data:
 - a source scan found no deprecated registration implementation markers in the
   deployed `apps` and `tests` trees.
 
+The same verification pass produced the following local quality evidence:
+
+- backend regression: `488 passed`;
+- frontend unit suite: `36 passed`;
+- frontend production build: successful;
+- browser E2E suite: `6 passed`;
+- legacy-auth, secret, browser-token, audit-coverage, readiness-artifact,
+  application-layout and production-composition checks: all passed;
+- read-only host preflight confirmed active Nginx/FRP on the VPS and active
+  PostgreSQL/Redis on the local server; `muxivo-console-api.service` remains
+  intentionally inactive and `/etc/muxivo-console` has no rendered runtime
+  credential file.
+
 The `502` responses are an intentional readiness boundary, not a successful
 production deployment. The next activation step requires the approved
 HashiCorp Vault instance and AppRole policy, a dedicated database credential,
