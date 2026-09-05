@@ -1,0 +1,41 @@
+[Unit]
+Description=HashiCorp Vault server for Muxivo Console staging
+Documentation=https://developer.hashicorp.com/vault/docs/configuration
+Wants=network-online.target
+After=network-online.target
+RequiresMountsFor=/var/lib/vault
+
+[Service]
+Type=notify
+User=vault
+Group=vault
+WorkingDirectory=/var/lib/vault
+ExecStart=/usr/local/bin/vault server -config=/etc/vault.d/vault.hcl
+ExecReload=/bin/kill -HUP $MAINPID
+Restart=on-failure
+RestartSec=5s
+TimeoutStartSec=120s
+TimeoutStopSec=30s
+LimitMEMLOCK=infinity
+UMask=0077
+
+NoNewPrivileges=false
+PrivateDevices=true
+PrivateTmp=true
+ProtectHome=true
+ProtectSystem=strict
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+ProtectClock=true
+LockPersonality=true
+RestrictRealtime=true
+RestrictSUIDSGID=true
+RestrictNamespaces=true
+CapabilityBoundingSet=CAP_IPC_LOCK
+AmbientCapabilities=CAP_IPC_LOCK
+ReadWritePaths=/var/lib/vault
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+
+[Install]
+WantedBy=multi-user.target

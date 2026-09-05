@@ -146,6 +146,22 @@ REQUIRED_SUPPORTING_ARTIFACTS: tuple[tuple[str, tuple[tuple[str, str], ...]], ..
         ),
     ),
     (
+        "deploy/vault-server.hcl.example",
+        (
+            ('storage "raft"', "persistent staging Vault storage"),
+            ('address         = "127.0.0.1:8200"', "loopback Vault listener"),
+            ('tls_min_version = "tls13"', "TLS 1.3 Vault listener"),
+        ),
+    ),
+    (
+        "deploy/vault-server.service",
+        (
+            ("User=vault", "dedicated Vault service user"),
+            ("ReadWritePaths=/var/lib/vault", "isolated Vault data path"),
+            ("ExecStart=/usr/local/bin/vault server", "Vault server process"),
+        ),
+    ),
+    (
         "deploy/console.env.ctmpl.example",
         (
             ('secret "secret/data/muxivo-console/staging"', "staging Vault KV path"),
@@ -195,7 +211,7 @@ REQUIRED_SUPPORTING_ARTIFACTS: tuple[tuple[str, tuple[tuple[str, str], ...]], ..
     (
         "deploy/muxivo-console-vault-agent.service",
         (
-            ("ExecStart=/usr/bin/vault agent", "Vault Agent service command"),
+            ("ExecStart=/usr/local/bin/vault agent", "Vault Agent service command"),
             ("RuntimeDirectory=muxivo-console-vault-agent", "isolated Vault Agent runtime"),
         ),
     ),

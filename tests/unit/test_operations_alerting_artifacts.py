@@ -117,3 +117,19 @@ def test_vault_templates_and_policies_cannot_cross_environment_boundaries() -> N
     assert 'path "secret/data/muxivo-console/production"' not in staging_policy
     assert 'path "secret/data/muxivo-console/production"' in production_policy
     assert 'path "secret/data/muxivo-console/staging"' not in production_policy
+
+
+def test_staging_vault_server_is_loopback_tls_and_persistent() -> None:
+    server_config = Path("deploy/vault-server.hcl.example").read_text()
+    server_unit = Path("deploy/vault-server.service").read_text()
+    agent_unit = Path("deploy/muxivo-console-vault-agent.service").read_text()
+
+    assert 'storage "raft"' in server_config
+    assert 'path    = "/var/lib/vault/data"' in server_config
+    assert 'address         = "127.0.0.1:8200"' in server_config
+    assert 'tls_min_version = "tls13"' in server_config
+    assert "User=vault" in server_unit
+    assert "ExecStart=/usr/local/bin/vault server -config=/etc/vault.d/vault.hcl" in server_unit
+    assert "ReadWritePaths=/var/lib/vault" in server_unit
+    assert "CapabilityBoundingSet=CAP_IPC_LOCK" in server_unit
+    assert "ExecStart=/usr/local/bin/vault agent" in agent_unit

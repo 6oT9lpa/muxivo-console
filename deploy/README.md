@@ -17,6 +17,10 @@ credential path used by `muxivo-console-api.service`.
 
 - `muxivo-console-api.service` runs the production ASGI application and applies
   migrations before startup.
+- `vault-server.hcl.example` and `vault-server.service` describe the isolated
+  loopback-only staging Vault server. They use integrated raft storage and a
+  TLS 1.3 listener; a public production deployment requires a reviewed HA or
+  managed Vault topology.
 - `vault-agent.hcl.example`, `console.env.ctmpl.example`,
   `console.env.production.ctmpl.example`, `vault-policy.hcl.example`,
   `vault-policy.production.hcl.example` and

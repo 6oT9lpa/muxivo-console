@@ -10,7 +10,7 @@ User=root
 Group=root
 RuntimeDirectory=muxivo-console-vault-agent
 RuntimeDirectoryMode=0750
-ExecStart=/usr/bin/vault agent -config=/etc/muxivo-console/vault-agent.hcl
+ExecStart=/usr/local/bin/vault agent -config=/etc/muxivo-console/vault-agent.hcl
 Restart=on-failure
 RestartSec=5s
 TimeoutStartSec=60s
