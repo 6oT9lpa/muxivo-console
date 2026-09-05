@@ -177,6 +177,7 @@ REQUIRED_SUPPORTING_ARTIFACTS: tuple[tuple[str, tuple[tuple[str, str], ...]], ..
 
 REQUIRED_CI_MARKERS: tuple[tuple[str, str], ...] = (
     ("python scripts/secret_scan.py", "secret scan command"),
+    ("python scripts/legacy_auth_scan.py", "legacy auth scan command"),
     ("python scripts/browser_token_exposure_scan.py", "browser token exposure scan command"),
     ("python scripts/audit_coverage.py", "audit coverage command"),
     ("python scripts/production_composition_smoke.py", "production composition smoke command"),

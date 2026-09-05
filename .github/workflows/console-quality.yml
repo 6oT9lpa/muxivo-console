@@ -43,6 +43,9 @@ jobs:
       - name: Scan for committed secrets
         run: python scripts/secret_scan.py
 
+      - name: Prevent removed legacy registration flows
+        run: python scripts/legacy_auth_scan.py
+
       - name: Scan browser-facing contracts for platform tokens
         run: python scripts/browser_token_exposure_scan.py
 
