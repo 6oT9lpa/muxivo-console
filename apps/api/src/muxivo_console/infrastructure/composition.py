@@ -703,6 +703,8 @@ def create_production_app(
     twitch_identity_link_complete = None
     discord_login_start = None
     discord_login_complete = None
+    twitch_login_start = None
+    twitch_login_complete = None
     discord_authorization_url = None
     twitch_authorization_url = None
     identity_linker = None
@@ -778,6 +780,23 @@ def create_production_app(
             provider_client=twitch_oauth_client,
             linker=identity_linker,
         )
+        twitch_login_start = BeginOAuthLogin(
+            identifiers=identifiers,
+            clock=clock,
+            token_issuer=SecureOpaqueSessionTokenIssuer(),
+            token_hasher=session_hasher,
+            secrets=opaque_secrets,
+            transactions=SqlAlchemyOAuthLoginTransactionWriter(sessions),
+        )
+        twitch_login_complete = CompleteOAuthLogin(
+            clock=clock,
+            token_hasher=session_hasher,
+            secrets=opaque_secrets,
+            transactions=SqlAlchemyOAuthLoginTransactionConsumer(sessions),
+            provider_client=twitch_oauth_client,
+            identities=SqlAlchemyLoginIdentityReader(sessions),
+            sessions=session_creator,
+        )
         twitch_authorization_url = twitch_oauth_client.authorization_url
     return create_app(
         control_modules_use_case=modules,
@@ -819,6 +838,8 @@ def create_production_app(
         twitch_identity_link_complete=twitch_identity_link_complete,
         discord_login_start=discord_login_start,
         discord_login_complete=discord_login_complete,
+        twitch_login_start=twitch_login_start,
+        twitch_login_complete=twitch_login_complete,
         discord_authorization_url=discord_authorization_url,
         twitch_authorization_url=twitch_authorization_url,
         session_resolver=ResolveBrowserSession(

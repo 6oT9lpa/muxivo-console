@@ -145,6 +145,22 @@ def test_discord_oauth_start_is_rate_limited_before_use_case() -> None:
     assert use_case.called is False
 
 
+def test_twitch_oauth_start_is_rate_limited_before_use_case() -> None:
+    limiter = DenyingRateLimiter()
+    use_case = RecordingUseCase(StartedOAuthLogin("state", "challenge", 600))
+    app = create_app(
+        twitch_login_start=use_case,
+        twitch_authorization_url=lambda **_: "https://twitch.example/authorize",
+        rate_limiter=limiter,
+    )
+    client = TestClient(app)
+
+    response = client.post("/api/v1/auth/twitch/authorizations")
+
+    assert_rate_limited(response, limiter, "auth.oauth.start")
+    assert use_case.called is False
+
+
 def test_discord_oauth_callback_is_rate_limited_before_use_case() -> None:
     limiter = DenyingRateLimiter()
     use_case = RecordingUseCase()

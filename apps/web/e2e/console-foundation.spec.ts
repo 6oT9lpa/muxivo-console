@@ -259,6 +259,15 @@ test("authenticated Console shell stays usable in a narrow viewport", async ({ p
 
 test("sign-in dialog keeps the Activity-style black surface in light theme", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
+  await installConsoleApiMock(page, {
+    authenticated: false,
+    registeredEmail: "",
+    organizations: [],
+    invitations: [],
+    connections: [],
+    auditEvents: [],
+    observedLifecycleIdempotencyKey: "",
+  });
   await page.goto("/");
 
   await page
@@ -268,6 +277,8 @@ test("sign-in dialog keeps the Activity-style black surface in light theme", asy
 
   const panel = page.locator(".login-panel");
   await expect(panel).toBeVisible();
+  await expect(page.getByRole("button", { name: "Continue with Twitch" })).toBeEnabled();
+  await expect(page.getByRole("button", { name: "Continue with Google" })).toBeDisabled();
   const styleState = await panel.evaluate((element) => {
     const title = element.querySelector("#console-auth-dialog-title");
     const description = element.querySelector(".auth-panel-heading > p");
@@ -378,6 +389,9 @@ async function installConsoleApiMock(
       expect(request.headers()["x-csrf-token"]).toBe("csrf-token");
     }
 
+    if (method === "GET" && path === "/api/v1/auth/providers") {
+      return json(route, { providers: ["discord", "twitch"] });
+    }
     if (method === "GET" && path === "/api/v1/auth/session") {
       return state.authenticated
         ? json(route, { authenticated: true })

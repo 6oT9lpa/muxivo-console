@@ -37,6 +37,11 @@ def authorization_url(*, state: str, code_challenge: str) -> str:
     return "https://discord.example/authorize"
 
 
+def twitch_authorization_url(*, state: str, code_challenge: str) -> str:
+    assert (state, code_challenge) == ("state", "challenge")
+    return "https://twitch.example/authorize"
+
+
 def test_starts_discord_oauth_login_without_a_browser_session() -> None:
     start = LoginStart()
     client = TestClient(
@@ -68,3 +73,50 @@ def test_discord_oauth_callback_sets_first_party_cookies_and_redirects_to_consol
     assert complete.arguments["authorization_code"] == "oauth-code"
     assert complete.arguments["client_ip"]
     assert complete.arguments["user_agent"] == "testclient"
+
+
+def test_starts_twitch_oauth_login_without_a_browser_session() -> None:
+    start = LoginStart()
+    client = TestClient(
+        create_app(twitch_login_start=start, twitch_authorization_url=twitch_authorization_url)
+    )
+
+    response = client.post("/api/v1/auth/twitch/authorizations")
+
+    assert response.status_code == 200
+    assert response.json()["authorization_url"] == "https://twitch.example/authorize"
+    assert start.arguments is not None
+    assert start.arguments["provider"].value == "twitch"
+
+
+def test_twitch_oauth_callback_sets_first_party_cookies_and_redirects_to_console() -> None:
+    complete = LoginComplete()
+    client = TestClient(create_app(twitch_login_complete=complete))
+
+    response = client.get(
+        "/api/v1/auth/twitch/callback?code=oauth-code&state=oauth-state",
+        follow_redirects=False,
+    )
+
+    assert response.status_code == 303
+    assert response.headers["location"] == "/"
+    assert "__Host-muxivo_session=opaque-session" in response.headers["set-cookie"]
+    assert "__Host-muxivo_csrf=csrf-token" in response.headers["set-cookie"]
+    assert complete.arguments is not None
+    assert complete.arguments["provider"].value == "twitch"
+
+
+def test_provider_catalog_lists_only_configured_oauth_login_providers() -> None:
+    client = TestClient(
+        create_app(
+            discord_login_start=LoginStart(),
+            discord_authorization_url=authorization_url,
+            twitch_login_start=LoginStart(),
+            twitch_authorization_url=twitch_authorization_url,
+        )
+    )
+
+    response = client.get("/api/v1/auth/providers")
+
+    assert response.status_code == 200
+    assert response.json() == {"providers": ["discord", "twitch"]}

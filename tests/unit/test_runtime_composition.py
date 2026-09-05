@@ -415,6 +415,8 @@ def test_production_composition_wires_twitch_health_when_control_api_is_configur
     assert Platform.TWITCH in health_use_case.health_readers
     assert captured["twitch_identity_link_start"] is not None
     assert captured["twitch_identity_link_complete"] is not None
+    assert captured["twitch_login_start"] is not None
+    assert captured["twitch_login_complete"] is not None
     assert captured["twitch_authorization_url"] is not None
 
 

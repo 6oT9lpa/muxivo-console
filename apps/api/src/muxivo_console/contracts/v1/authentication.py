@@ -60,3 +60,11 @@ class PasswordRecoveryRequestResponse(BaseModel):
 class PasswordRecoveryCompletionRequest(BaseModel):
     token: SecretStr = Field(min_length=1, max_length=4096)
     new_password: SecretStr = Field(min_length=12, max_length=1024)
+
+
+class OAuthProviderCatalogResponse(BaseModel):
+    """Browser-safe list of OAuth providers configured for Console login."""
+
+    providers: list[Literal["discord", "twitch", "telegram", "google", "yandex"]] = Field(
+        default_factory=list
+    )

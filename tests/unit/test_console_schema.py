@@ -54,9 +54,7 @@ def test_browser_sessions_are_stored_as_hashes_only() -> None:
 
 def test_platform_connection_state_explanation_is_non_secret_metadata() -> None:
     connection_columns = Base.metadata.tables["platform_connections"].columns
-    idempotency_columns = Base.metadata.tables[
-        "platform_connection_lifecycle_idempotency"
-    ].columns
+    idempotency_columns = Base.metadata.tables["platform_connection_lifecycle_idempotency"].columns
 
     assert "status_reason" in connection_columns
     assert "result_reason" in idempotency_columns

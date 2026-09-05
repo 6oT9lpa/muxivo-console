@@ -85,6 +85,15 @@ import type {
   Theme,
 } from "./features/console/types";
 
+type AuthProvider = "discord" | "twitch" | "telegram" | "google" | "yandex";
+const AUTH_PROVIDERS = new Set<AuthProvider>([
+  "discord",
+  "twitch",
+  "telegram",
+  "google",
+  "yandex",
+]);
+
 const { t } = useI18n();
 
 const initialTheme: Theme = readConsoleTheme(
@@ -144,6 +153,7 @@ const theme = ref<Theme>(initialTheme);
 const activeConsoleSection = ref<ConsoleSection>("overview");
 const busy = ref(false);
 const notice = ref("");
+const availableAuthProviders = ref<AuthProvider[]>([]);
 const browserSessions = ref<BrowserSession[]>([]);
 const loginIdentities = ref<LoginIdentity[]>([]);
 const organizations = ref<OrganizationListItem[]>([]);
@@ -522,12 +532,41 @@ function continueToSignIn(): void {
   notice.value = t("console.notice.account_created");
 }
 
-async function signInWithDiscord() {
+function isAuthProvider(value: string): value is AuthProvider {
+  return AUTH_PROVIDERS.has(value as AuthProvider);
+}
+
+async function loadAuthProviders(): Promise<void> {
+  try {
+    const payload = await consoleApi<{ providers: string[] }>("/api/v1/auth/providers");
+    availableAuthProviders.value = payload.providers.filter(isAuthProvider);
+    clientLogger.info("console.auth.providers_loaded", {
+      providers: availableAuthProviders.value.join(","),
+    });
+  } catch (error) {
+    availableAuthProviders.value = [];
+    clientLogger.info("console.auth.providers_unavailable", {
+      error: error instanceof Error ? error.name : "unknown",
+    });
+  }
+}
+
+async function signInWithProvider(provider: AuthProvider): Promise<void> {
+  const authorizationPaths: Partial<Record<AuthProvider, string>> = {
+    discord: "/api/v1/auth/discord/authorizations",
+    twitch: "/api/v1/auth/twitch/authorizations",
+  };
+  const authorizationPath = authorizationPaths[provider];
+  if (!authorizationPath) {
+    notice.value = t("console.auth.provider_unavailable");
+    clientLogger.info("console.auth.provider_unavailable", { provider });
+    return;
+  }
   busy.value = true;
   notice.value = "";
   try {
     const authorization = await consoleApi<{ authorization_url: string }>(
-      "/api/v1/auth/discord/authorizations",
+      authorizationPath,
       { method: "POST" },
     );
     window.location.assign(authorization.authorization_url);
@@ -624,6 +663,7 @@ onMounted(async () => {
     url.searchParams.delete("identity_linked");
     window.history.replaceState({}, "", url);
   }
+  await loadAuthProviders();
   try {
     await consoleApi<{ authenticated: boolean }>("/api/v1/auth/session");
     authenticated.value = true;
@@ -1763,6 +1803,7 @@ function messageFor(error: unknown): string {
         :invitation-token="invitationToken"
         :registration-verification-sent="registrationVerificationSent"
         :registration-email-verified="registrationEmailVerified"
+        :available-providers="availableAuthProviders"
         @close="closeLoginModal"
         @sign-in="signIn"
         @request-recovery="requestPasswordRecovery"
@@ -1772,7 +1813,7 @@ function messageFor(error: unknown): string {
         @verify-registration="verifyRegistration"
         @reset-registration-verification="resetRegistrationVerification"
         @continue-sign-in="continueToSignIn"
-        @oauth-provider="(provider) => provider === 'discord' && signInWithDiscord()"
+        @oauth-provider="signInWithProvider"
       />
     </template>
     <section v-else class="console-shell">

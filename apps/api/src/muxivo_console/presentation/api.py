@@ -218,6 +218,7 @@ from muxivo_console.contracts.v1.authentication import (
     EmailPasswordRegistrationVerificationRequest,
     EmailPasswordRegistrationVerificationResendRequest,
     EmailPasswordRegistrationVerificationResponse,
+    OAuthProviderCatalogResponse,
     PasswordChangeRequest,
     PasswordRecoveryCompletionRequest,
     PasswordRecoveryRequest,
@@ -337,6 +338,7 @@ CSRF_EXEMPT_PATHS = frozenset(
         "/api/v1/auth/email-password/registration-verifications/resend",
         "/api/v1/auth/email-password/sessions",
         "/api/v1/auth/discord/authorizations",
+        "/api/v1/auth/twitch/authorizations",
         "/api/v1/auth/password-recovery/requests",
         "/api/v1/auth/password-recovery/completions",
     }
@@ -630,6 +632,8 @@ def create_app(
     twitch_identity_link_complete: CompleteIdentityLink | None = None,
     discord_login_start: BeginOAuthLogin | None = None,
     discord_login_complete: CompleteOAuthLogin | None = None,
+    twitch_login_start: BeginOAuthLogin | None = None,
+    twitch_login_complete: CompleteOAuthLogin | None = None,
     discord_authorization_url: Callable[..., str] | None = None,
     twitch_authorization_url: Callable[..., str] | None = None,
     session_resolver: ResolveBrowserSession | None = None,
@@ -1312,6 +1316,82 @@ def create_app(
                 detail=f"{provider_label} identity linking failed",
             ) from error
 
+    async def begin_oauth_login(
+        *,
+        request: Request,
+        provider: LoginIdentityProvider,
+        start_use_case: BeginOAuthLogin | None,
+        authorization_url: Callable[..., str] | None,
+        provider_label: str,
+    ) -> dict[str, str | int]:
+        """Start one provider-neutral, rate-limited OAuth login transaction."""
+        await enforce_auth_rate_limit(request, scope="auth.oauth.start")
+        if start_use_case is None or authorization_url is None:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail=f"{provider_label} sign-in is unavailable",
+            )
+        try:
+            started = await start_use_case.execute(
+                provider=provider,
+                correlation_id=request.state.correlation_id,
+            )
+        except OAuthLoginStartRejectedError as error:
+            logger.warning(
+                "auth.oauth_login.start.rejected",
+                extra={
+                    "provider": provider.value,
+                    "correlation_id": str(request.state.correlation_id),
+                },
+            )
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail=f"{provider_label} sign-in is unavailable",
+            ) from error
+        logger.info(
+            "auth.oauth_login.authorization_started",
+            extra={
+                "provider": provider.value,
+                "correlation_id": str(request.state.correlation_id),
+            },
+        )
+        return {
+            "authorization_url": authorization_url(
+                state=started.state, code_challenge=started.code_challenge
+            ),
+            "expires_in_seconds": started.expires_in_seconds,
+        }
+
+    async def complete_oauth_login_if_valid(
+        *,
+        request: Request,
+        provider: LoginIdentityProvider,
+        state: str,
+        authorization_code: str,
+        completion: CompleteOAuthLogin | None,
+    ) -> IssuedBrowserSession | None:
+        """Try the login transaction before falling back to identity linking."""
+        if completion is None:
+            return None
+        try:
+            return await completion.execute(
+                provider=provider,
+                state=state,
+                authorization_code=authorization_code,
+                correlation_id=request.state.correlation_id,
+                client_ip=_request_client_ip(request),
+                user_agent=request.headers.get("user-agent"),
+            )
+        except OAuthLoginCompletionRejectedError:
+            logger.info(
+                "auth.oauth_login.callback_not_a_login_transaction",
+                extra={
+                    "provider": provider.value,
+                    "correlation_id": str(request.state.correlation_id),
+                },
+            )
+            return None
+
     @app.post(
         "/api/v1/auth/password-recovery/completions",
         status_code=status.HTTP_204_NO_CONTENT,
@@ -1424,51 +1504,72 @@ def create_app(
             provider_label="Twitch",
         )
 
+    @app.get(
+        "/api/v1/auth/providers",
+        response_model=OAuthProviderCatalogResponse,
+        tags=["authentication"],
+    )
+    async def list_oauth_providers(request: Request) -> OAuthProviderCatalogResponse:
+        providers = [
+            provider.value
+            for provider, start_use_case, authorization_url in (
+                (
+                    LoginIdentityProvider.DISCORD,
+                    discord_login_start,
+                    discord_authorization_url,
+                ),
+                (
+                    LoginIdentityProvider.TWITCH,
+                    twitch_login_start,
+                    twitch_authorization_url,
+                ),
+            )
+            if start_use_case is not None and authorization_url is not None
+        ]
+        logger.info(
+            "auth.oauth_login.providers_listed",
+            extra={
+                "providers": providers,
+                "correlation_id": str(request.state.correlation_id),
+            },
+        )
+        return OAuthProviderCatalogResponse(providers=providers)
+
     @app.post("/api/v1/auth/discord/authorizations", tags=["authentication"])
     async def begin_discord_oauth_login(request: Request) -> dict[str, str | int]:
-        await enforce_auth_rate_limit(request, scope="auth.oauth.start")
-        if discord_login_start is None or discord_authorization_url is None:
-            raise HTTPException(
-                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-                detail="Discord sign-in is unavailable",
-            )
-        try:
-            started = await discord_login_start.execute(
-                provider=LoginIdentityProvider.DISCORD,
-                correlation_id=request.state.correlation_id,
-            )
-        except OAuthLoginStartRejectedError as error:
-            raise HTTPException(
-                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-                detail="Discord sign-in is unavailable",
-            ) from error
-        return {
-            "authorization_url": discord_authorization_url(
-                state=started.state, code_challenge=started.code_challenge
-            ),
-            "expires_in_seconds": started.expires_in_seconds,
-        }
+        return await begin_oauth_login(
+            request=request,
+            provider=LoginIdentityProvider.DISCORD,
+            start_use_case=discord_login_start,
+            authorization_url=discord_authorization_url,
+            provider_label="Discord",
+        )
+
+    @app.post("/api/v1/auth/twitch/authorizations", tags=["authentication"])
+    async def begin_twitch_oauth_login(request: Request) -> dict[str, str | int]:
+        return await begin_oauth_login(
+            request=request,
+            provider=LoginIdentityProvider.TWITCH,
+            start_use_case=twitch_login_start,
+            authorization_url=twitch_authorization_url,
+            provider_label="Twitch",
+        )
 
     @app.get("/api/v1/auth/discord/callback", tags=["authentication"])
     @app.get("/api/v1/identity-links/discord/callback", tags=["identity-links"])
     async def complete_discord_oauth_callback(code: str, state: str, request: Request) -> Response:
         await enforce_auth_rate_limit(request, scope="auth.oauth.callback")
-        if discord_login_complete is not None:
-            try:
-                issued_session = await discord_login_complete.execute(
-                    provider=LoginIdentityProvider.DISCORD,
-                    state=state,
-                    authorization_code=code,
-                    correlation_id=request.state.correlation_id,
-                    client_ip=_request_client_ip(request),
-                    user_agent=request.headers.get("user-agent"),
-                )
-            except OAuthLoginCompletionRejectedError:
-                issued_session = None
-            if issued_session is not None:
-                response = RedirectResponse(url="/", status_code=status.HTTP_303_SEE_OTHER)
-                _set_browser_session_cookies(response, issued_session, cookies)
-                return response
+        issued_session = await complete_oauth_login_if_valid(
+            request=request,
+            provider=LoginIdentityProvider.DISCORD,
+            state=state,
+            authorization_code=code,
+            completion=discord_login_complete,
+        )
+        if issued_session is not None:
+            response = RedirectResponse(url="/", status_code=status.HTTP_303_SEE_OTHER)
+            _set_browser_session_cookies(response, issued_session, cookies)
+            return response
         if discord_identity_link_complete is None:
             raise HTTPException(
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
@@ -1506,12 +1607,23 @@ def create_app(
             url="/?identity_linked=discord", status_code=status.HTTP_303_SEE_OTHER
         )
 
-    @app.get("/api/v1/auth/twitch/callback", tags=["identity-links"])
+    @app.get("/api/v1/auth/twitch/callback", tags=["authentication", "identity-links"])
     @app.get("/api/v1/identity-links/twitch/callback", tags=["identity-links"])
     async def complete_twitch_identity_link_callback(
         code: str, state: str, request: Request
     ) -> Response:
         await enforce_auth_rate_limit(request, scope="auth.oauth.callback")
+        issued_session = await complete_oauth_login_if_valid(
+            request=request,
+            provider=LoginIdentityProvider.TWITCH,
+            state=state,
+            authorization_code=code,
+            completion=twitch_login_complete,
+        )
+        if issued_session is not None:
+            response = RedirectResponse(url="/", status_code=status.HTTP_303_SEE_OTHER)
+            _set_browser_session_cookies(response, issued_session, cookies)
+            return response
         if twitch_identity_link_complete is None:
             raise HTTPException(
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
