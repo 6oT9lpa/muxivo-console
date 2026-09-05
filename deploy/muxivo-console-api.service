@@ -14,7 +14,7 @@ WorkingDirectory=/opt/muxivo-console
 Environment=PYTHONUNBUFFERED=1
 Environment=PYTHONDONTWRITEBYTECODE=1
 LoadCredential=console_env:/run/muxivo-console-vault-agent/console.env
-EnvironmentFile=/run/credentials/%N/console_env
+EnvironmentFile=%d/console_env
 ExecStartPre=/opt/muxivo-console/venv/bin/python -m alembic -c /opt/muxivo-console/alembic.ini upgrade head
 ExecStart=/opt/muxivo-console/venv/bin/python -m uvicorn muxivo_console.asgi:app --app-dir /opt/muxivo-console/apps/api/src --host 127.0.0.1 --port 8010 --proxy-headers --forwarded-allow-ips=127.0.0.1
 Restart=on-failure

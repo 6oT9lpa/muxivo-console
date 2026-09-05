@@ -17,5 +17,5 @@ def test_console_api_service_loads_only_vault_agent_runtime_credentials() -> Non
     service = SERVICE_PATH.read_text(encoding="utf-8")
 
     assert "LoadCredential=console_env:/run/muxivo-console-vault-agent/console.env" in service
-    assert "EnvironmentFile=/run/credentials/%N/console_env" in service
+    assert "EnvironmentFile=%d/console_env" in service
     assert "MUXIVO_CONSOLE_PASSWORD_RECOVERY_SMTP_PASSWORD" not in service
