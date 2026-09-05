@@ -44,7 +44,7 @@ completed.
 | Operations | Liveness/readiness endpoints distinguish process health from database readiness | Implemented; API unit is installed but disabled until the staging credential file and environment are provisioned |
 | Lifecycle | Periodic platform connection reconciliation worker | Implemented |
 | Lifecycle | Idempotency keys for retry-safe lifecycle actions | Implemented |
-| Lifecycle | Persisted and localized reason for every connection state transition | Implemented; legacy rows remain readable with a neutral fallback |
+| Lifecycle | Persisted and localized reason for every connection state transition | Implemented; legacy rows remain readable with a neutral fallback, and reconciliation contracts reject reason/status mismatches |
 | Lifecycle | Browser-safe platform resource candidate discovery | Console contract/UI implemented; Control API endpoints pending |
 | Lifecycle | Discord/Twitch ownership verification before registration | Implemented; Twitch Control API config pending |
 | Lifecycle | Discord/Twitch browser-safe connection health adapters | Implemented; Twitch Control API config pending |
@@ -95,7 +95,7 @@ On 2026-09-05 the deployment was checked without changing application data:
 
 The same verification pass produced the following local quality evidence:
 
-- backend regression: `490 passed`;
+- backend regression: `497 passed`;
 - frontend unit suite: `65 passed`;
 - frontend production build: successful;
 - browser E2E suite: `7 passed`; the browser flows verify member role update,
