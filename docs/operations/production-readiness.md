@@ -98,6 +98,10 @@ The same verification pass produced the following local quality evidence:
 - frontend unit suite: `64 passed`;
 - frontend production build: successful;
 - browser E2E suite: `6 passed`;
+- local development Docker Compose smoke: successful after restarting the
+  Docker Desktop Linux engine; Postgres/API built and started, `/healthz` and
+  `/readyz` returned `200`, and the compose cleanup left no Console
+  containers;
 - legacy-auth, secret, browser-token, audit-coverage, readiness-artifact,
   application-layout and production-composition checks: all passed;
 - read-only host preflight confirmed active Nginx/FRP on the VPS and active
