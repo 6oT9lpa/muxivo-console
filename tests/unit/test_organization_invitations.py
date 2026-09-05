@@ -14,6 +14,7 @@ from muxivo_console.application.invite_organization_member import (
     OrganizationInvitationRejectedError,
 )
 from muxivo_console.application.revoke_organization_invitation import (
+    OrganizationInvitationRevocationRejectedError,
     RevokeOrganizationInvitation,
     RevokeOrganizationInvitationCommand,
 )
@@ -268,6 +269,40 @@ async def test_invite_rejects_equal_or_higher_role_without_persisting() -> None:
 
 
 @pytest.mark.asyncio
+async def test_moderator_cannot_create_a_lower_role_invitation() -> None:
+    actor_id, organization_id = uuid4(), uuid4()
+    writer = InvitationWriter()
+    use_case = InviteOrganizationMember(
+        identifiers=SequenceIdentifiers(uuid4(), uuid4()),
+        clock=FixedClock(),
+        email_normalizer=EmailNormalizer(),
+        email_protector=EmailProtector(),
+        token_issuer=TokenIssuer(),
+        token_hasher=TokenHasher(),
+        organizations=OrganizationReader(),
+        memberships=MembershipReader(
+            membership(actor_id, organization_id, OrganizationRole.MODERATOR)
+        ),
+        invitations=writer,
+        notifier=InvitationNotifier(),
+    )
+
+    with pytest.raises(OrganizationInvitationRejectedError):
+        await use_case.execute(
+            InviteOrganizationMemberCommand(
+                actor_id=actor_id,
+                organization_id=organization_id,
+                email="person@example.com",
+                role=OrganizationRole.VIEWER,
+                resource_scopes=(),
+                correlation_id=uuid4(),
+            )
+        )
+
+    assert writer.invitation is None
+
+
+@pytest.mark.asyncio
 async def test_acceptance_requires_the_account_owning_invited_email() -> None:
     actor_id, other_user_id, organization_id = uuid4(), uuid4(), uuid4()
     stored_invitation = invitation(organization_id, uuid4())
@@ -348,3 +383,31 @@ async def test_revoke_only_allows_pending_invitation_below_actor_role() -> None:
     assert writer.revoked_id == stored_invitation.id
     assert writer.audit_event is not None
     assert writer.audit_event.action == "organization.member.invitation.revoked"
+
+
+@pytest.mark.asyncio
+async def test_moderator_cannot_revoke_a_lower_role_invitation() -> None:
+    actor_id, organization_id = uuid4(), uuid4()
+    stored_invitation = invitation(organization_id, uuid4())
+    writer = InvitationWriter()
+    use_case = RevokeOrganizationInvitation(
+        clock=FixedClock(),
+        identifiers=SequenceIdentifiers(uuid4()),
+        memberships=MembershipReader(
+            membership(actor_id, organization_id, OrganizationRole.MODERATOR)
+        ),
+        invitations=InvitationReader(stored_invitation),
+        writer=writer,
+    )
+
+    with pytest.raises(OrganizationInvitationRevocationRejectedError):
+        await use_case.execute(
+            RevokeOrganizationInvitationCommand(
+                actor_id=actor_id,
+                organization_id=organization_id,
+                invitation_id=stored_invitation.id,
+                correlation_id=uuid4(),
+            )
+        )
+
+    assert writer.revoked_id is None

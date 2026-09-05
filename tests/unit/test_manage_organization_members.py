@@ -218,6 +218,43 @@ async def test_admin_cannot_assign_equal_or_higher_role() -> None:
 
 
 @pytest.mark.asyncio
+async def test_moderator_cannot_add_a_lower_role_member() -> None:
+    moderator_id = uuid4()
+    target_id = uuid4()
+    organization_id = uuid4()
+    writer = MemberWriter()
+    use_case = AddOrganizationMember(
+        identifiers=SequenceIdentifiers([uuid4(), uuid4()]),
+        email_normalizer=EmailNormalizer(),
+        email_lookup_hasher=EmailLookupHasher(),
+        invitees=Invitees({"lookup:viewer@example.com": target_id}),
+        user_statuses=UserStatuses({target_id: UserStatus.ACTIVE}),
+        memberships=Memberships(
+            {
+                (moderator_id, organization_id): membership(
+                    moderator_id, organization_id, OrganizationRole.MODERATOR
+                )
+            }
+        ),
+        members=writer,
+    )
+
+    with pytest.raises(OrganizationMemberManagementRejectedError):
+        await use_case.execute(
+            AddOrganizationMemberCommand(
+                actor_id=moderator_id,
+                organization_id=organization_id,
+                email="viewer@example.com",
+                role=OrganizationRole.VIEWER,
+                resource_scopes=(control_read_scope(),),
+                correlation_id=uuid4(),
+            )
+        )
+
+    assert writer.membership is None
+
+
+@pytest.mark.asyncio
 async def test_member_invite_rejects_scope_that_target_role_cannot_use() -> None:
     owner_id = uuid4()
     target_id = uuid4()
@@ -317,6 +354,42 @@ async def test_member_update_denies_self_change() -> None:
                 organization_id=organization_id,
                 user_id=actor_id,
                 role=OrganizationRole.ADMIN,
+                resource_scopes=(),
+                correlation_id=uuid4(),
+            )
+        )
+
+    assert writer.membership is None
+
+
+@pytest.mark.asyncio
+async def test_moderator_cannot_update_a_lower_role_member() -> None:
+    moderator_id = uuid4()
+    target_id = uuid4()
+    organization_id = uuid4()
+    writer = MemberWriter()
+    use_case = UpdateOrganizationMember(
+        identifiers=SequenceIdentifiers([uuid4()]),
+        memberships=Memberships(
+            {
+                (moderator_id, organization_id): membership(
+                    moderator_id, organization_id, OrganizationRole.MODERATOR
+                ),
+                (target_id, organization_id): membership(
+                    target_id, organization_id, OrganizationRole.VIEWER
+                ),
+            }
+        ),
+        members=writer,
+    )
+
+    with pytest.raises(OrganizationMemberManagementRejectedError):
+        await use_case.execute(
+            UpdateOrganizationMemberCommand(
+                actor_id=moderator_id,
+                organization_id=organization_id,
+                user_id=target_id,
+                role=OrganizationRole.VIEWER,
                 resource_scopes=(),
                 correlation_id=uuid4(),
             )
@@ -444,6 +517,44 @@ async def test_admin_cannot_remove_equal_role_member() -> None:
         await use_case.execute(
             RemoveOrganizationMemberCommand(
                 actor_id=actor_id,
+                organization_id=organization_id,
+                user_id=target_id,
+                correlation_id=uuid4(),
+            )
+        )
+
+    assert writer.removed_membership_id is None
+
+
+@pytest.mark.asyncio
+async def test_moderator_cannot_remove_a_lower_role_member() -> None:
+    moderator_id = uuid4()
+    target_id = uuid4()
+    organization_id = uuid4()
+    target_membership_id = uuid4()
+    writer = MemberWriter()
+    use_case = RemoveOrganizationMember(
+        identifiers=SequenceIdentifiers([uuid4()]),
+        memberships=Memberships(
+            {
+                (moderator_id, organization_id): membership(
+                    moderator_id, organization_id, OrganizationRole.MODERATOR
+                ),
+                (target_id, organization_id): membership(
+                    target_id,
+                    organization_id,
+                    OrganizationRole.VIEWER,
+                    membership_id=target_membership_id,
+                ),
+            }
+        ),
+        members=writer,
+    )
+
+    with pytest.raises(OrganizationMemberManagementRejectedError):
+        await use_case.execute(
+            RemoveOrganizationMemberCommand(
+                actor_id=moderator_id,
                 organization_id=organization_id,
                 user_id=target_id,
                 correlation_id=uuid4(),

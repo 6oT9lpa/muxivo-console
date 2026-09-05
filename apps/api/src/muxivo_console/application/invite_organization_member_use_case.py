@@ -15,6 +15,9 @@ from muxivo_console.application.organization_invitation_creation_result import (
 from muxivo_console.application.organization_invitation_error import (
     OrganizationInvitationRejectedError,
 )
+from muxivo_console.application.organization_member_management_helpers import (
+    can_manage_organization_members,
+)
 from muxivo_console.application.ports import (
     Clock,
     EmailAddressNormalizer,
@@ -73,7 +76,12 @@ class InviteOrganizationMember:
         actor = await self.memberships.get_membership(
             actor_id=command.actor_id, organization_id=command.organization_id
         )
-        if organization is None or actor is None or not actor.role.may_assign(command.role):
+        if (
+            organization is None
+            or actor is None
+            or not can_manage_organization_members(actor.role)
+            or not actor.role.may_assign(command.role)
+        ):
             logger.warning(
                 "organization.invitation.create.denied",
                 extra={

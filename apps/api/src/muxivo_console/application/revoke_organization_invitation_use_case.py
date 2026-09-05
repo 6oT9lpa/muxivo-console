@@ -8,6 +8,9 @@ from dataclasses import dataclass
 from muxivo_console.application.organization_invitation_revocation_error import (
     OrganizationInvitationRevocationRejectedError,
 )
+from muxivo_console.application.organization_member_management_helpers import (
+    can_manage_organization_members,
+)
 from muxivo_console.application.ports import (
     Clock,
     IdentifierGenerator,
@@ -53,6 +56,7 @@ class RevokeOrganizationInvitation:
         if (
             actor is None
             or invitation is None
+            or not can_manage_organization_members(actor.role)
             or not actor.role.may_assign(invitation.role)
             or invitation.status_at(self.clock.now()) is not OrganizationInvitationStatus.PENDING
         ):

@@ -7,6 +7,7 @@ from muxivo_console.application.organization_member_management_error import (
     OrganizationMemberManagementRejectedError,
 )
 from muxivo_console.application.organization_member_management_helpers import (
+    can_manage_organization_members,
     create_member_audit_event,
 )
 from muxivo_console.application.ports import (
@@ -50,6 +51,7 @@ class RemoveOrganizationMember:
             or target is None
             or target.id is None
             or target.actor_id == actor.actor_id
+            or not can_manage_organization_members(actor.role)
             or not actor.role.may_assign(target.role)
         ):
             logger.warning(

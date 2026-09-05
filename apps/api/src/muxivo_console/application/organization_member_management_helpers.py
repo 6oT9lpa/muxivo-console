@@ -20,6 +20,11 @@ from muxivo_console.domain.organizations import (
 logger = logging.getLogger("muxivo_console.application.manage_organization_members")
 
 
+def can_manage_organization_members(role: OrganizationRole) -> bool:
+    """Return whether a role may enter the organization-member management boundary."""
+    return role in {OrganizationRole.OWNER, OrganizationRole.ADMIN}
+
+
 async def require_actor_can_manage(
     memberships: OrganizationMembershipReader,
     actor_id: UUID,
@@ -28,7 +33,11 @@ async def require_actor_can_manage(
 ) -> OrganizationMembership:
     """Require the actor to assign the requested role or fail closed."""
     actor = await memberships.get_membership(actor_id=actor_id, organization_id=organization_id)
-    if actor is None or not actor.role.may_assign(target_role):
+    if (
+        actor is None
+        or not can_manage_organization_members(actor.role)
+        or not actor.role.may_assign(target_role)
+    ):
         logger.warning(
             "organization.member.manage.denied",
             extra={
