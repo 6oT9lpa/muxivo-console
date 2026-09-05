@@ -32,6 +32,13 @@ credential path used by `muxivo-console-api.service`.
   environment. Never use the staging template or policy for production. The
   API unit requires the agent and consumes only its root-owned runtime
   credential; it does not read a repository `.env` file.
+- `muxivo-discord-vault-agent.service`, `discord-vault-agent.hcl.example`,
+  `discord-control.env.ctmpl.example`, `vault-policy.discord.hcl.example` and
+  `muxivo-discord-activity-vault.conf.example` describe the separate AppRole
+  used by the already deployed Discord Activity. Only the HMAC signing key is
+  rendered into its root-owned runtime EnvironmentFile; Discord OAuth, bot and
+  platform credentials remain outside Console and are never exposed to the
+  browser.
 - `frpc-console.toml.example` is only a proxy fragment. Merge the `[[proxies]]`
   block into the existing `/etc/frp/frpc.toml` while preserving its server and
   authentication settings.

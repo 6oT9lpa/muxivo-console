@@ -1,0 +1,6 @@
+# Read-only policy for the Muxivo Discord Activity Vault Agent.
+# Use a separate AppRole from the Console role and keep the path environment-specific.
+
+path "secret/data/muxivo-discord/staging" {
+  capabilities = ["read"]
+}

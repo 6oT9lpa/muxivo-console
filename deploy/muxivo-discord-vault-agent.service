@@ -1,22 +1,23 @@
 [Unit]
-Description=HashiCorp Vault Agent for Muxivo Console credentials
+Description=HashiCorp Vault Agent for Muxivo Discord Control API credentials
 Documentation=https://developer.hashicorp.com/vault/docs/agent
 Wants=network-online.target
-After=network-online.target
+After=network-online.target vault.service
+Requires=vault.service
 
 [Service]
 Type=simple
 User=root
 Group=root
-RuntimeDirectory=muxivo-console-vault-agent
+RuntimeDirectory=muxivo-discord-vault-agent
 RuntimeDirectoryMode=0750
-ExecStart=/usr/local/bin/vault agent -config=/etc/muxivo-console/vault-agent.hcl
+Environment=HOME=/run/muxivo-discord-vault-agent
+ExecStart=/usr/local/bin/vault agent -config=/etc/muxivo-console/discord-vault-agent.hcl
 Restart=on-failure
 RestartSec=5s
 TimeoutStartSec=60s
 TimeoutStopSec=30s
 UMask=0077
-Environment=HOME=/run/muxivo-console-vault-agent
 
 NoNewPrivileges=true
 PrivateDevices=true
@@ -34,7 +35,7 @@ RestrictNamespaces=true
 CapabilityBoundingSet=
 AmbientCapabilities=
 RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
-ReadWritePaths=/run/muxivo-console-vault-agent
+ReadWritePaths=/run/muxivo-discord-vault-agent
 
 [Install]
 WantedBy=multi-user.target

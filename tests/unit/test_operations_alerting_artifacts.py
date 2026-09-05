@@ -133,3 +133,19 @@ def test_staging_vault_server_is_loopback_tls_and_persistent() -> None:
     assert "ReadWritePaths=/var/lib/vault /var/log/vault" in server_unit
     assert "CapabilityBoundingSet=CAP_IPC_LOCK" in server_unit
     assert "ExecStart=/usr/local/bin/vault agent" in agent_unit
+
+
+def test_discord_control_agent_isolated_from_console_credentials() -> None:
+    agent_unit = Path("deploy/muxivo-discord-vault-agent.service").read_text()
+    agent_config = Path("deploy/discord-vault-agent.hcl.example").read_text()
+    template = Path("deploy/discord-control.env.ctmpl.example").read_text()
+    policy = Path("deploy/vault-policy.discord.hcl.example").read_text()
+    activity_dropin = Path("deploy/muxivo-discord-activity-vault.conf.example").read_text()
+
+    assert "HOME=/run/muxivo-discord-vault-agent" in agent_unit
+    assert "discord-control.env.ctmpl" in agent_config
+    assert 'secret "secret/data/muxivo-discord/staging"' in template
+    assert 'path "secret/data/muxivo-discord/staging"' in policy
+    assert "EnvironmentFile=/run/muxivo-discord-vault-agent/control.env" in activity_dropin
+    assert "MUXIVO_DISCORD_CONTROL_SIGNING_KEY" in template
+    assert "MUXIVO_CONSOLE_DATABASE_URL" not in template

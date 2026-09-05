@@ -1,0 +1,6 @@
+[Unit]
+Requires=muxivo-discord-vault-agent.service
+After=muxivo-discord-vault-agent.service
+
+[Service]
+EnvironmentFile=/run/muxivo-discord-vault-agent/control.env

@@ -1,0 +1,38 @@
+# Vault Agent configuration for the already deployed Muxivo Discord Activity.
+# Keep the role and secret IDs in root-owned files outside the repository.
+
+pid_file = "/run/muxivo-discord-vault-agent/agent.pid"
+
+vault {
+  address = "https://vault.example.internal:8200"
+  ca_cert = "/etc/muxivo-console/vault-ca.pem"
+}
+
+auto_auth {
+  method "approle" {
+    mount_path = "auth/approle"
+    config = {
+      role_id_file_path                   = "/etc/muxivo-console/discord-vault-role-id"
+      secret_id_file_path                 = "/etc/muxivo-console/discord-vault-secret-id"
+      remove_secret_id_file_after_reading = false
+    }
+  }
+
+  sink "file" {
+    config = {
+      path = "/run/muxivo-discord-vault-agent/token"
+      mode = 0600
+    }
+  }
+}
+
+template {
+  source      = "/etc/muxivo-console/discord-control.env.ctmpl"
+  destination = "/run/muxivo-discord-vault-agent/control.env"
+  perms       = "0600"
+
+  wait {
+    min = "5s"
+    max = "30s"
+  }
+}

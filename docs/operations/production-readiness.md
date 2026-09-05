@@ -30,8 +30,8 @@ completed.
 | --- | --- | --- |
 | Identity | E-mail/password registration creates an account only after a short-lived six-digit code is verified | Implemented; SMTP.BZ secret-manager wiring and delivery test pending |
 | Identity | Password recovery SMTP delivery adapter configured outside logs | SMTP.BZ domain verified and STARTTLS/AUTH probe passed; Redis-backed token gate, secret-manager wiring and delivery test pending |
-| Security | Shared rate limits enabled for login, registration, reauthentication, OAuth callback and recovery | Redis is installed and loopback-only; staging secret-manager URL wiring pending |
-| Security | CORS allowlist configured for staging/prod origins | Enforced in settings; values pending |
+| Security | Shared rate limits enabled for login, registration, reauthentication, OAuth callback and recovery | Redis is installed and loopback-only; isolated staging DB 15 URL is staged in Vault |
+| Security | CORS allowlist configured for staging/prod origins | Enforced in settings; staging origin is staged in Vault |
 | Security | CSP, HSTS and browser hardening headers enabled | Implemented |
 | Security | Secret redaction filter and structured JSON logging installed in production composition | Implemented |
 | Security | Browser contracts checked for platform token exposure | Implemented in CI |
@@ -41,15 +41,15 @@ completed.
 | Security | Recent authentication refresh and gates for password change, identity unlink and sensitive writes | Implemented |
 | Security | Scheduled cleanup for expired sessions and recovery transactions | Implemented |
 | Observability | `/metrics` scraped and alert rules configured | Metrics endpoint, complete Prometheus scrape config and alert rules implemented; Prometheus/Alertmanager service installation and notification receiver remain deployment tasks |
-| Operations | Liveness/readiness endpoints distinguish process health from database readiness | Implemented; API unit is installed but disabled until the staging credential file and environment are provisioned |
+| Operations | Liveness/readiness endpoints distinguish process health from database readiness | Implemented; API unit is installed but disabled until SMTP credentials complete the staging Vault record |
 | Lifecycle | Periodic platform connection reconciliation worker | Implemented; unavailable Control API probes fail closed to `DEGRADED/PLATFORM_UNREACHABLE` and do not abort the remaining batch |
 | Lifecycle | Idempotency keys for retry-safe lifecycle actions | Implemented |
 | Lifecycle | Persisted and localized reason for every connection state transition | Implemented; legacy rows remain readable with a neutral fallback, and reconciliation contracts reject reason/status mismatches |
-| Lifecycle | Browser-safe platform resource candidate discovery | Console contract/UI implemented; Discord Control API endpoint implemented; Twitch Control API endpoint pending |
-| Lifecycle | Discord/Twitch ownership verification before registration | Implemented; Twitch Control API config pending |
-| Lifecycle | Discord/Twitch browser-safe connection health adapters | Implemented; Twitch Control API config pending |
+| Lifecycle | Browser-safe platform resource candidate discovery | Console contract/UI implemented; Discord Control API endpoint is deployed on the Activity host; Twitch Control API endpoint pending |
+| Lifecycle | Discord/Twitch ownership verification before registration | Discord implemented and signed end-to-end; Twitch Control API config pending |
+| Lifecycle | Discord/Twitch browser-safe connection health adapters | Discord implemented and signed end-to-end; Twitch Control API config pending |
 | Lifecycle | Discord token/scope reconciliation contract | Implemented |
-| Lifecycle | Twitch token/scope reconciliation contract | Implemented; service URL/signing key pending |
+| Lifecycle | Twitch token/scope reconciliation contract | Implemented; signing key generated and staged, service URL/implementation pending |
 | Quality | Production composition smoke with fail-fast env checks | Implemented in CI |
 | Quality | Discord/Twitch Control API adapter contract tests | Implemented in CI with MockTransport; live sandbox fixtures pending |
 | Quality | GitHub Actions quality workflow | Implemented; backend, frontend, E2E, security scanners and Docker smoke are required on push and pull request |
@@ -61,8 +61,8 @@ completed.
 | Operations | Incident runbook approved and exercised | Draft |
 | Operations | Backup/restore drill completed | Isolated database restore, migration rollback and restored-data application smoke passed on 2026-09-05; measured RTO/RPO and scheduled backup retention remain pending |
 | Deployment | Staging/prod domains provisioned | Temporary staging `beget.ame-life.com` serves frontend release `35c7fab`; API source release `4247079` and its Python runtime are staged, but the service remains stopped pending credential activation, and canonical production host is pending |
-| Deployment | Staging/prod OAuth credentials provisioned | Discord/Twitch OAuth enforced; Google/Yandex ID and Telegram Login adapters are implemented and remain disabled until their values are supplied |
-| Secrets | KMS/secret manager selected and wired | HashiCorp Vault + Vault Agent selected; Vault instance, AppRole policy and runtime wiring pending |
+| Deployment | Staging/prod OAuth credentials provisioned | Existing Discord/Twitch client credentials are staged in Vault with the new staging callback URLs; those callback URLs still need to be added in the provider dashboards |
+| Secrets | KMS/secret manager selected and wired | HashiCorp Vault + Vault Agent selected; loopback TLS Vault, audit log, AppRole policies, generated application keys and Discord Control Agent are provisioned; Console activation awaits SMTP |
 
 ## Latest staging verification
 
@@ -125,16 +125,29 @@ The same verification pass produced the following local quality evidence:
   expected CSP, `nosniff` and `no-referrer` browser headers;
 - legacy-auth, secret, browser-token, audit-coverage, readiness-artifact,
   application-layout and production-composition checks: all passed;
-- read-only host preflight confirmed active Nginx/FRP on the VPS and active
-  PostgreSQL/Redis on the local server; `muxivo-console-api.service` remains
-  intentionally inactive and `/etc/muxivo-console` has no rendered runtime
-  credential file.
+- the current Discord release was deployed beside the existing data and
+  environment, migration `0018_discord_control_guilds` reached head, and both
+  `omnibot-activity.service` and `omnibot-bot.service` returned to active state;
+- the signed Discord Control API is reachable through `https://muxivo.pro`,
+  rejects an unsigned request with `401`, and accepts a short-lived Console
+  assertion with the same Vault-managed HMAC key;
+- Vault 1.20.4 is initialized, unsealed, loopback-only over TLS with raft
+  storage and an audit file; separate AppRole policies now render the Console
+  and Discord Control secrets through root-owned runtime files;
+- a dedicated `muxivo_console` database role/password, isolated Redis DB 15
+  URL, email encryption key, lookup key, session pepper and reconciliation
+  actor ID were generated and stored in Vault; no values are present in Git or
+  the browser;
+- the Console staging Vault record contains the application and existing
+  Discord/Twitch OAuth values, but remains intentionally incomplete until the
+  SMTP.BZ username/password are supplied; consequently
+  `muxivo-console-api.service` remains stopped and the public staging API still
+  returns the expected fail-closed `502`.
 
 The `502` responses are an intentional readiness boundary, not a successful
-production deployment. The next activation step requires the approved
-HashiCorp Vault instance and AppRole policy, a dedicated database credential,
-Redis URL, OAuth credentials, SMTP configuration and signed Control API
-endpoints.
+production deployment. The remaining activation inputs are the SMTP.BZ
+credentials, provider-dashboard callback registration for Discord/Twitch, and
+an implemented/reachable Twitch Control API.
 
 ## Secret-manager decision
 
@@ -217,10 +230,11 @@ Before staging, fill in actual subprocessors:
 
 - Hosting provider: TBD.
 - Database provider: TBD.
-- Email delivery provider for verification/recovery: SMTP.BZ domain verification and non-delivery authentication probe passed; production secret-manager wiring and approved delivery test pending.
+- Email delivery provider for verification/recovery: SMTP.BZ domain verification and non-delivery authentication probe passed; staging Vault wiring is waiting only for the relay username/password and approved delivery test.
 - Error/metrics/logging provider: TBD.
-- KMS/secret manager provider: HashiCorp Vault selected; instance, region and
-  production policy wiring remain pending.
+- KMS/secret manager provider: HashiCorp Vault selected; staging instance,
+  TLS, audit logging, AppRole policies and generated application credentials
+  are provisioned; production namespace/policy wiring remains pending.
 
 ### User rights and requests
 

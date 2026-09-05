@@ -216,6 +216,46 @@ REQUIRED_SUPPORTING_ARTIFACTS: tuple[tuple[str, tuple[tuple[str, str], ...]], ..
         (
             ("ExecStart=/usr/local/bin/vault agent", "Vault Agent service command"),
             ("RuntimeDirectory=muxivo-console-vault-agent", "isolated Vault Agent runtime"),
+            ("Environment=HOME=/run/muxivo-console-vault-agent", "Vault Agent runtime home"),
+        ),
+    ),
+    (
+        "deploy/muxivo-discord-vault-agent.service",
+        (
+            ("ExecStart=/usr/local/bin/vault agent", "Discord Vault Agent service command"),
+            ("RuntimeDirectory=muxivo-discord-vault-agent", "isolated Discord Agent runtime"),
+            ("Environment=HOME=/run/muxivo-discord-vault-agent", "Discord Agent runtime home"),
+        ),
+    ),
+    (
+        "deploy/discord-vault-agent.hcl.example",
+        (
+            ("auth/approle", "Discord AppRole authentication mount"),
+            ("discord-control.env.ctmpl", "Discord Control environment template"),
+        ),
+    ),
+    (
+        "deploy/discord-control.env.ctmpl.example",
+        (
+            ("MUXIVO_DISCORD_CONTROL_SIGNING_KEY", "Discord Control signing key mapping"),
+            ("secret/data/muxivo-discord/staging", "Discord Control KV path"),
+        ),
+    ),
+    (
+        "deploy/vault-policy.discord.hcl.example",
+        (
+            ('path "secret/data/muxivo-discord/staging"', "Discord read-only Vault policy path"),
+            ('capabilities = ["read"]', "Discord read-only Vault policy"),
+        ),
+    ),
+    (
+        "deploy/muxivo-discord-activity-vault.conf.example",
+        (
+            ("Requires=muxivo-discord-vault-agent.service", "Activity-to-Discord-Agent dependency"),
+            (
+                "EnvironmentFile=/run/muxivo-discord-vault-agent/control.env",
+                "Discord Control runtime credential source",
+            ),
         ),
     ),
     (
