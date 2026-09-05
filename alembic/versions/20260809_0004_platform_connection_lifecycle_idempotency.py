@@ -44,8 +44,7 @@ def upgrade() -> None:
             name="ck_platform_connection_lifecycle_idempotency_action",
         ),
         sa.CheckConstraint(
-            "result_status IN ('pending', 'active', 'degraded', "
-            "'reauth_required', 'disconnected')",
+            "result_status IN ('pending', 'active', 'degraded', 'reauth_required', 'disconnected')",
             name="ck_platform_connection_lifecycle_idempotency_result_status",
         ),
     )
