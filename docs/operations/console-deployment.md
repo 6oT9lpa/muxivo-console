@@ -301,5 +301,7 @@ public deployment still requires external values and services:
   Telegram Login OAuth credentials when those login methods are enabled;
 - a reachable signed Discord Control API and Twitch Control API;
 - production secret-manager wiring for the verified SMTP.BZ credential and an explicitly approved delivery mailbox;
-- monitoring backend, backup/restore drill and legal approval of the policy and
-  terms drafts.
+- monitoring backend, restored-data application smoke for the backup/restore
+  path and legal approval of the policy and terms drafts. The isolated
+  database restore/migration probe is already recorded in the production
+  readiness document.

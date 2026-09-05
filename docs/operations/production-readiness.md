@@ -57,7 +57,7 @@ completed.
 | Compliance | Terms reviewed and published | Pending legal review |
 | Compliance | Data inventory and retention schedule approved | Draft |
 | Operations | Incident runbook approved and exercised | Draft |
-| Operations | Backup/restore drill completed | Drill procedure documented; staging exercise pending |
+| Operations | Backup/restore drill completed | Isolated database restore and migration rollback probe passed on 2026-09-05; restored-data application smoke and RTO/RPO record pending |
 | Deployment | Staging/prod domains provisioned | Temporary staging `beget.ame-life.com` serves frontend release `740220b`; API source release `79cca30` and its Python runtime are staged, but the service remains stopped pending credential activation, and canonical production host is pending |
 | Deployment | Staging/prod OAuth credentials provisioned | Discord/Twitch OAuth enforced; Google/Yandex ID and Telegram Login adapters are implemented and remain disabled until their values are supplied |
 | Secrets | KMS/secret manager selected and wired | HashiCorp Vault + Vault Agent selected; Vault instance, AppRole policy and runtime wiring pending |
@@ -90,7 +90,7 @@ On 2026-09-05 the deployment was checked without changing application data:
 The same verification pass produced the following local quality evidence:
 
 - backend regression: `488 passed`;
-- frontend unit suite: `54 passed`;
+- frontend unit suite: `59 passed`;
 - frontend production build: successful;
 - browser E2E suite: `6 passed`;
 - legacy-auth, secret, browser-token, audit-coverage, readiness-artifact,
@@ -434,6 +434,27 @@ Minimum documented drill before production:
 6. Verify recovery from backup does not restore revoked active sessions as
    usable sessions.
 7. Record restore time objective, data loss window and any manual steps.
+
+### Verified schema-level probe (2026-09-05)
+
+An isolated recovery probe was executed on the local staging database without
+changing the live `muxivo_console` database:
+
+- `pg_dump --format=custom --no-owner` produced a temporary encrypted backup;
+- the backup was decrypted only inside the drill workspace and restored into a
+  temporary PostgreSQL database through a temporary login role;
+- the restored database contained 17 public tables and retained source Alembic
+  revision `20260902_0006`;
+- migrations advanced the restored copy to head `20260905_0008`, rolled back
+  the newest migration to `20260905_0007`, and upgraded it to head again;
+- the temporary database, role, dump files, key file and drill directory were
+  verified absent after cleanup.
+
+This proves the database backup format, encryption boundary, isolated restore
+and migration rollback path. It is not the complete production gate yet:
+restored-data application smoke (login, organizations, memberships,
+connections, audit timeline and revoked-session behavior), plus measured RTO,
+RPO and scheduled backup retention, remain pending.
 
 ## Remaining engineering follow-up
 
