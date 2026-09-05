@@ -42,6 +42,16 @@ def twitch_authorization_url(*, state: str, code_challenge: str) -> str:
     return "https://twitch.example/authorize"
 
 
+def google_authorization_url(*, state: str, code_challenge: str) -> str:
+    assert (state, code_challenge) == ("state", "challenge")
+    return "https://google.example/authorize"
+
+
+def yandex_authorization_url(*, state: str, code_challenge: str) -> str:
+    assert (state, code_challenge) == ("state", "challenge")
+    return "https://yandex.example/authorize"
+
+
 def test_starts_discord_oauth_login_without_a_browser_session() -> None:
     start = LoginStart()
     client = TestClient(
@@ -106,6 +116,51 @@ def test_twitch_oauth_callback_sets_first_party_cookies_and_redirects_to_console
     assert complete.arguments["provider"].value == "twitch"
 
 
+def test_starts_google_oauth_login_without_a_browser_session() -> None:
+    start = LoginStart()
+    client = TestClient(
+        create_app(google_login_start=start, google_authorization_url=google_authorization_url)
+    )
+
+    response = client.post("/api/v1/auth/google/authorizations")
+
+    assert response.status_code == 200
+    assert response.json()["authorization_url"] == "https://google.example/authorize"
+    assert start.arguments is not None
+    assert start.arguments["provider"].value == "google"
+
+
+def test_starts_yandex_oauth_login_without_a_browser_session() -> None:
+    start = LoginStart()
+    client = TestClient(
+        create_app(yandex_login_start=start, yandex_authorization_url=yandex_authorization_url)
+    )
+
+    response = client.post("/api/v1/auth/yandex/authorizations")
+
+    assert response.status_code == 200
+    assert response.json()["authorization_url"] == "https://yandex.example/authorize"
+    assert start.arguments is not None
+    assert start.arguments["provider"].value == "yandex"
+
+
+def test_google_oauth_callback_sets_first_party_cookies_and_redirects_to_console() -> None:
+    complete = LoginComplete()
+    client = TestClient(create_app(google_login_complete=complete))
+
+    response = client.get(
+        "/api/v1/auth/google/callback?code=oauth-code&state=oauth-state",
+        follow_redirects=False,
+    )
+
+    assert response.status_code == 303
+    assert response.headers["location"] == "/"
+    assert "__Host-muxivo_session=opaque-session" in response.headers["set-cookie"]
+    assert "__Host-muxivo_csrf=csrf-token" in response.headers["set-cookie"]
+    assert complete.arguments is not None
+    assert complete.arguments["provider"].value == "google"
+
+
 def test_provider_catalog_lists_only_configured_oauth_login_providers() -> None:
     client = TestClient(
         create_app(
@@ -120,3 +175,19 @@ def test_provider_catalog_lists_only_configured_oauth_login_providers() -> None:
 
     assert response.status_code == 200
     assert response.json() == {"providers": ["discord", "twitch"]}
+
+
+def test_provider_catalog_includes_google_and_yandex_when_configured() -> None:
+    client = TestClient(
+        create_app(
+            google_login_start=LoginStart(),
+            google_authorization_url=google_authorization_url,
+            yandex_login_start=LoginStart(),
+            yandex_authorization_url=yandex_authorization_url,
+        )
+    )
+
+    response = client.get("/api/v1/auth/providers")
+
+    assert response.status_code == 200
+    assert response.json() == {"providers": ["google", "yandex"]}

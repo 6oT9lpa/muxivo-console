@@ -119,6 +119,7 @@ from muxivo_console.infrastructure.notifications import (
     UndeliveredEmailPasswordRegistrationVerificationNotifier,
     UndeliveredPasswordRecoveryCompletionNotifier,
 )
+from muxivo_console.infrastructure.openid_connect_oauth import OpenIdConnectOAuthClient
 from muxivo_console.infrastructure.persistence.audit_repository import (
     SqlAlchemyAuditEventReader,
     SqlAlchemyAuditEventWriter,
@@ -705,11 +706,29 @@ def create_production_app(
     discord_login_complete = None
     twitch_login_start = None
     twitch_login_complete = None
+    google_identity_link_start = None
+    google_identity_link_complete = None
+    google_login_start = None
+    google_login_complete = None
+    yandex_identity_link_start = None
+    yandex_identity_link_complete = None
+    yandex_login_start = None
+    yandex_login_complete = None
     discord_authorization_url = None
     twitch_authorization_url = None
+    google_authorization_url = None
+    yandex_authorization_url = None
     identity_linker = None
     opaque_secrets = None
-    if settings.discord_oauth is not None or settings.twitch_oauth is not None:
+    if any(
+        oauth is not None
+        for oauth in (
+            settings.discord_oauth,
+            settings.twitch_oauth,
+            settings.google_oauth,
+            settings.yandex_oauth,
+        )
+    ):
         identity_linker = LinkVerifiedIdentity(
             identifiers=identifiers,
             user_statuses=user_statuses,
@@ -798,6 +817,99 @@ def create_production_app(
             sessions=session_creator,
         )
         twitch_authorization_url = twitch_oauth_client.authorization_url
+    if settings.google_oauth is not None:
+        google_oauth_client = OpenIdConnectOAuthClient(
+            provider_label="Google",
+            client_id=settings.google_oauth.client_id,
+            client_secret=settings.google_oauth.client_secret,
+            redirect_uri=settings.google_oauth.redirect_uri,
+            authorize_url="https://accounts.google.com/o/oauth2/v2/auth",
+            token_url="https://oauth2.googleapis.com/token",
+            userinfo_url="https://openidconnect.googleapis.com/v1/userinfo",
+            scopes=("openid", "email", "profile"),
+        )
+        google_identity_link_start = BeginIdentityLink(
+            identifiers=identifiers,
+            clock=clock,
+            user_statuses=user_statuses,
+            token_issuer=SecureOpaqueSessionTokenIssuer(),
+            token_hasher=session_hasher,
+            secrets=opaque_secrets,
+            transactions=SqlAlchemyIdentityLinkTransactionWriter(sessions),
+        )
+        google_identity_link_complete = CompleteIdentityLink(
+            clock=clock,
+            token_hasher=session_hasher,
+            secrets=opaque_secrets,
+            transactions=SqlAlchemyIdentityLinkTransactionConsumer(sessions),
+            provider_client=google_oauth_client,
+            linker=identity_linker,
+        )
+        google_login_start = BeginOAuthLogin(
+            identifiers=identifiers,
+            clock=clock,
+            token_issuer=SecureOpaqueSessionTokenIssuer(),
+            token_hasher=session_hasher,
+            secrets=opaque_secrets,
+            transactions=SqlAlchemyOAuthLoginTransactionWriter(sessions),
+        )
+        google_login_complete = CompleteOAuthLogin(
+            clock=clock,
+            token_hasher=session_hasher,
+            secrets=opaque_secrets,
+            transactions=SqlAlchemyOAuthLoginTransactionConsumer(sessions),
+            provider_client=google_oauth_client,
+            identities=SqlAlchemyLoginIdentityReader(sessions),
+            sessions=session_creator,
+        )
+        google_authorization_url = google_oauth_client.authorization_url
+    if settings.yandex_oauth is not None:
+        yandex_oauth_client = OpenIdConnectOAuthClient(
+            provider_label="Yandex ID",
+            client_id=settings.yandex_oauth.client_id,
+            client_secret=settings.yandex_oauth.client_secret,
+            redirect_uri=settings.yandex_oauth.redirect_uri,
+            authorize_url="https://oauth.yandex.com/authorize",
+            token_url="https://oauth.yandex.com/token",
+            userinfo_url="https://login.yandex.ru/info?format=json",
+            scopes=("login:email", "login:info"),
+            subject_field="id",
+        )
+        yandex_identity_link_start = BeginIdentityLink(
+            identifiers=identifiers,
+            clock=clock,
+            user_statuses=user_statuses,
+            token_issuer=SecureOpaqueSessionTokenIssuer(),
+            token_hasher=session_hasher,
+            secrets=opaque_secrets,
+            transactions=SqlAlchemyIdentityLinkTransactionWriter(sessions),
+        )
+        yandex_identity_link_complete = CompleteIdentityLink(
+            clock=clock,
+            token_hasher=session_hasher,
+            secrets=opaque_secrets,
+            transactions=SqlAlchemyIdentityLinkTransactionConsumer(sessions),
+            provider_client=yandex_oauth_client,
+            linker=identity_linker,
+        )
+        yandex_login_start = BeginOAuthLogin(
+            identifiers=identifiers,
+            clock=clock,
+            token_issuer=SecureOpaqueSessionTokenIssuer(),
+            token_hasher=session_hasher,
+            secrets=opaque_secrets,
+            transactions=SqlAlchemyOAuthLoginTransactionWriter(sessions),
+        )
+        yandex_login_complete = CompleteOAuthLogin(
+            clock=clock,
+            token_hasher=session_hasher,
+            secrets=opaque_secrets,
+            transactions=SqlAlchemyOAuthLoginTransactionConsumer(sessions),
+            provider_client=yandex_oauth_client,
+            identities=SqlAlchemyLoginIdentityReader(sessions),
+            sessions=session_creator,
+        )
+        yandex_authorization_url = yandex_oauth_client.authorization_url
     return create_app(
         control_modules_use_case=modules,
         registration_verification_start_use_case=registration_verification_start,
@@ -840,8 +952,18 @@ def create_production_app(
         discord_login_complete=discord_login_complete,
         twitch_login_start=twitch_login_start,
         twitch_login_complete=twitch_login_complete,
+        google_identity_link_start=google_identity_link_start,
+        google_identity_link_complete=google_identity_link_complete,
+        google_login_start=google_login_start,
+        google_login_complete=google_login_complete,
+        yandex_identity_link_start=yandex_identity_link_start,
+        yandex_identity_link_complete=yandex_identity_link_complete,
+        yandex_login_start=yandex_login_start,
+        yandex_login_complete=yandex_login_complete,
         discord_authorization_url=discord_authorization_url,
         twitch_authorization_url=twitch_authorization_url,
+        google_authorization_url=google_authorization_url,
+        yandex_authorization_url=yandex_authorization_url,
         session_resolver=ResolveBrowserSession(
             clock=clock,
             token_hasher=session_hasher,

@@ -86,6 +86,7 @@ import type {
 } from "./features/console/types";
 
 type AuthProvider = "discord" | "twitch" | "telegram" | "google" | "yandex";
+type ExternalIdentityProvider = Exclude<AuthProvider, "telegram">;
 const AUTH_PROVIDERS = new Set<AuthProvider>([
   "discord",
   "twitch",
@@ -134,11 +135,16 @@ const invitationToken = ref(
     ? initialAuthUrl.searchParams.get("token") ?? ""
     : "",
 );
-const identityLinkedProvider = ref<"discord" | "twitch" | null>(
+const identityLinkedProvider = ref<ExternalIdentityProvider | null>(
   typeof window !== "undefined"
     ? (() => {
         const provider = new URL(window.location.href).searchParams.get("identity_linked");
-        return provider === "discord" || provider === "twitch" ? provider : null;
+        return provider === "discord" ||
+          provider === "twitch" ||
+          provider === "google" ||
+          provider === "yandex"
+          ? provider
+          : null;
       })()
     : null,
 );
@@ -555,6 +561,8 @@ async function signInWithProvider(provider: AuthProvider): Promise<void> {
   const authorizationPaths: Partial<Record<AuthProvider, string>> = {
     discord: "/api/v1/auth/discord/authorizations",
     twitch: "/api/v1/auth/twitch/authorizations",
+    google: "/api/v1/auth/google/authorizations",
+    yandex: "/api/v1/auth/yandex/authorizations",
   };
   const authorizationPath = authorizationPaths[provider];
   if (!authorizationPath) {
@@ -674,13 +682,13 @@ onMounted(async () => {
   }
   if (linkedProvider) {
     notice.value = t("console.notice.identity_linked", {
-      platform: platformLabel(linkedProvider),
+      platform: providerLabel(linkedProvider),
     });
     activeConsoleSection.value = "connections";
   }
 });
 
-async function linkExternalIdentity(provider: "discord" | "twitch") {
+async function linkExternalIdentity(provider: ExternalIdentityProvider) {
   busy.value = true;
   notice.value = "";
   try {
@@ -701,6 +709,14 @@ async function linkDiscord() {
 
 async function linkTwitch() {
   await linkExternalIdentity("twitch");
+}
+
+async function linkGoogle() {
+  await linkExternalIdentity("google");
+}
+
+async function linkYandex() {
+  await linkExternalIdentity("yandex");
 }
 
 async function loadBrowserSessions() {
@@ -1219,7 +1235,9 @@ async function acceptOrganizationInvitation() {
 }
 
 function providerLabel(provider: LoginIdentity["provider"]): string {
-  return provider === "email" ? t("console.security.email_password") : provider;
+  return provider === "email"
+    ? t("console.security.email_password")
+    : t(`console.identity_provider.${provider}`);
 }
 
 function connectionStatusLabel(status: PlatformConnection["status"]): string {
@@ -1938,6 +1956,16 @@ function messageFor(error: unknown): string {
           <h3>{{ t("console.overview.twitch_identity") }}</h3>
           <p>{{ t("console.overview.twitch_description") }}</p>
           <button type="button" :disabled="busy" @click="linkTwitch">{{ t("console.overview.link_twitch") }}</button>
+        </div>
+        <div class="identity-link">
+          <h3>{{ t("console.overview.google_identity") }}</h3>
+          <p>{{ t("console.overview.google_description") }}</p>
+          <button type="button" :disabled="busy" @click="linkGoogle">{{ t("console.overview.link_google") }}</button>
+        </div>
+        <div class="identity-link">
+          <h3>{{ t("console.overview.yandex_identity") }}</h3>
+          <p>{{ t("console.overview.yandex_description") }}</p>
+          <button type="button" :disabled="busy" @click="linkYandex">{{ t("console.overview.link_yandex") }}</button>
         </div>
       </div>
     </section>

@@ -339,6 +339,8 @@ CSRF_EXEMPT_PATHS = frozenset(
         "/api/v1/auth/email-password/sessions",
         "/api/v1/auth/discord/authorizations",
         "/api/v1/auth/twitch/authorizations",
+        "/api/v1/auth/google/authorizations",
+        "/api/v1/auth/yandex/authorizations",
         "/api/v1/auth/password-recovery/requests",
         "/api/v1/auth/password-recovery/completions",
     }
@@ -634,8 +636,18 @@ def create_app(
     discord_login_complete: CompleteOAuthLogin | None = None,
     twitch_login_start: BeginOAuthLogin | None = None,
     twitch_login_complete: CompleteOAuthLogin | None = None,
+    google_identity_link_start: BeginIdentityLink | None = None,
+    google_identity_link_complete: CompleteIdentityLink | None = None,
+    google_login_start: BeginOAuthLogin | None = None,
+    google_login_complete: CompleteOAuthLogin | None = None,
+    yandex_identity_link_start: BeginIdentityLink | None = None,
+    yandex_identity_link_complete: CompleteIdentityLink | None = None,
+    yandex_login_start: BeginOAuthLogin | None = None,
+    yandex_login_complete: CompleteOAuthLogin | None = None,
     discord_authorization_url: Callable[..., str] | None = None,
     twitch_authorization_url: Callable[..., str] | None = None,
+    google_authorization_url: Callable[..., str] | None = None,
+    yandex_authorization_url: Callable[..., str] | None = None,
     session_resolver: ResolveBrowserSession | None = None,
     session_revoker: RevokeBrowserSession | None = None,
     session_list_use_case: ListBrowserSessions | None = None,
@@ -1392,6 +1404,66 @@ def create_app(
             )
             return None
 
+    async def complete_external_identity_link_callback(
+        *,
+        request: Request,
+        provider: LoginIdentityProvider,
+        state: str,
+        authorization_code: str,
+        login_completion: CompleteOAuthLogin | None,
+        identity_link_completion: CompleteIdentityLink | None,
+        provider_label: str,
+    ) -> Response:
+        """Complete login first, then safely fall back to identity linking."""
+        await enforce_auth_rate_limit(request, scope="auth.oauth.callback")
+        issued_session = await complete_oauth_login_if_valid(
+            request=request,
+            provider=provider,
+            state=state,
+            authorization_code=authorization_code,
+            completion=login_completion,
+        )
+        if issued_session is not None:
+            response = RedirectResponse(url="/", status_code=status.HTTP_303_SEE_OTHER)
+            _set_browser_session_cookies(response, issued_session, cookies)
+            return response
+        if identity_link_completion is None:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail=f"{provider_label} identity linking is unavailable",
+            )
+        try:
+            await identity_link_completion.execute(
+                CompleteIdentityLinkCommand(
+                    provider=provider,
+                    state=state,
+                    authorization_code=authorization_code,
+                    correlation_id=request.state.correlation_id,
+                )
+            )
+            logger.info(
+                "identity.link.callback_completed",
+                extra={
+                    "provider": provider.value,
+                    "correlation_id": str(request.state.correlation_id),
+                },
+            )
+        except IdentityLinkCompletionRejectedError as error:
+            logger.warning(
+                "identity.link.callback_rejected",
+                extra={
+                    "provider": provider.value,
+                    "correlation_id": str(request.state.correlation_id),
+                },
+            )
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"{provider_label} identity linking failed",
+            ) from error
+        return RedirectResponse(
+            url=f"/?identity_linked={provider.value}", status_code=status.HTTP_303_SEE_OTHER
+        )
+
     @app.post(
         "/api/v1/auth/password-recovery/completions",
         status_code=status.HTTP_204_NO_CONTENT,
@@ -1504,6 +1576,32 @@ def create_app(
             provider_label="Twitch",
         )
 
+    @app.post(
+        "/api/v1/identity-links/google/authorizations",
+        tags=["identity-links"],
+    )
+    async def begin_google_identity_link(request: Request) -> dict[str, str | int]:
+        return await begin_external_identity_link(
+            request=request,
+            provider=LoginIdentityProvider.GOOGLE,
+            start_use_case=google_identity_link_start,
+            authorization_url=google_authorization_url,
+            provider_label="Google",
+        )
+
+    @app.post(
+        "/api/v1/identity-links/yandex/authorizations",
+        tags=["identity-links"],
+    )
+    async def begin_yandex_identity_link(request: Request) -> dict[str, str | int]:
+        return await begin_external_identity_link(
+            request=request,
+            provider=LoginIdentityProvider.YANDEX,
+            start_use_case=yandex_identity_link_start,
+            authorization_url=yandex_authorization_url,
+            provider_label="Yandex ID",
+        )
+
     @app.get(
         "/api/v1/auth/providers",
         response_model=OAuthProviderCatalogResponse,
@@ -1522,6 +1620,16 @@ def create_app(
                     LoginIdentityProvider.TWITCH,
                     twitch_login_start,
                     twitch_authorization_url,
+                ),
+                (
+                    LoginIdentityProvider.GOOGLE,
+                    google_login_start,
+                    google_authorization_url,
+                ),
+                (
+                    LoginIdentityProvider.YANDEX,
+                    yandex_login_start,
+                    yandex_authorization_url,
                 ),
             )
             if start_use_case is not None and authorization_url is not None
@@ -1555,56 +1663,37 @@ def create_app(
             provider_label="Twitch",
         )
 
+    @app.post("/api/v1/auth/google/authorizations", tags=["authentication"])
+    async def begin_google_oauth_login(request: Request) -> dict[str, str | int]:
+        return await begin_oauth_login(
+            request=request,
+            provider=LoginIdentityProvider.GOOGLE,
+            start_use_case=google_login_start,
+            authorization_url=google_authorization_url,
+            provider_label="Google",
+        )
+
+    @app.post("/api/v1/auth/yandex/authorizations", tags=["authentication"])
+    async def begin_yandex_oauth_login(request: Request) -> dict[str, str | int]:
+        return await begin_oauth_login(
+            request=request,
+            provider=LoginIdentityProvider.YANDEX,
+            start_use_case=yandex_login_start,
+            authorization_url=yandex_authorization_url,
+            provider_label="Yandex ID",
+        )
+
     @app.get("/api/v1/auth/discord/callback", tags=["authentication"])
     @app.get("/api/v1/identity-links/discord/callback", tags=["identity-links"])
     async def complete_discord_oauth_callback(code: str, state: str, request: Request) -> Response:
-        await enforce_auth_rate_limit(request, scope="auth.oauth.callback")
-        issued_session = await complete_oauth_login_if_valid(
+        return await complete_external_identity_link_callback(
             request=request,
             provider=LoginIdentityProvider.DISCORD,
             state=state,
             authorization_code=code,
-            completion=discord_login_complete,
-        )
-        if issued_session is not None:
-            response = RedirectResponse(url="/", status_code=status.HTTP_303_SEE_OTHER)
-            _set_browser_session_cookies(response, issued_session, cookies)
-            return response
-        if discord_identity_link_complete is None:
-            raise HTTPException(
-                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-                detail="Discord identity linking is unavailable",
-            )
-        try:
-            await discord_identity_link_complete.execute(
-                CompleteIdentityLinkCommand(
-                    provider=LoginIdentityProvider.DISCORD,
-                    state=state,
-                    authorization_code=code,
-                    correlation_id=request.state.correlation_id,
-                )
-            )
-            logger.info(
-                "identity.link.callback_completed",
-                extra={
-                    "provider": LoginIdentityProvider.DISCORD.value,
-                    "correlation_id": str(request.state.correlation_id),
-                },
-            )
-        except IdentityLinkCompletionRejectedError as error:
-            logger.warning(
-                "identity.link.callback_rejected",
-                extra={
-                    "provider": LoginIdentityProvider.DISCORD.value,
-                    "correlation_id": str(request.state.correlation_id),
-                },
-            )
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Discord identity linking failed",
-            ) from error
-        return RedirectResponse(
-            url="/?identity_linked=discord", status_code=status.HTTP_303_SEE_OTHER
+            login_completion=discord_login_complete,
+            identity_link_completion=discord_identity_link_complete,
+            provider_label="Discord",
         )
 
     @app.get("/api/v1/auth/twitch/callback", tags=["authentication", "identity-links"])
@@ -1612,53 +1701,40 @@ def create_app(
     async def complete_twitch_identity_link_callback(
         code: str, state: str, request: Request
     ) -> Response:
-        await enforce_auth_rate_limit(request, scope="auth.oauth.callback")
-        issued_session = await complete_oauth_login_if_valid(
+        return await complete_external_identity_link_callback(
             request=request,
             provider=LoginIdentityProvider.TWITCH,
             state=state,
             authorization_code=code,
-            completion=twitch_login_complete,
+            login_completion=twitch_login_complete,
+            identity_link_completion=twitch_identity_link_complete,
+            provider_label="Twitch",
         )
-        if issued_session is not None:
-            response = RedirectResponse(url="/", status_code=status.HTTP_303_SEE_OTHER)
-            _set_browser_session_cookies(response, issued_session, cookies)
-            return response
-        if twitch_identity_link_complete is None:
-            raise HTTPException(
-                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-                detail="Twitch identity linking is unavailable",
-            )
-        try:
-            await twitch_identity_link_complete.execute(
-                CompleteIdentityLinkCommand(
-                    provider=LoginIdentityProvider.TWITCH,
-                    state=state,
-                    authorization_code=code,
-                    correlation_id=request.state.correlation_id,
-                )
-            )
-            logger.info(
-                "identity.link.callback_completed",
-                extra={
-                    "provider": LoginIdentityProvider.TWITCH.value,
-                    "correlation_id": str(request.state.correlation_id),
-                },
-            )
-        except IdentityLinkCompletionRejectedError as error:
-            logger.warning(
-                "identity.link.callback_rejected",
-                extra={
-                    "provider": LoginIdentityProvider.TWITCH.value,
-                    "correlation_id": str(request.state.correlation_id),
-                },
-            )
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Twitch identity linking failed",
-            ) from error
-        return RedirectResponse(
-            url="/?identity_linked=twitch", status_code=status.HTTP_303_SEE_OTHER
+
+    @app.get("/api/v1/auth/google/callback", tags=["authentication"])
+    @app.get("/api/v1/identity-links/google/callback", tags=["identity-links"])
+    async def complete_google_oauth_callback(code: str, state: str, request: Request) -> Response:
+        return await complete_external_identity_link_callback(
+            request=request,
+            provider=LoginIdentityProvider.GOOGLE,
+            state=state,
+            authorization_code=code,
+            login_completion=google_login_complete,
+            identity_link_completion=google_identity_link_complete,
+            provider_label="Google",
+        )
+
+    @app.get("/api/v1/auth/yandex/callback", tags=["authentication"])
+    @app.get("/api/v1/identity-links/yandex/callback", tags=["identity-links"])
+    async def complete_yandex_oauth_callback(code: str, state: str, request: Request) -> Response:
+        return await complete_external_identity_link_callback(
+            request=request,
+            provider=LoginIdentityProvider.YANDEX,
+            state=state,
+            authorization_code=code,
+            login_completion=yandex_login_complete,
+            identity_link_completion=yandex_identity_link_complete,
+            provider_label="Yandex ID",
         )
 
     @app.get(

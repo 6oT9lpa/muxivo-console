@@ -161,6 +161,31 @@ def test_twitch_oauth_start_is_rate_limited_before_use_case() -> None:
     assert use_case.called is False
 
 
+@pytest.mark.parametrize(
+    ("path", "provider_url"),
+    (
+        ("/api/v1/auth/google/authorizations", "https://google.example/authorize"),
+        ("/api/v1/auth/yandex/authorizations", "https://yandex.example/authorize"),
+    ),
+)
+def test_oidc_oauth_starts_are_rate_limited_before_use_case(path: str, provider_url: str) -> None:
+    limiter = DenyingRateLimiter()
+    use_case = RecordingUseCase(StartedOAuthLogin("state", "challenge", 600))
+    app = create_app(
+        google_login_start=use_case if "google" in path else None,
+        google_authorization_url=(lambda **_: provider_url) if "google" in path else None,
+        yandex_login_start=use_case if "yandex" in path else None,
+        yandex_authorization_url=(lambda **_: provider_url) if "yandex" in path else None,
+        rate_limiter=limiter,
+    )
+    client = TestClient(app)
+
+    response = client.post(path)
+
+    assert_rate_limited(response, limiter, "auth.oauth.start")
+    assert use_case.called is False
+
+
 def test_discord_oauth_callback_is_rate_limited_before_use_case() -> None:
     limiter = DenyingRateLimiter()
     use_case = RecordingUseCase()

@@ -191,6 +191,42 @@ def test_settings_require_twitch_oauth_outside_development() -> None:
     assert ConsoleSettings.from_environment(values).twitch_oauth is None
 
 
+def test_settings_parse_optional_google_and_yandex_oauth_configuration() -> None:
+    values = environment()
+    values.update(
+        {
+            "MUXIVO_GOOGLE_OAUTH_CLIENT_ID": "google-client-id",
+            "MUXIVO_GOOGLE_OAUTH_CLIENT_SECRET": "google-client-secret",
+            "MUXIVO_GOOGLE_OAUTH_REDIRECT_URI": (
+                "https://console.muxivo.test/api/v1/auth/google/callback"
+            ),
+            "MUXIVO_YANDEX_OAUTH_CLIENT_ID": "yandex-client-id",
+            "MUXIVO_YANDEX_OAUTH_CLIENT_SECRET": "yandex-client-secret",
+            "MUXIVO_YANDEX_OAUTH_REDIRECT_URI": (
+                "https://console.muxivo.test/api/v1/auth/yandex/callback"
+            ),
+        }
+    )
+
+    settings = ConsoleSettings.from_environment(values)
+
+    assert settings.google_oauth is not None
+    assert settings.google_oauth.redirect_uri.endswith("/auth/google/callback")
+    assert settings.yandex_oauth is not None
+    assert settings.yandex_oauth.redirect_uri.endswith("/auth/yandex/callback")
+
+    values["MUXIVO_GOOGLE_OAUTH_REDIRECT_URI"] = (
+        "https://console.muxivo.test/api/v1/auth/wrong/callback"
+    )
+    with pytest.raises(ConfigurationError, match="GOOGLE_OAUTH_REDIRECT_URI"):
+        ConsoleSettings.from_environment(values)
+
+    values = environment()
+    values["MUXIVO_YANDEX_OAUTH_CLIENT_ID"] = "yandex-client-id"
+    with pytest.raises(ConfigurationError, match="Yandex OAuth"):
+        ConsoleSettings.from_environment(values)
+
+
 def test_settings_parse_cors_allowlist_and_reject_wildcards() -> None:
     values = environment()
     values["MUXIVO_CONSOLE_PUBLIC_BASE_URL"] = "https://console.muxivo.com"
@@ -418,6 +454,47 @@ def test_production_composition_wires_twitch_health_when_control_api_is_configur
     assert captured["twitch_login_start"] is not None
     assert captured["twitch_login_complete"] is not None
     assert captured["twitch_authorization_url"] is not None
+
+
+def test_production_composition_wires_google_and_yandex_oauth(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    captured: dict[str, object] = {}
+
+    def capture_create_app(**kwargs):
+        captured.update(kwargs)
+        return SimpleNamespace(title="Muxivo Console API")
+
+    monkeypatch.setattr(composition_module, "create_app", capture_create_app)
+    values = environment()
+    values.update(
+        {
+            "MUXIVO_GOOGLE_OAUTH_CLIENT_ID": "google-client-id",
+            "MUXIVO_GOOGLE_OAUTH_CLIENT_SECRET": "google-client-secret",
+            "MUXIVO_GOOGLE_OAUTH_REDIRECT_URI": (
+                "https://console.muxivo.test/api/v1/auth/google/callback"
+            ),
+            "MUXIVO_YANDEX_OAUTH_CLIENT_ID": "yandex-client-id",
+            "MUXIVO_YANDEX_OAUTH_CLIENT_SECRET": "yandex-client-secret",
+            "MUXIVO_YANDEX_OAUTH_REDIRECT_URI": (
+                "https://console.muxivo.test/api/v1/auth/yandex/callback"
+            ),
+        }
+    )
+
+    app = create_production_app(ConsoleSettings.from_environment(values))
+
+    assert app.title == "Muxivo Console API"
+    assert captured["google_identity_link_start"] is not None
+    assert captured["google_identity_link_complete"] is not None
+    assert captured["google_login_start"] is not None
+    assert captured["google_login_complete"] is not None
+    assert captured["google_authorization_url"] is not None
+    assert captured["yandex_identity_link_start"] is not None
+    assert captured["yandex_identity_link_complete"] is not None
+    assert captured["yandex_login_start"] is not None
+    assert captured["yandex_login_complete"] is not None
+    assert captured["yandex_authorization_url"] is not None
 
 
 def test_development_composition_requires_explicit_development_environment() -> None:

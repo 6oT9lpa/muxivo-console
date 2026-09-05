@@ -18,6 +18,7 @@ from muxivo_console.infrastructure.deployment_readiness_settings import (
     DeploymentReadinessSettings,
 )
 from muxivo_console.infrastructure.discord_oauth_settings import DiscordOAuthSettings
+from muxivo_console.infrastructure.google_oauth_settings import GoogleOAuthSettings
 from muxivo_console.infrastructure.rate_limit_settings import RateLimitSettings
 from muxivo_console.infrastructure.security_cleanup_settings import SecurityCleanupSettings
 from muxivo_console.infrastructure.smtp_password_recovery_settings import (
@@ -25,6 +26,7 @@ from muxivo_console.infrastructure.smtp_password_recovery_settings import (
 )
 from muxivo_console.infrastructure.twitch_control_settings import TwitchControlSettings
 from muxivo_console.infrastructure.twitch_oauth_settings import TwitchOAuthSettings
+from muxivo_console.infrastructure.yandex_oauth_settings import YandexOAuthSettings
 
 __all__ = [
     "ConfigurationError",
@@ -32,11 +34,13 @@ __all__ = [
     "ConsoleSettings",
     "DeploymentReadinessSettings",
     "DiscordOAuthSettings",
+    "GoogleOAuthSettings",
     "RateLimitSettings",
     "SecurityCleanupSettings",
     "SmtpPasswordRecoverySettings",
     "TwitchControlSettings",
     "TwitchOAuthSettings",
+    "YandexOAuthSettings",
 ]
 
 
@@ -52,6 +56,8 @@ class ConsoleSettings:
     deployment: DeploymentReadinessSettings | None = None
     discord_oauth: DiscordOAuthSettings | None = None
     twitch_oauth: TwitchOAuthSettings | None = None
+    google_oauth: GoogleOAuthSettings | None = None
+    yandex_oauth: YandexOAuthSettings | None = None
     rate_limit: RateLimitSettings | None = None
     cors_allowed_origins: tuple[str, ...] = ()
     password_recovery_smtp: SmtpPasswordRecoverySettings | None = None
@@ -86,6 +92,8 @@ class ConsoleSettings:
         deployment = _deployment_readiness_settings(values, environment=runtime_environment)
         oauth = _discord_oauth_settings(values, environment=runtime_environment)
         twitch_oauth = _twitch_oauth_settings(values, environment=runtime_environment)
+        google_oauth = _google_oauth_settings(values, environment=runtime_environment)
+        yandex_oauth = _yandex_oauth_settings(values, environment=runtime_environment)
         password_recovery_smtp = _optional_password_recovery_smtp(
             values, environment=runtime_environment
         )
@@ -106,6 +114,8 @@ class ConsoleSettings:
             deployment=deployment,
             discord_oauth=oauth,
             twitch_oauth=twitch_oauth,
+            google_oauth=google_oauth,
+            yandex_oauth=yandex_oauth,
             rate_limit=rate_limit,
             cors_allowed_origins=_optional_cors_allowed_origins(
                 values,
@@ -229,6 +239,71 @@ def _twitch_oauth_settings(
         client_id=_required(values, names[0]),
         client_secret=_required(values, names[1]),
         redirect_uri=redirect_uri,
+    )
+
+
+def _google_oauth_settings(
+    values: Mapping[str, str], *, environment: str
+) -> GoogleOAuthSettings | None:
+    oauth_values = _optional_external_oauth_values(
+        values,
+        environment=environment,
+        names=(
+            "MUXIVO_GOOGLE_OAUTH_CLIENT_ID",
+            "MUXIVO_GOOGLE_OAUTH_CLIENT_SECRET",
+            "MUXIVO_GOOGLE_OAUTH_REDIRECT_URI",
+        ),
+        provider_label="Google OAuth",
+        expected_path="/api/v1/auth/google/callback",
+    )
+    if oauth_values is None:
+        return None
+    return GoogleOAuthSettings(*oauth_values)
+
+
+def _yandex_oauth_settings(
+    values: Mapping[str, str], *, environment: str
+) -> YandexOAuthSettings | None:
+    oauth_values = _optional_external_oauth_values(
+        values,
+        environment=environment,
+        names=(
+            "MUXIVO_YANDEX_OAUTH_CLIENT_ID",
+            "MUXIVO_YANDEX_OAUTH_CLIENT_SECRET",
+            "MUXIVO_YANDEX_OAUTH_REDIRECT_URI",
+        ),
+        provider_label="Yandex OAuth",
+        expected_path="/api/v1/auth/yandex/callback",
+    )
+    if oauth_values is None:
+        return None
+    return YandexOAuthSettings(*oauth_values)
+
+
+def _optional_external_oauth_values(
+    values: Mapping[str, str],
+    *,
+    environment: str,
+    names: tuple[str, str, str],
+    provider_label: str,
+    expected_path: str,
+) -> tuple[str, str, str] | None:
+    provided = [bool(values.get(name, "").strip()) for name in names]
+    if not any(provided):
+        return None
+    if not all(provided):
+        raise ConfigurationError(f"{provider_label} configuration must be complete or absent.")
+    redirect_uri = _required(values, names[2])
+    if environment != "development":
+        _validate_oauth_redirect_uri(
+            redirect_uri,
+            setting_name=names[2],
+            expected_path=expected_path,
+        )
+    return (
+        _required(values, names[0]),
+        _required(values, names[1]),
+        redirect_uri,
     )
 
 

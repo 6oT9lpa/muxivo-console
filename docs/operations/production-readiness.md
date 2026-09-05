@@ -59,7 +59,7 @@ completed.
 | Operations | Incident runbook approved and exercised | Draft |
 | Operations | Backup/restore drill completed | Drill procedure documented; staging exercise pending |
 | Deployment | Staging/prod domains provisioned | Temporary staging `beget.ame-life.com` serves frontend release `eb08bd6`; API source is staged at `fc221a2`, pending credential/service activation, and canonical production host is pending |
-| Deployment | Staging/prod OAuth credentials provisioned | Discord/Twitch OAuth enforced; values pending |
+| Deployment | Staging/prod OAuth credentials provisioned | Discord/Twitch OAuth enforced; Google/Yandex ID adapters are implemented and remain disabled until their values are supplied |
 | Secrets | KMS/secret manager selected and wired | HashiCorp Vault + Vault Agent selected; Vault instance, AppRole policy and runtime wiring pending |
 
 ## Latest staging verification
@@ -344,10 +344,18 @@ Before staging:
 - create production Discord OAuth application credentials;
 - create staging Twitch OAuth application credentials;
 - create production Twitch OAuth application credentials;
+- optionally create staging Google OAuth credentials when Google sign-in is enabled;
+- optionally create production Google OAuth credentials when Google sign-in is enabled;
+- optionally create staging Yandex ID OAuth credentials when Yandex sign-in is enabled;
+- optionally create production Yandex ID OAuth credentials when Yandex sign-in is enabled;
 - configure exact Discord redirect URI per environment:
   `/api/v1/auth/discord/callback`;
 - configure exact Twitch redirect URI per environment:
   `/api/v1/auth/twitch/callback`;
+- configure exact Google redirect URI per environment when enabled:
+  `/api/v1/auth/google/callback`;
+- configure exact Yandex ID redirect URI per environment when enabled:
+  `/api/v1/auth/yandex/callback`;
 - store OAuth client secrets in the selected secret manager only.
 
 ## KMS/secret manager decision

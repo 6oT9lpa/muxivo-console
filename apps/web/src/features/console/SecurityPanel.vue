@@ -57,7 +57,9 @@ function formatSessionTime(value: string | null): string {
 }
 
 function providerLabel(provider: LoginIdentity["provider"]): string {
-  return provider === "email" ? t("console.security.email_password") : provider;
+  return provider === "email"
+    ? t("console.security.email_password")
+    : t(`console.identity_provider.${provider}`);
 }
 
 function identityProtectionLabel(identity: LoginIdentity): string {
