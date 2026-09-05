@@ -231,8 +231,9 @@ at `/opt/muxivo-console.backup-79cca30` for
 rollback. The frontend release `740220b` is installed at
 `/srv/muxivo-console/web`, and its previous web root is retained at
 `/srv/muxivo-console/web.backup-740220b` for rollback. The disabled
-`muxivo-console-api.service` has no credential file yet,
-so it was not started. PostgreSQL and the `muxivo_console` database are present
+`muxivo-console-api.service` now has its Python runtime provisioned, but no
+Vault-rendered credential file yet, so it was not started. PostgreSQL and the
+`muxivo_console` database are present
 on the local server. Redis is installed, enabled and bound only to loopback;
 its URL still belongs in the secret-manager-rendered environment.
 
