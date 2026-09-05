@@ -22,6 +22,7 @@ import OrganizationSwitcher from "./features/console/OrganizationSwitcher.vue";
 import SecurityPanel from "./features/console/SecurityPanel.vue";
 import { useOrganizationMembers } from "./features/console/useOrganizationMembers";
 import { useOrganizationSelection } from "./features/console/useOrganizationSelection";
+import { usePlatformConnectionCatalog } from "./features/console/usePlatformConnectionCatalog";
 import { membershipAllows } from "./features/console/access";
 import { useI18n } from "./i18n";
 import { clientLogger } from "./utils/clientLogger";
@@ -33,7 +34,6 @@ import {
 } from "./utils/theme";
 import {
   connectionWizardOptions,
-  type ConnectablePlatform,
 } from "./utils/connectionWizard";
 import GetToKnowUs from "./views/GetToKnowUs.vue";
 import MuxivoLanding from "./views/MuxivoLanding.vue";
@@ -55,8 +55,6 @@ import type {
   PlatformChannelPurposes,
   PlatformConnection,
   PlatformConnectionGrantedScope,
-  PlatformConnectionCandidate,
-  PlatformConnectionCandidateCatalog,
   PlatformDashboardSummary,
   PlatformHealth,
   PlatformHealthSignal,
@@ -85,17 +83,8 @@ const theme = ref<Theme>(initialTheme);
 const activeConsoleSection = ref<ConsoleSection>("overview");
 const busy = ref(false);
 const notice = ref("");
-const platform = ref<ConnectablePlatform>("discord");
-const connectionCandidates = ref<PlatformConnectionCandidate[]>([]);
-const connectionCandidatesIdentityLinked = ref<boolean | null>(null);
-const connectionCandidatesLoading = ref(false);
-const connectionCandidatesUnavailable = ref(false);
-const selectedConnectionCandidateId = ref("");
-const connections = ref<PlatformConnection[]>([]);
 const platformHealth = ref<PlatformHealth | null>(null);
 const controlModules = ref<ControlModule[]>([]);
-const selectedConnectionId = ref("");
-const selectedDiscordConnectionId = ref("");
 const dashboardSummary = ref<PlatformDashboardSummary | null>(null);
 const channelCatalog = ref<PlatformChannelCatalog | null>(null);
 const botSettings = ref<PlatformBotSettings | null>(null);
@@ -335,32 +324,6 @@ const {
   acceptInvitationIfPresent,
 });
 
-const usableConnections = computed(() =>
-  connections.value.filter(
-    (connection) =>
-      (connection.status === "active" || connection.status === "degraded"),
-  ),
-);
-const usableDiscordConnections = computed(() =>
-  usableConnections.value.filter((connection) => connection.platform === "discord"),
-);
-const selectedConnectionWizard = computed(
-  () =>
-    localizedConnectionWizardOptions.value.find((option) => option.platform === platform.value) ??
-    localizedConnectionWizardOptions.value[0],
-);
-const selectedConnection = computed(() =>
-  usableConnections.value.find((connection) => connection.id === selectedConnectionId.value) ?? null,
-);
-const selectedDiscordConnection = computed(
-  () =>
-    usableDiscordConnections.value.find(
-      (connection) => connection.id === selectedDiscordConnectionId.value,
-    ) ?? null,
-);
-const canRunSelectedDiscordWrites = computed(
-  () => selectedDiscordConnection.value?.status === "active",
-);
 const canReadPlatformConnections = computed(() =>
   membershipAllows(
     activeOrganization.value?.membership,
@@ -375,22 +338,44 @@ const canManagePlatformConnections = computed(() =>
     "manage",
   ),
 );
-const selectableConnectionCandidates = computed(() =>
-  connectionCandidates.value.filter(
-    (candidate) =>
-      !connections.value.some(
-        (connection) =>
-          connection.platform === candidate.platform &&
-          connection.external_resource_id === candidate.external_resource_id,
-      ),
-  ),
-);
-const selectedConnectionCandidate = computed(
-  () =>
-    selectableConnectionCandidates.value.find(
-      (candidate) => candidate.external_resource_id === selectedConnectionCandidateId.value,
-    ) ?? null,
-);
+const {
+  platform,
+  connectionCandidates,
+  connectionCandidatesIdentityLinked,
+  connectionCandidatesLoading,
+  connectionCandidatesUnavailable,
+  selectedConnectionCandidateId,
+  connections,
+  selectedConnectionId,
+  selectedDiscordConnectionId,
+  usableConnections,
+  usableDiscordConnections,
+  selectedConnectionWizard,
+  selectedConnection,
+  selectedDiscordConnection,
+  canRunSelectedDiscordWrites,
+  selectableConnectionCandidates,
+  selectedConnectionCandidate,
+  loadConnections,
+  loadConnectionCandidates,
+  selectConnectionWizard,
+  connectPlatform,
+  runConnectionLifecycle,
+  resetPlatformConnectionCatalog,
+} = usePlatformConnectionCatalog({
+  t,
+  busy,
+  notice,
+  messageFor,
+  activeOrganizationId,
+  canReadPlatformConnections,
+  canManagePlatformConnections,
+  localizedConnectionWizardOptions,
+  platformLabel,
+  connectionStatusLabel,
+  resetPlatformConnectionDetails: selectPlatformConnection,
+  resetDiscordConnectionDetails: selectDiscordConnection,
+});
 const currentBrowserSession = computed(
   () => browserSessions.value.find((session) => session.is_current) ?? null,
 );
@@ -507,12 +492,7 @@ async function refreshOrganizationWorkspace() {
 }
 
 function resetOrganizationWorkspace() {
-  connections.value = [];
-  connectionCandidates.value = [];
-  connectionCandidatesIdentityLinked.value = null;
-  connectionCandidatesLoading.value = false;
-  connectionCandidatesUnavailable.value = false;
-  selectedConnectionCandidateId.value = "";
+  resetPlatformConnectionCatalog();
   resetOrganizationMembers();
   platformHealth.value = null;
   controlModules.value = [];
@@ -528,91 +508,6 @@ function resetOrganizationWorkspace() {
   aiModerationPolicy.value = null;
   auditEvents.value = [];
   auditEventsNextCursor.value = null;
-  selectedConnectionId.value = "";
-  selectedDiscordConnectionId.value = "";
-}
-
-async function loadConnections() {
-  if (!activeOrganizationId.value || !canReadPlatformConnections.value) {
-    connections.value = [];
-    return;
-  }
-  busy.value = true;
-  notice.value = "";
-  try {
-    const payload = await consoleApi<{ items: PlatformConnection[] }>(
-      `/api/v1/organizations/${encodeURIComponent(activeOrganizationId.value)}/platform-connections`,
-    );
-    connections.value = payload.items;
-    platformHealth.value = null;
-    controlModules.value = [];
-    dashboardSummary.value = null;
-    channelCatalog.value = null;
-    botSettings.value = null;
-    integrations.value = null;
-    welcomeSettings.value = null;
-    channelPurposes.value = null;
-    aiModerationSummary.value = null;
-    aiModerationPolicy.value = null;
-    auditEvents.value = [];
-    auditEventsNextCursor.value = null;
-    selectedConnectionId.value = usableConnections.value[0]?.id ?? "";
-    selectedDiscordConnectionId.value = usableDiscordConnections.value[0]?.id ?? "";
-    syncSelectedConnectionCandidate();
-  } catch (error) {
-    notice.value = messageFor(error);
-  } finally {
-    busy.value = false;
-  }
-}
-
-async function loadConnectionCandidates() {
-  if (!activeOrganizationId.value || !canManagePlatformConnections.value) {
-    connectionCandidates.value = [];
-    connectionCandidatesIdentityLinked.value = null;
-    connectionCandidatesLoading.value = false;
-    connectionCandidatesUnavailable.value = false;
-    selectedConnectionCandidateId.value = "";
-    return;
-  }
-  const requestedPlatform = platform.value;
-  const requestedOrganizationId = activeOrganizationId.value;
-  connectionCandidatesLoading.value = true;
-  connectionCandidatesUnavailable.value = false;
-  try {
-    const payload = await consoleApi<PlatformConnectionCandidateCatalog>(
-      `/api/v1/organizations/${encodeURIComponent(requestedOrganizationId)}/platform-connection-candidates?platform=${encodeURIComponent(requestedPlatform)}`,
-    );
-    if (
-      requestedPlatform !== platform.value ||
-      requestedOrganizationId !== activeOrganizationId.value
-    ) {
-      return;
-    }
-    connectionCandidates.value = payload.items;
-    connectionCandidatesIdentityLinked.value = payload.identity_linked;
-    syncSelectedConnectionCandidate();
-  } catch (error) {
-    if (
-      requestedPlatform !== platform.value ||
-      requestedOrganizationId !== activeOrganizationId.value
-    ) {
-      return;
-    }
-    connectionCandidates.value = [];
-    connectionCandidatesIdentityLinked.value = null;
-    connectionCandidatesUnavailable.value = error instanceof ConsoleApiError && error.status === 503;
-    if (!(error instanceof ConsoleApiError && error.status === 503)) {
-      notice.value = messageFor(error);
-    }
-  } finally {
-    if (
-      requestedPlatform === platform.value &&
-      requestedOrganizationId === activeOrganizationId.value
-    ) {
-      connectionCandidatesLoading.value = false;
-    }
-  }
 }
 
 async function acceptInvitationIfPresent() {
@@ -713,29 +608,6 @@ function connectionStatusDescription(connection: PlatformConnection): string {
 
 function connectionRiskyActionsBlocked(status: PlatformConnection["status"]): boolean {
   return ["degraded", "reauth_required", "disconnected"].includes(status);
-}
-
-function syncSelectedConnectionCandidate() {
-  if (
-    selectedConnectionCandidateId.value &&
-    selectableConnectionCandidates.value.some(
-      (candidate) =>
-        candidate.external_resource_id === selectedConnectionCandidateId.value,
-    )
-  ) {
-    return;
-  }
-  selectedConnectionCandidateId.value =
-    selectableConnectionCandidates.value[0]?.external_resource_id ?? "";
-}
-
-function selectConnectionWizard(nextPlatform: ConnectablePlatform) {
-  platform.value = nextPlatform;
-  connectionCandidates.value = [];
-  connectionCandidatesIdentityLinked.value = null;
-  connectionCandidatesUnavailable.value = false;
-  selectedConnectionCandidateId.value = "";
-  void loadConnectionCandidates();
 }
 
 async function loadControlModules() {
@@ -1076,75 +948,6 @@ async function loadPlatformHealth() {
   }
 }
 
-async function registerConnection() {
-  if (!activeOrganizationId.value || !selectedConnectionCandidate.value) {
-    notice.value = t("console.connections.select_candidate_required");
-    return;
-  }
-  busy.value = true;
-  notice.value = "";
-  try {
-    const connection = await consoleApi<PlatformConnection>(
-      `/api/v1/organizations/${encodeURIComponent(activeOrganizationId.value)}/platform-connections`,
-      {
-        method: "POST",
-        body: JSON.stringify({
-          platform: platform.value,
-          external_resource_id: selectedConnectionCandidate.value.external_resource_id,
-        }),
-      },
-    );
-    selectedConnectionCandidateId.value = "";
-    connections.value = [connection, ...connections.value];
-    syncSelectedConnectionCandidate();
-    notice.value = t("console.notice.connection_pending", {
-      platform: platformLabel(connection.platform),
-    });
-  } catch (error) {
-    notice.value = messageFor(error);
-  } finally {
-    busy.value = false;
-  }
-}
-
-async function runConnectionLifecycle(
-  connection: PlatformConnection,
-  action: "reauthorize" | "revoke" | "disconnect",
-) {
-  if (!activeOrganizationId.value) return;
-  const suffix =
-    action === "reauthorize"
-      ? "reauthorizations"
-      : action === "revoke"
-        ? "revocations"
-        : "";
-  const path =
-    action === "disconnect"
-      ? `/api/v1/organizations/${encodeURIComponent(activeOrganizationId.value)}/platform-connections/${encodeURIComponent(connection.id)}`
-      : `/api/v1/organizations/${encodeURIComponent(activeOrganizationId.value)}/platform-connections/${encodeURIComponent(connection.id)}/${suffix}`;
-  busy.value = true;
-  notice.value = "";
-  try {
-    const updated = await consoleApi<PlatformConnection>(path, {
-      method: action === "disconnect" ? "DELETE" : "POST",
-      headers: { "Idempotency-Key": `${action}:${connection.id}` },
-    });
-    connections.value = connections.value.map((item) =>
-      item.id === updated.id ? updated : item,
-    );
-    selectPlatformConnection();
-    selectDiscordConnection();
-    notice.value = t("console.notice.connection_state", {
-      platform: platformLabel(updated.platform),
-      status: connectionStatusLabel(updated.status),
-    });
-  } catch (error) {
-    notice.value = messageFor(error);
-  } finally {
-    busy.value = false;
-  }
-}
-
 </script>
 
 <template>
@@ -1467,7 +1270,7 @@ async function runConnectionLifecycle(
         :connection-candidates-identity-linked="connectionCandidatesIdentityLinked"
         :selectable-connection-candidates="selectableConnectionCandidates"
         @select-platform="selectConnectionWizard"
-        @register="registerConnection"
+        @connect="connectPlatform"
         @load-candidates="loadConnectionCandidates"
         @link-identity="linkExternalIdentity"
       />

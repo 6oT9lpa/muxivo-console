@@ -26,7 +26,7 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   (event: "select-platform", platform: ConnectablePlatform): void;
-  (event: "register"): void;
+  (event: "connect"): void;
   (event: "load-candidates"): void;
   (event: "link-identity", platform: ConnectablePlatform): void;
   (event: "update:selectedConnectionCandidateId", value: string): void;
@@ -67,7 +67,7 @@ const selectedCandidateModel = computed({
       </li>
     </ol>
 
-    <form class="connection-form" @submit.prevent="emit('register')">
+    <form class="connection-form" @submit.prevent="emit('connect')">
       <label>
         {{ selectedConnectionWizard.candidateLabel }}
         <select
