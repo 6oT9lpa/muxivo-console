@@ -5700,7 +5700,7 @@ input[type="checkbox"]:disabled { cursor: not-allowed; opacity: 0.46; }
 .login-panel {
   position: relative;
   z-index: 1;
-  width: min(100%, 460px);
+  width: min(100%, 700px);
   max-height: calc(100vh - 48px);
   overflow-y: auto;
   padding: clamp(26px, 5vw, 42px);
@@ -6087,8 +6087,7 @@ input[type="checkbox"]:disabled { cursor: not-allowed; opacity: 0.46; }
 
 .auth-providers {
   margin-top: 24px;
-  padding-top: 22px;
-  border-top: 1px solid #27272a;
+  padding-top: 0;
 }
 
 .auth-or {
@@ -6152,7 +6151,7 @@ input[type="checkbox"]:disabled { cursor: not-allowed; opacity: 0.46; }
   border-color: rgba(88, 101, 242, 0.42);
 }
 
-.auth-provider-mark {
+.auth-provider-icon {
   display: inline-grid;
   flex: 0 0 auto;
   width: 24px;
@@ -6161,9 +6160,14 @@ input[type="checkbox"]:disabled { cursor: not-allowed; opacity: 0.46; }
   color: #c7ceff;
   background: rgba(88, 101, 242, 0.14);
   border-radius: 6px;
-  font-size: 0.67rem;
-  font-weight: 900;
+  padding: 4px;
 }
+
+.auth-provider-icon-discord { color: #c7ceff; }
+.auth-provider-icon-twitch { color: #d8b4fe; }
+.auth-provider-icon-telegram { color: #7dd3fc; }
+.auth-provider-icon-google { color: #facc15; }
+.auth-provider-icon-yandex { color: #fca5a5; }
 
 .auth-provider-button small {
   margin-left: auto;

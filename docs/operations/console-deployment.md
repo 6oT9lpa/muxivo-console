@@ -8,7 +8,7 @@ and its runtime logic untouched.
 
 ```text
 Browser
-  -> https://console.muxivo.pro
+  -> https://muxivo.pro
   -> VPS Nginx (138.124.119.238)
   -> FRP remote port 18081
   -> local FRP client
@@ -16,15 +16,20 @@ Browser
   -> 127.0.0.1:5432 dedicated muxivo_console database
 ```
 
-The existing public `muxivo.pro` Activity remains on its current Nginx route and
-FRP mapping. Console must not reuse its port or its deployment directory.
+The Console owns the `muxivo.pro` root. The Discord Activity keeps its existing
+FRP mapping on `18080` and is exposed at `https://muxivo.pro/activity/` through
+the combined Nginx vhost. The Activity API paths are routed to `18080`, while
+Console `/api/v1` paths are routed to `18081`; the two applications keep
+separate runtime state and credentials.
 
 ## Prerequisites before a public rollout
 
-- Add `console.muxivo.pro A 138.124.119.238` in the REG.RU hosting DNS panel.
-- Do not change the existing `muxivo.pro` or `www` records and do not change
-  the existing REG.RU MX records.
-- Issue a separate Let's Encrypt certificate for `console.muxivo.pro`.
+- Keep `muxivo.pro` and `www.muxivo.pro` pointed at `138.124.119.238` and do
+  not change the existing REG.RU MX records.
+- Reuse the existing `muxivo.pro` certificate only after backing up the
+  Activity vhost and validating the combined configuration with `nginx -t`.
+- Update the Discord Developer Portal Activity URL mapping to
+  `https://muxivo.pro/activity/` before enabling the new public route.
 - Choose and provision one approved secret manager. The production settings
   reject `.env`, `dotenv`, local files and in-memory rate limiting as a source
   of truth outside development.
@@ -219,31 +224,33 @@ Keep all existing server, TLS and authentication values and the existing
 existing `frpc.service`; then verify that the new remote port is listening on
 the VPS. A failed validation must not trigger a restart.
 
-### 6. Provision the Console virtual host
+### 6. Provision the combined Console/Activity virtual host
 
-Install `nginx-console-bootstrap.conf.example` as a temporary site, validate with
-`nginx -t`, and reload Nginx. After the DNS record resolves, issue the separate
-certificate with the webroot `/srv/muxivo-console/web`. Replace the temporary
-site with `nginx-console.conf.example`, validate again and reload. Verify that
-the original `muxivo.pro` server still serves the Discord Activity.
+Back up the existing Activity vhost, install
+`nginx-console-bootstrap.conf.example` only for certificate work, validate with
+`nginx -t`, and reload Nginx. Replace it with `nginx-console.conf.example`,
+validate again and reload. Verify that the Console root, `/activity/` frontend,
+Activity API routes and Console `/api/v1` routes all reach their intended
+upstreams.
 
-The final host serves static frontend assets from
-`/srv/muxivo-console/web`, proxies only `/api/`, `/healthz` and `/readyz` to FRP
-`18081`, and does not expose `/metrics` publicly.
+The final host serves Console static assets from `/srv/muxivo-console/web`,
+proxies Activity under `/activity/` and its non-versioned `/api/*` paths to FRP
+`18080`, proxies Console `/api/v1`, `/healthz` and `/readyz` to FRP `18081`,
+and does not expose `/metrics` publicly.
 
 As of 2026-09-05, the temporary staging host is `beget.ame-life.com`. Its DNS
 record resolves to `138.124.119.238`, its dedicated certificate covers the
 hostname, and the active HTTPS vhost serves the Console frontend release
-`35c7fab`. The canonical `console.muxivo.pro` host remains separate and still
-requires its own DNS record, certificate and final HTTPS vhost. The staging
-host is suitable for visual checks only until the API, FRP route and production
-environment are provisioned.
+`35c7fab`. The canonical production Console host is `muxivo.pro`; it shares the
+verified domain certificate with Activity and is not the staging host. The
+staging host is suitable for visual checks only until the API, FRP route and
+production environment are provisioned.
 
 For this temporary rollout, install
-`deploy/nginx-console-beget.conf.example` as the dedicated staging vhost. Keep
-the existing `muxivo.pro` and Discord Activity vhost unchanged, and configure
-the staging public base URL, CORS origin, recovery URLs and OAuth redirect URLs
-to use `https://beget.ame-life.com`.
+`deploy/nginx-console-beget.conf.example` as the dedicated staging vhost and
+configure the staging public base URL, CORS origin, recovery URLs and OAuth
+redirect URLs to use `https://beget.ame-life.com`. Do not use the staging
+configuration for the production `muxivo.pro` root.
 
 The staging edge and tunnel are now active: Nginx serves the host over HTTPS,
 FRP exposes the existing Activity route on `18080` and the Console API route on
@@ -270,7 +277,7 @@ Vault itself is initialized, unsealed, TLS-enabled on loopback and audited.
 Run the checks in this order:
 
 1. `nginx -t` and HTTPS certificate hostname validation.
-2. `curl -fsS https://console.muxivo.pro/healthz` and `/readyz`, then inspect
+2. `curl -fsS https://muxivo.pro/healthz` and `/readyz`, then inspect
    security headers.
 3. Browser sign-in, organization creation, organization switcher and empty
    state.
@@ -290,7 +297,7 @@ The read-only network portion can be repeated from an approved operator host
 after DNS, TLS, FRP and the API are ready:
 
 ```bash
-export MUXIVO_CONSOLE_PUBLIC_BASE_URL=https://console.muxivo.pro
+export MUXIVO_CONSOLE_PUBLIC_BASE_URL=https://muxivo.pro
 export MUXIVO_CONSOLE_EXPECTED_DNS_IPS=138.124.119.238
 python scripts/production_network_preflight.py
 ```
@@ -316,9 +323,10 @@ operation.
 The repository-side implementation and local UI checks are ready, but a truthful
 public deployment still requires external values and services:
 
-- the `console.muxivo.pro` DNS record and certificate;
-- the final HTTPS Nginx virtual host and a reload after its certificate passes
-  hostname validation;
+- the final combined `muxivo.pro` HTTPS Nginx virtual host and a reload after
+  its configuration passes validation;
+- updating the Discord Developer Portal Activity URL mapping to
+  `https://muxivo.pro/activity/`;
 - the production API service, environment and FRP upstream before sign-in or
   any authenticated Console flow can be tested publicly;
 - SMTP.BZ credentials and an approved test mailbox for the non-delivery and

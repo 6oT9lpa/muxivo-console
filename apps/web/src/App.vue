@@ -29,6 +29,7 @@ import { isConsoleSectionVisible, membershipAllows } from "./features/console/ac
 import { useI18n } from "./i18n";
 import { clientLogger } from "./utils/clientLogger";
 import { consoleErrorMessage } from "./utils/consoleError";
+import { isDiscordActivityAuthLaunch } from "./utils/authLaunchContext";
 import {
   nextConsoleTheme,
   persistConsoleTheme,
@@ -66,6 +67,7 @@ const loginVisible = ref(false);
 let loginCloseTimer: ReturnType<typeof setTimeout> | null = null;
 const loginTrigger = ref<HTMLButtonElement | null>(null);
 const theme = ref<Theme>(initialTheme);
+const discordActivityAuthLaunch = isDiscordActivityAuthLaunch();
 const activeConsoleSection = ref<ConsoleSection>("overview");
 const busy = ref(false);
 const notice = ref("");
@@ -420,6 +422,11 @@ const visibleConsoleNavItems = computed(() =>
     }),
   ),
 );
+const visibleAuthProviders = computed(() =>
+  discordActivityAuthLaunch
+    ? availableAuthProviders.value.filter((provider) => provider === "discord")
+    : availableAuthProviders.value,
+);
 const activeConsoleNavItem = computed(
   () =>
     visibleConsoleNavItems.value.find((item) => item.key === activeConsoleSection.value) ??
@@ -742,7 +749,7 @@ function connectionRiskyActionsBlocked(status: PlatformConnection["status"]): bo
         :invitation-token="invitationToken"
         :registration-verification-sent="registrationVerificationSent"
         :registration-email-verified="registrationEmailVerified"
-        :available-providers="availableAuthProviders"
+        :available-providers="visibleAuthProviders"
         @close="closeLoginModal"
         @sign-in="signIn"
         @request-recovery="requestPasswordRecovery"

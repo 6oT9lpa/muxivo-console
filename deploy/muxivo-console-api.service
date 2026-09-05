@@ -1,6 +1,6 @@
 [Unit]
 Description=Muxivo Console API
-Documentation=https://console.muxivo.pro/healthz
+Documentation=https://muxivo.pro/healthz
 Wants=network-online.target
 Requires=muxivo-console-vault-agent.service
 After=network-online.target postgresql.service muxivo-console-vault-agent.service

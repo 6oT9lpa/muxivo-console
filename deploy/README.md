@@ -1,9 +1,9 @@
 # Muxivo Console deployment artifacts
 
 These files describe an isolated deployment of Muxivo Console beside the
-existing Discord Activity. The existing Activity keeps its current public host,
-local port and FRP proxy. Console uses its own local API port `8010`, FRP port
-`18081` and host `console.muxivo.pro`.
+existing Discord Activity. Console owns the canonical `muxivo.pro` origin,
+while Activity is mounted at `/activity/` through its existing local port and
+FRP proxy. Console uses its own local API port `8010` and FRP port `18081`.
 
 For the current temporary staging rollout, use `beget.ame-life.com` instead of
 the canonical host. Its DNS record and dedicated certificate already exist on
@@ -43,7 +43,9 @@ credential path used by `muxivo-console-api.service`.
   block into the existing `/etc/frp/frpc.toml` while preserving its server and
   authentication settings.
 - `nginx-console-bootstrap.conf.example` serves the HTTP/ACME bootstrap host.
-- `nginx-console.conf.example` is the final HTTPS virtual host.
+- `nginx-console.conf.example` is the final combined `muxivo.pro` HTTPS virtual
+  host. It routes Console at `/`, Activity at `/activity/`, Activity API paths
+  to `18080`, and Console `/api/v1` paths to `18081`.
 - `nginx-console-beget.conf.example` is the temporary HTTPS staging host for
   `beget.ame-life.com`; it must not replace the existing Activity host.
 - `console.env.beget.example` contains the staging URL and callback paths for

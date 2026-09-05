@@ -19,7 +19,7 @@ from scripts.production_network_preflight import (
 
 def _environment(**overrides: str) -> dict[str, str]:
     environment = {
-        "MUXIVO_CONSOLE_PUBLIC_BASE_URL": "https://console.muxivo.pro",
+        "MUXIVO_CONSOLE_PUBLIC_BASE_URL": "https://muxivo.pro",
         "MUXIVO_CONSOLE_EXPECTED_DNS_IPS": "138.124.119.238",
     }
     environment.update(overrides)
@@ -29,7 +29,7 @@ def _environment(**overrides: str) -> dict[str, str]:
 def test_settings_require_https_origin_and_expected_ip() -> None:
     settings = settings_from_environment(_environment())
 
-    assert settings.hostname == "console.muxivo.pro"
+    assert settings.hostname == "muxivo.pro"
     assert settings.expected_dns_ips == frozenset({"138.124.119.238"})
     assert settings.timeout_seconds == 10
 
@@ -37,16 +37,16 @@ def test_settings_require_https_origin_and_expected_ip() -> None:
 def test_settings_reject_nonstandard_https_port() -> None:
     with pytest.raises(ValueError, match="standard HTTPS port"):
         settings_from_environment(
-            _environment(MUXIVO_CONSOLE_PUBLIC_BASE_URL="https://console.muxivo.pro:8443")
+            _environment(MUXIVO_CONSOLE_PUBLIC_BASE_URL="https://muxivo.pro:8443")
         )
 
 
 @pytest.mark.parametrize(
     "overrides",
     (
-        {"MUXIVO_CONSOLE_PUBLIC_BASE_URL": "http://console.muxivo.pro"},
-        {"MUXIVO_CONSOLE_PUBLIC_BASE_URL": "https://user:pass@console.muxivo.pro"},
-        {"MUXIVO_CONSOLE_PUBLIC_BASE_URL": "https://console.muxivo.pro/api"},
+        {"MUXIVO_CONSOLE_PUBLIC_BASE_URL": "http://muxivo.pro"},
+        {"MUXIVO_CONSOLE_PUBLIC_BASE_URL": "https://user:pass@muxivo.pro"},
+        {"MUXIVO_CONSOLE_PUBLIC_BASE_URL": "https://muxivo.pro/api"},
         {"MUXIVO_CONSOLE_EXPECTED_DNS_IPS": "not-an-ip"},
         {"MUXIVO_CONSOLE_NETWORK_PREFLIGHT_TIMEOUT_SECONDS": "0"},
     ),
@@ -60,7 +60,7 @@ def test_dns_validation_requires_approved_ingress_address() -> None:
     settings = settings_from_environment(_environment())
 
     def resolver(host: str, port: int, *, type: int) -> list[tuple[Any, ...]]:
-        assert host == "console.muxivo.pro"
+        assert host == "muxivo.pro"
         assert port == 443
         assert type
         return [

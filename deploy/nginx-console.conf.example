@@ -1,26 +1,29 @@
 # Final HTTPS host for the Console frontend and BFF API.
-# Keep the existing muxivo.pro server block unchanged.
-
-server_tokens off;
+#
+# muxivo.pro is the canonical Console origin. The existing Discord Activity
+# remains available under /activity/ so both products can share the verified
+# domain without sharing application state or API credentials.
 
 server {
     listen 80;
     listen [::]:80;
-    server_name console.muxivo.pro;
-    return 301 https://$host$request_uri;
+    server_name muxivo.pro www.muxivo.pro;
+    server_tokens off;
+    return 301 https://muxivo.pro$request_uri;
 }
 
 server {
     listen 443 ssl http2;
     listen [::]:443 ssl http2;
-    server_name console.muxivo.pro;
+    server_name muxivo.pro www.muxivo.pro;
+    server_tokens off;
 
     root /srv/muxivo-console/web;
     index index.html;
     client_max_body_size 2m;
 
-    ssl_certificate /etc/letsencrypt/live/console.muxivo.pro/fullchain.pem;
-    ssl_certificate_key /etc/letsencrypt/live/console.muxivo.pro/privkey.pem;
+    ssl_certificate /etc/letsencrypt/live/muxivo.pro/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/muxivo.pro/privkey.pem;
     include /etc/letsencrypt/options-ssl-nginx.conf;
     ssl_dhparam /etc/letsencrypt/ssl-dhparams.pem;
 
@@ -32,7 +35,46 @@ server {
     add_header Strict-Transport-Security "max-age=31536000" always;
 
     location ^~ /.well-known/acme-challenge/ {
-        try_files $uri =404;
+        root /var/www/certbot;
+    }
+
+    location = /activity {
+        return 308 /activity/;
+    }
+
+    # Activity is mounted below the Console root. Its backend still receives
+    # the original path so the Activity application needs no browser token or
+    # API contract change.
+    location ^~ /activity/ {
+        rewrite ^/activity/?(.*)$ /$1 break;
+        proxy_pass http://127.0.0.1:18080;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header X-Forwarded-Prefix /activity;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+        # Activity is embedded by Discord and must not inherit Console's
+        # frame-ancestors 'none' policy.
+        add_header Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self' data:; connect-src 'self' https:; base-uri 'self'; form-action 'self'" always;
+        add_header X-Content-Type-Options "nosniff" always;
+        add_header Referrer-Policy "no-referrer" always;
+        add_header Permissions-Policy "camera=(), microphone=(), geolocation=()" always;
+        add_header Strict-Transport-Security "max-age=31536000" always;
+    }
+
+    # Activity API paths are kept distinct from the Console /api/v1 BFF.
+    location ~ ^/api/(auth|activity|muxivo-core|welcome|discord|dev-blog|creator-alerts|voice|stats|logs|bot|integrations|media|public)(/|$) {
+        proxy_pass http://127.0.0.1:18080;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header Connection "";
+        proxy_read_timeout 60s;
     }
 
     location = /healthz {
@@ -69,8 +111,6 @@ server {
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto $scheme;
-        # Console API is HTTP-only today; keep the header explicit so this
-        # server block does not depend on a global nginx `map` directive.
         proxy_set_header Connection "";
         proxy_read_timeout 60s;
     }

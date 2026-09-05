@@ -409,6 +409,8 @@ test("sign-in dialog keeps the Activity-style black surface in light theme", asy
 
   const panel = page.locator(".login-panel");
   await expect(panel).toBeVisible();
+  await expect(panel.locator(".auth-provider-icon")).toHaveCount(5);
+  await expect(panel.locator(".auth-provider-mark")).toHaveCount(0);
   await expect(page.getByRole("button", { name: "Continue with Twitch" })).toBeEnabled();
   await expect(page.getByRole("button", { name: "Continue with Google" })).toBeDisabled();
   const styleState = await panel.evaluate((element) => {
@@ -458,6 +460,9 @@ test("auth modal exposes the anti-enumeration recovery flow", async ({ page }) =
   await page.goto("/");
   await page.getByRole("button", { name: "See Panel" }).click();
   await page.getByRole("button", { name: "Forgot password?" }).click();
+  await expect(page.locator("#console-auth-email")).toHaveCount(0);
+  await expect(page.locator("#console-auth-password")).toHaveCount(0);
+  await expect(page.locator(".auth-providers")).toHaveCount(0);
   await expect(page.locator("#console-auth-recovery-email")).toBeFocused();
   await page.getByLabel("Account email").fill("creator@example.com");
   await page.getByRole("button", { name: "Request reset" }).click();

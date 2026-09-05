@@ -1,24 +1,42 @@
-# Temporary HTTP host used only to issue the Let's Encrypt certificate.
-# Install after console.muxivo.pro resolves to the VPS and before certbot.
+# Temporary HTTP host for the canonical muxivo.pro certificate bootstrap.
+# Install only while the existing muxivo.pro HTTPS vhost is backed up and
+# certbot is issuing or renewing the certificate.
 
 server {
     listen 80;
     listen [::]:80;
-    server_name console.muxivo.pro;
+    server_name muxivo.pro www.muxivo.pro;
 
     root /srv/muxivo-console/web;
     index index.html;
 
     location ^~ /.well-known/acme-challenge/ {
-        try_files $uri =404;
+        root /var/www/certbot;
+    }
+
+    location = /activity {
+        return 308 /activity/;
+    }
+
+    location ^~ /activity/ {
+        rewrite ^/activity/?(.*)$ /$1 break;
+        proxy_pass http://127.0.0.1:18080;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+    }
+
+    location ~ ^/api/(auth|activity|muxivo-core|welcome|discord|dev-blog|creator-alerts|voice|stats|logs|bot|integrations|media|public)(/|$) {
+        proxy_pass http://127.0.0.1:18080;
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-Proto $scheme;
     }
 
     location /api/ {
         proxy_pass http://127.0.0.1:18081;
-        proxy_http_version 1.1;
         proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto $scheme;
     }
 

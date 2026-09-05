@@ -3,6 +3,7 @@ import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue"
 import { useI18n } from "../../i18n";
 import { clientLogger } from "../../utils/clientLogger";
 import AuthField from "./AuthField.vue";
+import AuthProviderIcon from "./AuthProviderIcon.vue";
 
 type AuthMode = "sign-in" | "create-account";
 type AuthProvider = "discord" | "twitch" | "telegram" | "google" | "yandex";
@@ -73,12 +74,12 @@ const recoveryCompletionVisible = computed(() => Boolean(recoveryToken.value));
 const providerDefinitions = computed(
   () =>
     [
-      { id: "discord" as const, label: t("console.auth.provider_discord"), mark: "D" },
-      { id: "twitch" as const, label: t("console.auth.provider_twitch"), mark: "T" },
-      { id: "telegram" as const, label: t("console.auth.provider_telegram"), mark: "TG" },
-      { id: "google" as const, label: t("console.auth.provider_google"), mark: "G" },
-      { id: "yandex" as const, label: t("console.auth.provider_yandex"), mark: "Я" },
-    ] satisfies Array<{ id: AuthProvider; label: string; mark: string }>,
+      { id: "discord" as const, label: t("console.auth.provider_discord") },
+      { id: "twitch" as const, label: t("console.auth.provider_twitch") },
+      { id: "telegram" as const, label: t("console.auth.provider_telegram") },
+      { id: "google" as const, label: t("console.auth.provider_google") },
+      { id: "yandex" as const, label: t("console.auth.provider_yandex") },
+    ] satisfies Array<{ id: AuthProvider; label: string }>,
 );
 
 function navLetters(label: string): string[] {
@@ -338,12 +339,13 @@ onBeforeUnmount(() => {
         </p>
       </div>
 
-      <div v-if="invitationToken" class="auth-invitation-context" role="status">
-        <strong>{{ t("console.invitation.accept_title") }}</strong>
-        <p>{{ t("console.invitation.accept_description") }}</p>
-      </div>
+      <div v-if="!forgotPasswordOpen" class="auth-main-flow">
+        <div v-if="invitationToken" class="auth-invitation-context" role="status">
+          <strong>{{ t("console.invitation.accept_title") }}</strong>
+          <p>{{ t("console.invitation.accept_description") }}</p>
+        </div>
 
-      <div class="auth-mode-tabs" role="tablist" :aria-label="t('console.auth.mode_label')">
+        <div class="auth-mode-tabs" role="tablist" :aria-label="t('console.auth.mode_label')">
         <button
           class="animated-nav-link public-nav-button auth-mode-tab"
           type="button"
@@ -376,9 +378,9 @@ onBeforeUnmount(() => {
             :style="{ transitionDelay: `${index * 22}ms` }"
           >{{ letter === " " ? "\u00a0" : letter }}</span>
         </button>
-      </div>
+        </div>
 
-      <Transition name="auth-content" mode="out-in">
+        <Transition name="auth-content" mode="out-in">
         <form v-if="isSignIn" key="sign-in" class="auth-form" novalidate @submit.prevent="submitSignIn">
           <AuthField
             id="console-auth-email"
@@ -494,11 +496,36 @@ onBeforeUnmount(() => {
             }}
           </button>
         </form>
-      </Transition>
+        </Transition>
 
-      <Transition name="auth-notice">
-        <p v-if="notice" class="auth-notice" role="status">{{ notice }}</p>
-      </Transition>
+        <Transition name="auth-notice">
+          <p v-if="notice" class="auth-notice" role="status">{{ notice }}</p>
+        </Transition>
+
+        <section class="auth-providers" aria-labelledby="auth-providers-heading">
+          <div class="auth-or"><span>{{ t("console.auth.or") }}</span></div>
+          <h3 id="auth-providers-heading">{{ t("console.auth.providers_heading") }}</h3>
+          <p>{{ t("console.auth.providers_description") }}</p>
+          <div class="auth-provider-grid">
+            <button
+              v-for="provider in providerDefinitions"
+              :key="provider.id"
+              class="auth-provider-button"
+              :class="{ 'is-available': availableProviders.includes(provider.id) }"
+              type="button"
+              :disabled="busy || !availableProviders.includes(provider.id)"
+              :aria-label="provider.label"
+              :title="availableProviders.includes(provider.id) ? provider.label : t('console.auth.provider_soon')"
+              @click="handleProvider(provider.id)"
+            >
+              <AuthProviderIcon :provider="provider.id" />
+              <span>{{ provider.label }}</span>
+              <small v-if="!availableProviders.includes(provider.id)">{{ t("console.auth.provider_soon") }}</small>
+            </button>
+          </div>
+          <p v-if="providerNotice" class="auth-provider-notice" role="status">{{ providerNotice }}</p>
+        </section>
+      </div>
 
       <Transition name="auth-subflow">
         <section v-if="forgotPasswordOpen" class="auth-subflow auth-recovery-flow">
@@ -509,6 +536,9 @@ onBeforeUnmount(() => {
               <p>{{ t("console.auth.recovery_description") }}</p>
             </div>
           </div>
+          <Transition name="auth-notice">
+            <p v-if="notice" class="auth-notice" role="status">{{ notice }}</p>
+          </Transition>
           <form v-if="!recoveryCompletionVisible" class="auth-form" novalidate @submit.prevent="submitRecoveryRequest">
             <AuthField
               id="console-auth-recovery-email"
@@ -564,30 +594,6 @@ onBeforeUnmount(() => {
           </button>
         </section>
       </Transition>
-
-      <section class="auth-providers" aria-labelledby="auth-providers-heading">
-        <div class="auth-or"><span>{{ t("console.auth.or") }}</span></div>
-        <h3 id="auth-providers-heading">{{ t("console.auth.providers_heading") }}</h3>
-        <p>{{ t("console.auth.providers_description") }}</p>
-        <div class="auth-provider-grid">
-          <button
-            v-for="provider in providerDefinitions"
-            :key="provider.id"
-            class="auth-provider-button"
-            :class="{ 'is-available': availableProviders.includes(provider.id) }"
-            type="button"
-            :disabled="busy || !availableProviders.includes(provider.id)"
-            :aria-label="provider.label"
-            :title="availableProviders.includes(provider.id) ? provider.label : t('console.auth.provider_soon')"
-            @click="handleProvider(provider.id)"
-          >
-            <span class="auth-provider-mark" aria-hidden="true">{{ provider.mark }}</span>
-            <span>{{ provider.label }}</span>
-            <small v-if="!availableProviders.includes(provider.id)">{{ t("console.auth.provider_soon") }}</small>
-          </button>
-        </div>
-        <p v-if="providerNotice" class="auth-provider-notice" role="status">{{ providerNotice }}</p>
-      </section>
     </div>
   </section>
 </template>
