@@ -208,7 +208,7 @@ The final host serves static frontend assets from
 As of 2026-09-05, the temporary staging host is `beget.ame-life.com`. Its DNS
 record resolves to `138.124.119.238`, its dedicated certificate covers the
 hostname, and the active HTTPS vhost serves the Console frontend release
-`eb08bd6`. The canonical `console.muxivo.pro` host remains separate and still
+`1fa3e4c`. The canonical `console.muxivo.pro` host remains separate and still
 requires its own DNS record, certificate and final HTTPS vhost. The staging
 host is suitable for visual checks only until the API, FRP route and production
 environment are provisioned.
@@ -225,9 +225,9 @@ FRP exposes the existing Activity route on `18080` and the Console API route on
 local API service receives a complete staging credential set. A read-only
 verification on 2026-09-05 returned `200` for the staging frontend and `502`
 for `/healthz` and `/readyz`; the root `muxivo.pro` Activity returned `200` in
-the same check. The latest Console source `fc221a2` is staged at
+the same check. The latest Console source `1fa3e4c` is staged at
 `/opt/muxivo-console` on the local server, and the previous source is retained
-at `/opt/muxivo-console.backup-fc221a2` for
+at `/opt/muxivo-console.backup-1fa3e4c` for
 rollback. The disabled `muxivo-console-api.service` has no credential file yet,
 so it was not started. PostgreSQL and the `muxivo_console` database are present
 on the local server. Redis is installed, enabled and bound only to loopback;
