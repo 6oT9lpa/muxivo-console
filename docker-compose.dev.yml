@@ -15,18 +15,33 @@ services:
     volumes:
       - muxivo-console-dev-postgres:/var/lib/postgresql/data
 
+  redis:
+    image: redis:7-alpine
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
   api:
     build:
       context: .
       dockerfile: Dockerfile.dev
     env_file:
       - .dev/console.env
+    environment:
+      # Development exercises the same shared Redis boundary used by
+      # production for rate limits and one-time authentication state.
+      MUXIVO_CONSOLE_RATE_LIMIT_BACKEND: redis
+      MUXIVO_CONSOLE_RATE_LIMIT_REDIS_URL: redis://redis:6379/0
     ports:
       - "8000:8000"
     volumes:
       - ./:/workspace
     depends_on:
       postgres:
+        condition: service_healthy
+      redis:
         condition: service_healthy
 
 volumes:

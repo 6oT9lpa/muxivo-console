@@ -52,6 +52,8 @@ def test_development_environment_generates_all_required_runtime_values() -> None
     assert len(values["MUXIVO_CONSOLE_SESSION_TOKEN_PEPPER"]) >= 44
     assert values["MUXIVO_DISCORD_CONTROL_BASE_URL"].startswith("http://")
     assert len(values["MUXIVO_DISCORD_CONTROL_SIGNING_KEY"]) >= 44
+    assert values["MUXIVO_CONSOLE_RATE_LIMIT_BACKEND"] == "redis"
+    assert values["MUXIVO_CONSOLE_RATE_LIMIT_REDIS_URL"] == "redis://redis:6379/0"
 
 
 def test_smoke_runs_real_compose_stages_and_cleans_generated_environment(tmp_path: Path) -> None:
@@ -80,11 +82,29 @@ def test_smoke_runs_real_compose_stages_and_cleans_generated_environment(tmp_pat
     )
 
     assert commands[0][0][-1] == "config"
-    assert commands[1][0][-6:] == ("up", "-d", "--build", "--wait", "postgres", "api")
+    assert commands[1][0][-7:] == (
+        "up",
+        "-d",
+        "--build",
+        "--wait",
+        "postgres",
+        "redis",
+        "api",
+    )
     assert commands[-1][0][-2:] == ("down", "--remove-orphans")
     assert commands[-1][1] is False
     assert all(command[2:] == (True, True) for command in commands)
     assert not (tmp_path / ".dev" / "console.env").exists()
+
+
+def test_development_compose_keeps_redis_internal_and_binds_auth_state_to_it() -> None:
+    compose = Path("docker-compose.dev.yml").read_text(encoding="utf-8")
+
+    assert "image: redis:7-alpine" in compose
+    assert "MUXIVO_CONSOLE_RATE_LIMIT_BACKEND: redis" in compose
+    assert "MUXIVO_CONSOLE_RATE_LIMIT_REDIS_URL: redis://redis:6379/0" in compose
+    assert '"6379:6379"' not in compose
+    assert "condition: service_healthy" in compose
 
 
 def test_smoke_preserves_existing_development_environment(tmp_path: Path) -> None:

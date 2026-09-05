@@ -41,6 +41,8 @@ def development_environment_content() -> str:
             f"MUXIVO_CONSOLE_SESSION_TOKEN_PEPPER={_base64_key()}",
             "MUXIVO_DISCORD_CONTROL_BASE_URL=http://127.0.0.1:8030",
             f"MUXIVO_DISCORD_CONTROL_SIGNING_KEY={_base64_key()}",
+            "MUXIVO_CONSOLE_RATE_LIMIT_BACKEND=redis",
+            "MUXIVO_CONSOLE_RATE_LIMIT_REDIS_URL=redis://redis:6379/0",
             "",
         )
     )
@@ -74,7 +76,16 @@ def run_smoke(
         )
         _run_command(
             runner,
-            (*compose_command, "up", "-d", "--build", "--wait", "postgres", "api"),
+            (
+                *compose_command,
+                "up",
+                "-d",
+                "--build",
+                "--wait",
+                "postgres",
+                "redis",
+                "api",
+            ),
             root=root,
             stage="startup",
         )

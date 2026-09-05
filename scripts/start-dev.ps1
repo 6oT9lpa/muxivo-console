@@ -60,6 +60,8 @@ if (-not (Test-Path -LiteralPath $environmentFile)) {
         "MUXIVO_CONSOLE_SESSION_TOKEN_PEPPER=$(New-RandomBase64)"
         "MUXIVO_DISCORD_CONTROL_BASE_URL=http://127.0.0.1:8030"
         "MUXIVO_DISCORD_CONTROL_SIGNING_KEY=$(New-RandomBase64)"
+        "MUXIVO_CONSOLE_RATE_LIMIT_BACKEND=redis"
+        "MUXIVO_CONSOLE_RATE_LIMIT_REDIS_URL=redis://redis:6379/0"
     ) | Set-Content -LiteralPath $environmentFile -Encoding utf8
 }
 else {
@@ -75,7 +77,7 @@ else {
 Import-EnvironmentFile $environmentFile
 Push-Location $repositoryRoot
 try {
-    docker compose -f docker-compose.dev.yml up -d --build --wait postgres api | Out-Host
+    docker compose -f docker-compose.dev.yml up -d --build --wait postgres redis api | Out-Host
     if ($LASTEXITCODE -ne 0) {
         throw "Docker Desktop must be running before the Console development environment can start."
     }
