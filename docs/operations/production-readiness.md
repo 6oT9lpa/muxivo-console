@@ -98,8 +98,10 @@ The same verification pass produced the following local quality evidence:
 - backend regression: `490 passed`;
 - frontend unit suite: `64 passed`;
 - frontend production build: successful;
-- browser E2E suite: `6 passed`; the main browser flow also verifies member
-  role update, scoped access removal, member removal and their audit events;
+- browser E2E suite: `7 passed`; the browser flows verify member role update,
+  scoped access removal, member removal, security recent-authentication,
+  identity unlink protection, password change, session revocation and their
+  audit/session outcomes;
 - local development Docker Compose smoke: successful after restarting the
   Docker Desktop Linux engine; Postgres/API built and started, `/healthz` and
   `/readyz` returned `200`, and the compose cleanup left no Console

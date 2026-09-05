@@ -7,6 +7,8 @@ const ownerUserId = "33333333-3333-4333-8333-333333333333";
 const memberMembershipId = "77777777-7777-4777-8777-777777777777";
 const memberUserId = "88888888-8888-4888-8888-888888888888";
 const memberScopeId = "99999999-9999-4999-8999-999999999999";
+const discordIdentityId = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
+const emailIdentityId = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
 const connectionId = "44444444-4444-4444-8444-444444444444";
 const browserSessionId = "55555555-5555-4555-8555-555555555555";
 const invitationId = "66666666-6666-4666-8666-666666666666";
@@ -199,6 +201,91 @@ test("sign-in, create organization, connect Discord, audit and revoke from the b
 
   await page.getByRole("button", { name: "Load audit log" }).click();
   await expect(page.getByText("platform_connection.revoke")).toBeVisible();
+
+  await page.getByRole("button", { name: "Security", exact: true }).click();
+  await page
+    .locator("#console-security")
+    .getByRole("button", { name: "Revoke current session" })
+    .click();
+  await expect(page.getByRole("button", { name: "See Panel" })).toBeVisible();
+  expect(state.authenticated).toBe(false);
+});
+
+test("security screen manages recent authentication, identities and password safeguards", async ({
+  page,
+}) => {
+  const state = {
+    authenticated: true,
+    registeredEmail: "",
+    organizations: [] as unknown[],
+    organizationMembers: [] as unknown[],
+    invitations: [] as unknown[],
+    connections: [] as PlatformConnection[],
+    auditEvents: [] as unknown[],
+    observedLifecycleIdempotencyKey: "",
+    loginIdentities: [
+      {
+        id: emailIdentityId,
+        provider: "email",
+        linked_at: "2026-09-01T12:00:00Z",
+        last_used_at: "2026-09-05T12:00:00Z",
+        can_unlink: false,
+      },
+      {
+        id: discordIdentityId,
+        provider: "discord",
+        linked_at: "2026-09-02T12:00:00Z",
+        last_used_at: "2026-09-04T12:00:00Z",
+        can_unlink: true,
+      },
+    ],
+  };
+  await page.context().addCookies([
+    {
+      name: "muxivo_console_dev_csrf",
+      value: "csrf-token",
+      url: "http://127.0.0.1:5173",
+      sameSite: "Lax",
+    },
+  ]);
+  await installConsoleApiMock(page, state);
+
+  await page.goto("/");
+  await page.getByRole("button", { name: "Security", exact: true }).click();
+
+  const security = page.locator("#console-security");
+  await expect(security).toContainText("Browser:foundation · current");
+  const recentAuthenticationForm = security.locator("form").first();
+  await recentAuthenticationForm
+    .getByLabel("Refresh recent authentication")
+    .fill("current-password");
+  await recentAuthenticationForm
+    .getByRole("button", { name: "Confirm current password" })
+    .click();
+  await expect(page.getByRole("status")).toContainText(
+    "Recent authentication refreshed for this browser session.",
+  );
+
+  await expect(security.getByRole("button", { name: "Unlink" })).toBeVisible();
+  await security.getByRole("button", { name: "Unlink" }).click();
+  await expect(page.getByRole("status")).toContainText("Discord login identity unlinked.");
+  await expect(security.getByRole("button", { name: "Unlink" })).toHaveCount(0);
+  await expect(security.getByRole("button", { name: "Protected" })).toBeDisabled();
+
+  const passwordForm = security.locator("form").nth(1);
+  await passwordForm.getByLabel("Current password").fill("current-password");
+  await passwordForm.getByLabel("New password", { exact: true }).fill("a-new-long-enough-password");
+  await passwordForm
+    .getByLabel("Confirm new password", { exact: true })
+    .fill("a-new-long-enough-password");
+  await passwordForm.getByRole("button", { name: "Change password" }).click();
+  await expect(page.getByRole("status")).toContainText(
+    "Password changed. Keep your recovery options up to date.",
+  );
+
+  await security.getByRole("button", { name: "Revoke all sessions" }).click();
+  await expect(page.getByRole("button", { name: "See Panel" })).toBeVisible();
+  expect(state.authenticated).toBe(false);
 });
 
 test("landing page and sign-in dialog fit a narrow viewport", async ({ page }) => {
@@ -406,6 +493,7 @@ async function installConsoleApiMock(
     connections: PlatformConnection[];
     auditEvents: unknown[];
     observedLifecycleIdempotencyKey: string;
+    loginIdentities?: unknown[];
   },
 ) {
   await page.route("**/api/v1/**", async (route) => {
@@ -495,7 +583,35 @@ async function installConsoleApiMock(
       });
     }
     if (method === "GET" && path === "/api/v1/auth/identities") {
-      return json(route, { items: [] });
+      return json(route, { items: state.loginIdentities ?? [] });
+    }
+    if (method === "POST" && path === "/api/v1/auth/session/reauthentications") {
+      const payload = JSON.parse(request.postData() ?? "{}");
+      expect(payload).toEqual({ current_password: "current-password" });
+      return empty(route);
+    }
+    if (method === "PUT" && path === "/api/v1/auth/password") {
+      const payload = JSON.parse(request.postData() ?? "{}");
+      expect(payload).toEqual({
+        current_password: "current-password",
+        new_password: "a-new-long-enough-password",
+      });
+      return empty(route);
+    }
+    if (method === "DELETE" && path.startsWith("/api/v1/auth/identities/")) {
+      const identityId = path.split("/").at(-1);
+      state.loginIdentities = (state.loginIdentities ?? []).filter(
+        (identity) => (identity as { id?: string }).id !== identityId,
+      );
+      return empty(route);
+    }
+    if (method === "DELETE" && path === "/api/v1/auth/session") {
+      state.authenticated = false;
+      return empty(route);
+    }
+    if (method === "DELETE" && path === "/api/v1/auth/sessions") {
+      state.authenticated = false;
+      return json(route, { revoked_count: 2 });
     }
     if (method === "GET" && path === "/api/v1/organizations") {
       return json(route, { items: state.organizations });
