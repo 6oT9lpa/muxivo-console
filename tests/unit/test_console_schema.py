@@ -52,6 +52,16 @@ def test_browser_sessions_are_stored_as_hashes_only() -> None:
     assert "token" not in session_columns
 
 
+def test_platform_connection_state_explanation_is_non_secret_metadata() -> None:
+    connection_columns = Base.metadata.tables["platform_connections"].columns
+    idempotency_columns = Base.metadata.tables[
+        "platform_connection_lifecycle_idempotency"
+    ].columns
+
+    assert "status_reason" in connection_columns
+    assert "result_reason" in idempotency_columns
+
+
 def test_password_recovery_tokens_are_stored_as_hashes_only() -> None:
     recovery_columns = Base.metadata.tables["password_recovery_transactions"].columns
 
