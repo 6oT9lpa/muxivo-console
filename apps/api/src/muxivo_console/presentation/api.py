@@ -468,6 +468,10 @@ def _platform_connection_candidate_response(
 
 
 def _platform_connection_response(connection: PlatformConnection) -> PlatformConnectionResponse:
+    scope_catalog = _scope_catalog_for_platform(connection.platform)
+    if connection.granted_capabilities:
+        granted_capabilities = set(connection.granted_capabilities)
+        scope_catalog = tuple(scope for scope in scope_catalog if scope[0] in granted_capabilities)
     return PlatformConnectionResponse(
         id=connection.id,
         organization_id=connection.organization_id,
@@ -482,7 +486,7 @@ def _platform_connection_response(connection: PlatformConnection) -> PlatformCon
                 description=description,
                 status=_scope_status_for_connection(connection.status),
             )
-            for key, display_name, description in _scope_catalog_for_platform(connection.platform)
+            for key, display_name, description in scope_catalog
         ],
     )
 

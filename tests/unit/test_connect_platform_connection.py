@@ -84,6 +84,10 @@ async def test_connects_only_a_platform_verified_non_secret_pending_connection()
     assert connection.status is ConnectionStatus.PENDING
     assert connection.status_reason is ConnectionStatusReason.INITIAL_PENDING
     assert connection.external_resource_id == "123456789012345678"
+    assert connection.granted_capabilities == (
+        "discord.guild.read",
+        "discord.guild.manage",
+    )
     assert verifier.arguments == {
         "actor_id": requested.actor_id,
         "organization_id": requested.organization_id,

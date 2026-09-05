@@ -48,6 +48,10 @@ class SqlAlchemyPlatformConnectionWriter:
                                     if connection.status_reason is not None
                                     else None
                                 ),
+                                granted_capabilities={
+                                    capability: True
+                                    for capability in connection.granted_capabilities
+                                },
                             ),
                             AuditEventRecord(
                                 id=audit_event.id,
@@ -190,6 +194,9 @@ class SqlAlchemyPlatformConnectionReader:
                             if record.status_reason is not None
                             else None
                         ),
+                        granted_capabilities=_capability_keys_from_record(
+                            record.granted_capabilities
+                        ),
                     )
                 )
             except ValueError:
@@ -219,6 +226,7 @@ class SqlAlchemyPlatformConnectionReader:
                     if record.status_reason is not None
                     else None
                 ),
+                granted_capabilities=_capability_keys_from_record(record.granted_capabilities),
             )
         except ValueError:
             return None
@@ -248,8 +256,22 @@ class SqlAlchemyPlatformConnectionReader:
                             if record.status_reason is not None
                             else None
                         ),
+                        granted_capabilities=_capability_keys_from_record(
+                            record.granted_capabilities
+                        ),
                     )
                 )
             except ValueError:
                 continue
         return tuple(connections)
+
+
+def _capability_keys_from_record(value: object) -> tuple[str, ...]:
+    """Read only boolean capability flags from legacy-compatible JSON metadata."""
+    if not isinstance(value, dict):
+        return ()
+    return tuple(
+        key
+        for key, enabled in value.items()
+        if isinstance(key, str) and key.strip() and enabled is True
+    )

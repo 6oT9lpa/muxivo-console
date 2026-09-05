@@ -56,6 +56,7 @@ class PlatformConnection:
     external_resource_id: str
     status: ConnectionStatus
     status_reason: ConnectionStatusReason | None = None
+    granted_capabilities: tuple[str, ...] = ()
 
     def __post_init__(self) -> None:
         if not self.external_resource_id.strip() or len(self.external_resource_id) > 255:
@@ -64,6 +65,13 @@ class PlatformConnection:
             self.status_reason, ConnectionStatusReason
         ):
             raise ValueError("Connection status reason is invalid.")
+        if any(
+            not capability.strip() or len(capability) > 128
+            for capability in self.granted_capabilities
+        ):
+            raise ValueError("Connection capability keys must contain 1 to 128 characters.")
+        if len(set(self.granted_capabilities)) != len(self.granted_capabilities):
+            raise ValueError("Connection capability keys must be unique.")
 
     def transition_to(
         self,
@@ -80,6 +88,7 @@ class PlatformConnection:
             external_resource_id=self.external_resource_id,
             status=target,
             status_reason=reason,
+            granted_capabilities=self.granted_capabilities,
         )
 
 

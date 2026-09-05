@@ -75,6 +75,24 @@ def test_transition_preserves_a_typed_reason_for_browser_explanation() -> None:
     assert transitioned.status_reason is ConnectionStatusReason.PREFLIGHT_FAILED
 
 
+def test_transition_preserves_non_secret_granted_capabilities() -> None:
+    original = PlatformConnection(
+        id=uuid4(),
+        organization_id=uuid4(),
+        platform=Platform.TWITCH,
+        external_resource_id="12345",
+        status=ConnectionStatus.PENDING,
+        granted_capabilities=("twitch.channel.read", "twitch.channel.manage"),
+    )
+
+    transitioned = original.transition_to(
+        ConnectionStatus.ACTIVE,
+        reason=ConnectionStatusReason.HEALTHY,
+    )
+
+    assert transitioned.granted_capabilities == original.granted_capabilities
+
+
 def test_rejects_an_untyped_connection_status_reason() -> None:
     with pytest.raises(ValueError, match="Connection status reason"):
         PlatformConnection(

@@ -23,6 +23,9 @@ from muxivo_console.domain.authorization import (
 )
 from muxivo_console.domain.connection_status_reason import ConnectionStatusReason
 from muxivo_console.domain.connections import ConnectionStatus, PlatformConnection
+from muxivo_console.domain.platform_connection_capabilities import (
+    capability_keys_for_platform,
+)
 
 logger = logging.getLogger("muxivo_console.application.connect_platform_connection")
 
@@ -96,6 +99,7 @@ class ConnectPlatformConnection:
             external_resource_id=external_resource_id,
             status=ConnectionStatus.PENDING,
             status_reason=ConnectionStatusReason.INITIAL_PENDING,
+            granted_capabilities=capability_keys_for_platform(command.platform),
         )
         created = await self.connections.create(
             connection=connection,
@@ -130,6 +134,7 @@ class ConnectPlatformConnection:
                 "connection_id": str(connection.id),
                 "platform": command.platform.value,
                 "external_resource_id": external_resource_id,
+                "capability_count": len(connection.granted_capabilities),
                 "correlation_id": str(command.correlation_id),
             },
         )

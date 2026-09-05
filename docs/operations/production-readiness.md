@@ -101,7 +101,7 @@ On 2026-09-05 the deployment was checked without changing application data:
 
 The same verification pass produced the following local quality evidence:
 
-- backend regression: `511 passed`;
+- backend regression: `512 passed`;
 - frontend unit suite: `73 passed`;
 - frontend production build: successful;
 - browser E2E suite: `7 passed`; the browser flows verify member role update,

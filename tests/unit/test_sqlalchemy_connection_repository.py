@@ -79,6 +79,7 @@ def connection() -> PlatformConnection:
         platform=Platform.DISCORD,
         external_resource_id="123456789012345678",
         status=ConnectionStatus.PENDING,
+        granted_capabilities=("discord.guild.read", "discord.guild.manage"),
     )
 
 
@@ -113,6 +114,10 @@ async def test_writes_non_secret_connection_metadata_and_audit_atomically() -> N
     assert connection_record.platform == "discord"
     assert connection_record.external_resource_id == "123456789012345678"
     assert connection_record.status == "pending"
+    assert connection_record.granted_capabilities == {
+        "discord.guild.read": True,
+        "discord.guild.manage": True,
+    }
     assert not hasattr(connection_record, "credential")
 
 
