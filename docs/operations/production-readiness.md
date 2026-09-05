@@ -84,18 +84,19 @@ On 2026-09-05 the deployment was checked without changing application data:
 - `https://muxivo.pro/` returned HTTP `200` for the Console root;
 - `https://muxivo.pro/activity/` returned HTTP `200` for the Discord Activity,
   and its current `/activity/assets/` JavaScript and CSS returned HTTP `200`;
-- the latest API source `4247079` was staged at `/opt/muxivo-console` on the
-  local server, with a rollback source copy at
-  `/opt/muxivo-console.backup-4247079`;
+- the latest API source release `f3a15aa` was staged at `/opt/muxivo-console` on
+  the local server, with a rollback source copy at
+  `/opt/muxivo-console.backup-dff3e56-20260905`;
 - the installed systemd API and Vault Agent units now come from the current
   release and require the Vault-rendered credential path; the previous API
   unit is retained at
   `/etc/systemd/system/muxivo-console-api.service.backup-legacy-20260905`;
-- the API runtime `/opt/muxivo-console/venv` was provisioned from the current
-  `pyproject.toml`; imports and the Alembic CLI passed without starting the
-  service;
-- the frontend release `89e8002` was installed at `/srv/muxivo-console/web`,
-  with a rollback copy at `/srv/muxivo-console/web.backup-console-root-20260905`;
+- the API runtime `/opt/muxivo-console/venv` passed dependency import checks;
+  `alembic upgrade head` applied the two pending migrations and a subsequent
+  `alembic check` reported no new operations, without starting the API service;
+- the frontend release `f3a15aa` was installed at `/srv/muxivo-console/web` on
+  the local host and the public tunnel host, with rollback copies at
+  `/srv/muxivo-console/web.backup-light-theme-20260905` on both hosts;
 - a source scan found no deprecated registration implementation markers in the
   deployed `apps` and `tests` trees.
 

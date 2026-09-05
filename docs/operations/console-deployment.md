@@ -265,12 +265,12 @@ local API service receives a complete staging credential set. A read-only
 verification on 2026-09-05 returned `200` for the staging frontend and `502`
 for `/healthz` and `/readyz`; `muxivo.pro/` returned the Console frontend and
 `muxivo.pro/activity/` returned the Activity frontend with `200` in the same
-check. The latest Console API source `4247079` is staged at
+check. The latest Console API source release `f3a15aa` is staged at
 `/opt/muxivo-console` on the local server, and the previous source is retained
-at `/opt/muxivo-console.backup-4247079` for
-rollback. The frontend release `89e8002` is installed at
-`/srv/muxivo-console/web`, and its previous web root is retained at
-`/srv/muxivo-console/web.backup-console-root-20260905` for rollback. The disabled
+at `/opt/muxivo-console.backup-dff3e56-20260905` for rollback. The frontend
+release `f3a15aa` is installed at `/srv/muxivo-console/web` on the local and
+tunnel hosts, and the previous web roots are retained at
+`/srv/muxivo-console/web.backup-light-theme-20260905` for rollback. The disabled
 `muxivo-console-api.service` now has its Python runtime provisioned, but no
 Vault-rendered credential file yet, because the staging Vault record is still
 missing the SMTP.BZ credentials. PostgreSQL and the `muxivo_console` database
