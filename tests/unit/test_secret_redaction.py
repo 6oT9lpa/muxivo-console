@@ -1,7 +1,12 @@
 import logging
 
 from muxivo_console.domain.redaction import REDACTED_SECRET, redact_secret, redact_secret_text
+from muxivo_console.infrastructure.discord_oauth_settings import DiscordOAuthSettings
 from muxivo_console.infrastructure.logging_redaction import SecretRedactionFilter
+from muxivo_console.infrastructure.smtp_password_recovery_settings import (
+    SmtpPasswordRecoverySettings,
+)
+from muxivo_console.infrastructure.twitch_control_settings import TwitchControlSettings
 
 
 def test_secret_redaction_recurses_through_structured_payloads() -> None:
@@ -53,3 +58,25 @@ def test_secret_redaction_filter_sanitizes_messages_and_structured_extras() -> N
 
     assert "discord-refresh-token" not in record.getMessage()
     assert record.access_token == REDACTED_SECRET
+
+
+def test_secret_bearing_configuration_repr_never_contains_credentials() -> None:
+    values = (
+        repr(DiscordOAuthSettings("client-id", "oauth-secret", "https://example.test/callback")),
+        repr(
+            SmtpPasswordRecoverySettings(
+                host="smtp.example.test",
+                port=587,
+                from_email="security@example.test",
+                reset_url_base="https://example.test/recover",
+                username="smtp-user",
+                password="smtp-password",
+            )
+        ),
+        repr(TwitchControlSettings("https://twitch-control.test", b"signing-key")),
+    )
+
+    rendered = " ".join(values)
+    assert "oauth-secret" not in rendered
+    assert "smtp-password" not in rendered
+    assert "signing-key" not in rendered

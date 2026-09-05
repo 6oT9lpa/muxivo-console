@@ -4,7 +4,7 @@ import base64
 import binascii
 import os
 from collections.abc import Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from urllib.parse import urlparse
 from uuid import UUID
 
@@ -48,12 +48,12 @@ __all__ = [
 
 @dataclass(frozen=True, slots=True)
 class ConsoleSettings:
-    database_url: str
-    email_lookup_key: bytes
-    email_encryption_key: bytes
-    session_token_pepper: bytes
+    database_url: str = field(repr=False)
+    email_lookup_key: bytes = field(repr=False)
+    email_encryption_key: bytes = field(repr=False)
+    session_token_pepper: bytes = field(repr=False)
     discord_control_base_url: str
-    discord_control_signing_key: bytes
+    discord_control_signing_key: bytes = field(repr=False)
     environment: str = "production"
     deployment: DeploymentReadinessSettings | None = None
     discord_oauth: DiscordOAuthSettings | None = None
@@ -63,7 +63,7 @@ class ConsoleSettings:
     telegram_oauth: TelegramOAuthSettings | None = None
     rate_limit: RateLimitSettings | None = None
     cors_allowed_origins: tuple[str, ...] = ()
-    password_recovery_smtp: SmtpPasswordRecoverySettings | None = None
+    password_recovery_smtp: SmtpPasswordRecoverySettings | None = field(default=None, repr=False)
     connection_reconciliation: ConnectionReconciliationSettings | None = None
     security_cleanup: SecurityCleanupSettings | None = None
     twitch_control: TwitchControlSettings | None = None

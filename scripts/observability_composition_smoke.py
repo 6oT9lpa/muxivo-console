@@ -191,10 +191,7 @@ def _wait_for_observability(
                 endpoint: _get_status(opener, endpoint) for endpoint in PROMETHEUS_ENDPOINTS
             }
             statuses.update(
-                {
-                    endpoint: _get_status(opener, endpoint)
-                    for endpoint in ALERTMANAGER_ENDPOINTS
-                }
+                {endpoint: _get_status(opener, endpoint) for endpoint in ALERTMANAGER_ENDPOINTS}
             )
             configuration = _get_json(
                 opener,
