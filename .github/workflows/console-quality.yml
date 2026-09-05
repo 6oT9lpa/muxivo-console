@@ -32,10 +32,10 @@ jobs:
           python -m pip install -e ".[dev]"
 
       - name: Lint backend
-        run: python -m ruff check apps/api/src tests
+        run: python -m ruff check apps/api/src tests scripts
 
       - name: Check backend formatting
-        run: python -m ruff format --check apps/api/src tests
+        run: python -m ruff format --check apps/api/src tests scripts
 
       - name: Check application and settings class layout
         run: python scripts/application_class_layout_check.py
@@ -51,6 +51,21 @@ jobs:
 
       - name: Validate production readiness artifacts
         run: python scripts/readiness_artifact_check.py
+
+      - name: Test Discord and Twitch Control API contracts
+        run: >-
+          python -m pytest
+          tests/unit/test_discord_control_api.py
+          tests/unit/test_twitch_control_api.py
+          -q
+
+      - name: Test security regression contracts
+        run: >-
+          python -m pytest
+          tests/api/test_security_headers_api.py
+          tests/unit/test_secret_redaction.py
+          tests/unit/test_browser_token_exposure_scan.py
+          -q
 
       - name: Smoke production composition
         run: python scripts/production_composition_smoke.py
