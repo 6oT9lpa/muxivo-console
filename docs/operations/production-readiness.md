@@ -68,6 +68,10 @@ On 2026-09-05 the deployment was checked without changing application data:
 
 - `https://beget.ame-life.com/` served the Console frontend release `d8c8c44`
   with HTTP `200`;
+- the read-only public network preflight passed DNS resolution, certificate
+  validation with TLS 1.3 and the Console frontend marker; its only failed
+  stage was `public_http_surface` because `/healthz` and `/readyz` fail closed
+  with HTTP `502` while the API unit has no runtime credential file;
 - `https://beget.ame-life.com/healthz` and `/readyz` returned HTTP `502` because
   the API unit is intentionally disabled while `/etc/muxivo-console/console.env`
   is absent;
