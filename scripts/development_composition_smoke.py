@@ -123,7 +123,28 @@ def _run_command(
     )
     # Compose renders the complete environment in `config`; capture every
     # command so generated credentials never reach the terminal or CI logs.
-    runner(command, check=True, cwd=str(root), capture_output=True, text=True)
+    try:
+        runner(command, check=True, cwd=str(root), capture_output=True, text=True)
+    except subprocess.CalledProcessError as error:
+        logger.error(
+            "development_composition_smoke.stage_failed",
+            extra={
+                "stage": stage,
+                "error_type": type(error).__name__,
+                "return_code": error.returncode,
+            },
+        )
+        raise
+    except OSError as error:
+        logger.error(
+            "development_composition_smoke.stage_failed",
+            extra={
+                "stage": stage,
+                "error_type": type(error).__name__,
+                "errno": error.errno,
+            },
+        )
+        raise
     logger.info(
         "development_composition_smoke.stage_completed",
         extra={"stage": stage},

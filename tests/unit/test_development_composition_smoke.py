@@ -1,3 +1,4 @@
+import subprocess
 from contextlib import nullcontext
 from pathlib import Path
 from types import SimpleNamespace
@@ -6,6 +7,38 @@ from scripts.development_composition_smoke import (
     development_environment_content,
     run_smoke,
 )
+
+
+def test_smoke_logs_failed_compose_stage_without_command_output(tmp_path: Path, caplog) -> None:
+    compose_file = tmp_path / "docker-compose.dev.yml"
+    compose_file.write_text("services: {}\n", encoding="utf-8")
+
+    def runner(command, *, check, cwd, capture_output, text):
+        if "up" in command:
+            raise subprocess.CalledProcessError(17, command)
+
+    with caplog.at_level("ERROR"):
+        try:
+            run_smoke(
+                root=tmp_path,
+                runner=runner,
+                opener=lambda *_args, **_kwargs: nullcontext(SimpleNamespace(status=200)),
+                sleep=lambda _: None,
+                max_attempts=1,
+            )
+        except subprocess.CalledProcessError:
+            pass
+        else:
+            raise AssertionError("compose failure must be propagated")
+
+    assert "development_composition_smoke.stage_failed" in caplog.text
+    failure = next(
+        record
+        for record in caplog.records
+        if record.getMessage() == "development_composition_smoke.stage_failed"
+    )
+    assert failure.stage == "startup"
+    assert failure.return_code == 17
 
 
 def test_development_environment_generates_all_required_runtime_values() -> None:
