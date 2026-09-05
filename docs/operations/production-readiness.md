@@ -42,7 +42,7 @@ completed.
 | Security | Scheduled cleanup for expired sessions and recovery transactions | Implemented |
 | Observability | `/metrics` scraped and alert rules configured | Metrics endpoint and alert rules implemented; scraper backend pending |
 | Operations | Liveness/readiness endpoints distinguish process health from database readiness | Implemented; API unit is installed but disabled until the staging credential file and environment are provisioned |
-| Lifecycle | Periodic platform connection reconciliation worker | Implemented |
+| Lifecycle | Periodic platform connection reconciliation worker | Implemented; unavailable Control API probes fail closed to `DEGRADED/PLATFORM_UNREACHABLE` and do not abort the remaining batch |
 | Lifecycle | Idempotency keys for retry-safe lifecycle actions | Implemented |
 | Lifecycle | Persisted and localized reason for every connection state transition | Implemented; legacy rows remain readable with a neutral fallback, and reconciliation contracts reject reason/status mismatches |
 | Lifecycle | Browser-safe platform resource candidate discovery | Console contract/UI implemented; Control API endpoints pending |
@@ -95,7 +95,7 @@ On 2026-09-05 the deployment was checked without changing application data:
 
 The same verification pass produced the following local quality evidence:
 
-- backend regression: `497 passed`;
+- backend regression: `498 passed`;
 - frontend unit suite: `65 passed`;
 - frontend production build: successful;
 - browser E2E suite: `7 passed`; the browser flows verify member role update,

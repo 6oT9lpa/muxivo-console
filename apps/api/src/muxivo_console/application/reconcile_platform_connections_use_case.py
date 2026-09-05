@@ -6,6 +6,9 @@ import logging
 from dataclasses import dataclass
 from uuid import UUID
 
+from muxivo_console.application.platform_control_unavailable_error import (
+    PlatformControlUnavailableError,
+)
 from muxivo_console.application.ports import (
     IdentifierGenerator,
     PlatformConnectionLifecycleWriter,
@@ -19,7 +22,10 @@ from muxivo_console.application.reconcile_platform_connections_result import (
     ReconcilePlatformConnectionsResult,
 )
 from muxivo_console.domain.audit import AuditEvent
-from muxivo_console.domain.connection_reconciliation import ConnectionReconciliationDecision
+from muxivo_console.domain.connection_reconciliation import (
+    ConnectionReconciliationDecision,
+    ConnectionReconciliationReason,
+)
 from muxivo_console.domain.connection_status_reason import ConnectionStatusReason
 from muxivo_console.domain.connections import ConnectionStatus, PlatformConnection
 
@@ -62,10 +68,27 @@ class ReconcilePlatformConnections:
                     },
                 )
                 continue
-            decision = await probe.inspect_connection(
-                connection=connection,
-                correlation_id=command.correlation_id,
-            )
+            try:
+                decision = await probe.inspect_connection(
+                    connection=connection,
+                    correlation_id=command.correlation_id,
+                )
+            except PlatformControlUnavailableError:
+                logger.warning(
+                    "platform_connection.reconciliation.probe_unavailable",
+                    extra={
+                        "connection_id": str(connection.id),
+                        "organization_id": str(connection.organization_id),
+                        "platform": connection.platform.value,
+                        "target_status": ConnectionStatus.DEGRADED.value,
+                        "reason": ConnectionReconciliationReason.PLATFORM_UNREACHABLE.value,
+                        "correlation_id": str(command.correlation_id),
+                    },
+                )
+                decision = ConnectionReconciliationDecision(
+                    target_status=ConnectionStatus.DEGRADED,
+                    reason=ConnectionReconciliationReason.PLATFORM_UNREACHABLE,
+                )
             reconciled = await self._apply_decision(
                 connection=connection,
                 decision=decision,

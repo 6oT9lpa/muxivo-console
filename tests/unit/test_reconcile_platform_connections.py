@@ -2,6 +2,9 @@ from dataclasses import dataclass, field
 from uuid import UUID, uuid4
 
 import pytest
+from muxivo_console.application.platform_control_unavailable_error import (
+    PlatformControlUnavailableError,
+)
 from muxivo_console.application.reconcile_platform_connections import (
     ReconcilePlatformConnections,
     ReconcilePlatformConnectionsCommand,
@@ -27,10 +30,13 @@ class FakeConnectionReader:
 @dataclass(slots=True)
 class FakeProbe:
     decisions: dict[UUID, ConnectionReconciliationDecision]
+    unavailable_ids: frozenset[UUID] = frozenset()
 
     async def inspect_connection(
         self, *, connection: PlatformConnection, correlation_id: UUID
     ) -> ConnectionReconciliationDecision:
+        if connection.id in self.unavailable_ids:
+            raise PlatformControlUnavailableError("Control API unavailable")
         return self.decisions[connection.id]
 
 
@@ -165,3 +171,39 @@ async def test_reconciliation_moves_pending_connection_to_degraded_after_preflig
     assert result.skipped == 0
     assert lifecycle.saved[0][0].status is ConnectionStatus.DEGRADED
     assert lifecycle.saved[0][0].status_reason is ConnectionStatusReason.PREFLIGHT_FAILED
+
+
+@pytest.mark.asyncio
+async def test_reconciliation_degrades_unavailable_upstream_and_continues_the_batch() -> None:
+    unavailable = connection(ConnectionStatus.ACTIVE)
+    recoverable = connection(ConnectionStatus.DEGRADED)
+    lifecycle = FakeLifecycleWriter()
+    worker = ReconcilePlatformConnections(
+        connections=FakeConnectionReader((unavailable, recoverable)),
+        probes={
+            Platform.DISCORD.value: FakeProbe(
+                {
+                    recoverable.id: ConnectionReconciliationDecision(
+                        target_status=ConnectionStatus.ACTIVE,
+                        reason=ConnectionReconciliationReason.HEALTHY,
+                    )
+                },
+                unavailable_ids=frozenset({unavailable.id}),
+            )
+        },
+        lifecycle=lifecycle,
+        identifiers=FakeIdentifiers(),
+    )
+
+    result = await worker.execute(
+        ReconcilePlatformConnectionsCommand(system_actor_id=uuid4(), correlation_id=uuid4())
+    )
+
+    assert result.inspected == 2
+    assert result.changed == 2
+    assert result.skipped == 0
+    assert [saved[0].status for saved in lifecycle.saved] == [
+        ConnectionStatus.DEGRADED,
+        ConnectionStatus.ACTIVE,
+    ]
+    assert lifecycle.saved[0][0].status_reason is ConnectionStatusReason.PLATFORM_UNREACHABLE
