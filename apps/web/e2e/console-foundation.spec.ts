@@ -164,7 +164,7 @@ test("sign-in, create organization, connect Discord, audit and revoke from the b
 
   await page.getByRole("button", { name: "Load audit log" }).click();
   await expect(page.getByText("organization.created")).toBeVisible();
-  await expect(page.getByText("platform_connection.register")).toBeVisible();
+  await expect(page.getByText("platform_connection.connect")).toBeVisible();
 
   await connectionRow.getByRole("button", { name: "Revoke" }).click();
 
@@ -595,7 +595,7 @@ async function installConsoleApiMock(
       };
       state.connections = [connection];
       state.auditEvents.push(
-        auditEvent("platform_connection.register", "platform_connection", connectionId),
+        auditEvent("platform_connection.connect", "platform_connection", connectionId),
       );
       return json(route, connection, 201);
     }

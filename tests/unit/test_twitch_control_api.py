@@ -134,7 +134,7 @@ async def test_twitch_registration_verifier_maps_control_decision() -> None:
         allow_insecure_http=True,
     )
 
-    verified = await verifier.verify_registration(
+    verified = await verifier.verify_connection(
         actor_id=actor_id,
         organization_id=organization_id,
         platform=Platform.TWITCH,
@@ -247,7 +247,7 @@ async def test_twitch_registration_verifier_requires_linked_twitch_identity() ->
         allow_insecure_http=True,
     )
 
-    verified = await verifier.verify_registration(
+    verified = await verifier.verify_connection(
         actor_id=uuid4(),
         organization_id=uuid4(),
         platform=Platform.TWITCH,
@@ -270,7 +270,7 @@ async def test_twitch_registration_verifier_rejects_invalid_control_payload() ->
     )
 
     with pytest.raises(PlatformControlUnavailableError, match="verification payload"):
-        await verifier.verify_registration(
+        await verifier.verify_connection(
             actor_id=uuid4(),
             organization_id=uuid4(),
             platform=Platform.TWITCH,

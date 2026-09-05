@@ -1,10 +1,10 @@
-"""Use case for registering a verified, non-secret platform connection."""
+"""Use case for connecting a verified, non-secret platform resource."""
 
 import logging
 from dataclasses import dataclass
 
-from muxivo_console.application.platform_connection_registration_error import (
-    PlatformConnectionRegistrationRejectedError,
+from muxivo_console.application.platform_connection_connect_error import (
+    PlatformConnectionConnectRejectedError,
 )
 from muxivo_console.application.ports import (
     IdentifierGenerator,
@@ -12,8 +12,8 @@ from muxivo_console.application.ports import (
     PlatformConnectionVerifier,
     PlatformConnectionWriter,
 )
-from muxivo_console.application.register_platform_connection_command import (
-    RegisterPlatformConnectionCommand,
+from muxivo_console.application.connect_platform_connection_command import (
+    ConnectPlatformConnectionCommand,
 )
 from muxivo_console.domain.audit import AuditEvent
 from muxivo_console.domain.authorization import (
@@ -24,22 +24,22 @@ from muxivo_console.domain.authorization import (
 from muxivo_console.domain.connection_status_reason import ConnectionStatusReason
 from muxivo_console.domain.connections import ConnectionStatus, PlatformConnection
 
-logger = logging.getLogger("muxivo_console.application.register_platform_connection")
+logger = logging.getLogger("muxivo_console.application.connect_platform_connection")
 
 
 @dataclass(slots=True)
-class RegisterPlatformConnection:
-    """Persist a pending connection only after organization and ownership checks."""
+class ConnectPlatformConnection:
+    """Persist a pending connection only after RBAC and native ownership checks."""
 
     authorizer: OrganizationAuthorizer
     verifier: PlatformConnectionVerifier
     identifiers: IdentifierGenerator
     connections: PlatformConnectionWriter
 
-    async def execute(self, command: RegisterPlatformConnectionCommand) -> PlatformConnection:
+    async def execute(self, command: ConnectPlatformConnectionCommand) -> PlatformConnection:
         external_resource_id = command.external_resource_id.strip()
         logger.info(
-            "platform_connection.register.started",
+            "platform_connection.connect.started",
             extra={
                 "actor_id": str(command.actor_id),
                 "organization_id": str(command.organization_id),
@@ -58,7 +58,7 @@ class RegisterPlatformConnection:
         )
         if not decision.allowed:
             logger.warning(
-                "platform_connection.register.denied_rbac",
+            "platform_connection.connect.denied_rbac",
                 extra={
                     "actor_id": str(command.actor_id),
                     "organization_id": str(command.organization_id),
@@ -67,9 +67,9 @@ class RegisterPlatformConnection:
                     "correlation_id": str(command.correlation_id),
                 },
             )
-            raise PlatformConnectionRegistrationRejectedError("Registration was denied.")
+            raise PlatformConnectionConnectRejectedError("Connection was denied.")
 
-        verified = await self.verifier.verify_registration(
+        verified = await self.verifier.verify_connection(
             actor_id=command.actor_id,
             organization_id=command.organization_id,
             platform=command.platform,
@@ -78,7 +78,7 @@ class RegisterPlatformConnection:
         )
         if not verified:
             logger.warning(
-                "platform_connection.register.denied_ownership",
+            "platform_connection.connect.denied_ownership",
                 extra={
                     "actor_id": str(command.actor_id),
                     "organization_id": str(command.organization_id),
@@ -87,7 +87,7 @@ class RegisterPlatformConnection:
                     "correlation_id": str(command.correlation_id),
                 },
             )
-            raise PlatformConnectionRegistrationRejectedError("Registration was not verified.")
+            raise PlatformConnectionConnectRejectedError("Connection was not verified.")
 
         connection = PlatformConnection(
             id=self.identifiers.new(),
@@ -104,7 +104,7 @@ class RegisterPlatformConnection:
                 correlation_id=command.correlation_id,
                 actor_id=command.actor_id,
                 organization_id=command.organization_id,
-                action="platform_connection.register",
+                action="platform_connection.connect",
                 resource_type="platform_connection",
                 resource_id=str(connection.id),
                 result="succeeded",
@@ -112,7 +112,7 @@ class RegisterPlatformConnection:
         )
         if not created:
             logger.warning(
-                "platform_connection.register.conflict",
+            "platform_connection.connect.conflict",
                 extra={
                     "actor_id": str(command.actor_id),
                     "organization_id": str(command.organization_id),
@@ -121,9 +121,9 @@ class RegisterPlatformConnection:
                     "correlation_id": str(command.correlation_id),
                 },
             )
-            raise PlatformConnectionRegistrationRejectedError("Registration could not be created.")
+            raise PlatformConnectionConnectRejectedError("Connection could not be created.")
         logger.info(
-            "platform_connection.register.completed",
+            "platform_connection.connect.completed",
             extra={
                 "actor_id": str(command.actor_id),
                 "organization_id": str(command.organization_id),

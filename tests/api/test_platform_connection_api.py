@@ -5,8 +5,8 @@ from muxivo_console.application.list_platform_connections import PlatformConnect
 from muxivo_console.application.manage_platform_connection_lifecycle import (
     PlatformConnectionLifecycleRejectedError,
 )
-from muxivo_console.application.register_platform_connection import (
-    PlatformConnectionRegistrationRejectedError,
+from muxivo_console.application.connect_platform_connection import (
+    PlatformConnectionConnectRejectedError,
 )
 from muxivo_console.application.resolve_browser_session import BrowserSessionPrincipal
 from muxivo_console.domain.activity import Platform
@@ -28,7 +28,7 @@ class SessionResolver:
         return self.principal
 
 
-class ConnectionRegistrationUseCase:
+class ConnectionConnectUseCase:
     def __init__(self, connection: PlatformConnection | None = None, rejects: bool = False) -> None:
         self.connection = connection
         self.rejects = rejects
@@ -37,7 +37,7 @@ class ConnectionRegistrationUseCase:
     async def execute(self, command):
         self.command = command
         if self.rejects:
-            raise PlatformConnectionRegistrationRejectedError("Native authority denied.")
+            raise PlatformConnectionConnectRejectedError("Native authority denied.")
         return self.connection
 
 
@@ -71,7 +71,7 @@ def headers() -> dict[str, str]:
     }
 
 
-def test_connection_registration_requires_session_and_csrf() -> None:
+def test_connection_connect_requires_session_and_csrf() -> None:
     organization_id = uuid4()
     client = TestClient(create_app())
 
@@ -91,7 +91,7 @@ def test_connection_registration_requires_session_and_csrf() -> None:
     assert missing_session.json() == {"detail": "Access denied"}
 
 
-def test_connection_registration_uses_session_actor_and_neutral_contract() -> None:
+def test_connection_connect_uses_session_actor_and_neutral_contract() -> None:
     actor_id, organization_id, connection_id = uuid4(), uuid4(), uuid4()
     connection = PlatformConnection(
         id=connection_id,
@@ -100,10 +100,10 @@ def test_connection_registration_uses_session_actor_and_neutral_contract() -> No
         external_resource_id="123456789012345678",
         status=ConnectionStatus.PENDING,
     )
-    use_case = ConnectionRegistrationUseCase(connection)
+    use_case = ConnectionConnectUseCase(connection)
     client = TestClient(
         create_app(
-            platform_connection_registration_use_case=use_case,
+            platform_connection_connect_use_case=use_case,
             session_resolver=SessionResolver(
                 BrowserSessionPrincipal(actor_id, uuid4(), SessionAssuranceLevel.PASSWORD)
             ),
@@ -150,10 +150,10 @@ def test_connection_registration_uses_session_actor_and_neutral_contract() -> No
     assert isinstance(use_case.command.correlation_id, UUID)
 
 
-def test_connection_registration_hides_native_rejection_reason() -> None:
+def test_connection_connect_hides_native_rejection_reason() -> None:
     client = TestClient(
         create_app(
-            platform_connection_registration_use_case=ConnectionRegistrationUseCase(rejects=True),
+            platform_connection_connect_use_case=ConnectionConnectUseCase(rejects=True),
             session_resolver=SessionResolver(
                 BrowserSessionPrincipal(uuid4(), uuid4(), SessionAssuranceLevel.PASSWORD)
             ),
@@ -167,7 +167,7 @@ def test_connection_registration_hides_native_rejection_reason() -> None:
     )
 
     assert response.status_code == 403
-    assert response.json() == {"detail": "Platform connection registration failed"}
+    assert response.json() == {"detail": "Platform connection setup failed"}
 
 
 def test_connection_list_returns_cursor_paginated_neutral_contract() -> None:

@@ -2,11 +2,11 @@ from collections import deque
 from uuid import UUID, uuid4
 
 import pytest
-from muxivo_console.application.register_platform_connection import (
-    PlatformConnectionRegistrationRejectedError,
+from muxivo_console.application.connect_platform_connection import (
+    PlatformConnectionConnectRejectedError,
     PlatformConnectionVerifierRouter,
-    RegisterPlatformConnection,
-    RegisterPlatformConnectionCommand,
+    ConnectPlatformConnection,
+    ConnectPlatformConnectionCommand,
 )
 from muxivo_console.domain.activity import Platform
 from muxivo_console.domain.audit import AuditEvent
@@ -39,7 +39,7 @@ class Verifier:
         self.arguments = None
         self.call_count = 0
 
-    async def verify_registration(self, **arguments) -> bool:
+    async def verify_connection(self, **arguments) -> bool:
         self.arguments = arguments
         self.call_count += 1
         return self.verified
@@ -57,8 +57,8 @@ class ConnectionWriter:
         return self.created
 
 
-def command() -> RegisterPlatformConnectionCommand:
-    return RegisterPlatformConnectionCommand(
+def command() -> ConnectPlatformConnectionCommand:
+    return ConnectPlatformConnectionCommand(
         actor_id=uuid4(),
         organization_id=uuid4(),
         platform=Platform.DISCORD,
@@ -68,13 +68,13 @@ def command() -> RegisterPlatformConnectionCommand:
 
 
 @pytest.mark.asyncio
-async def test_registers_only_a_platform_verified_non_secret_pending_connection() -> None:
+async def test_connects_only_a_platform_verified_non_secret_pending_connection() -> None:
     requested = command()
     authorizer = Authorizer(True)
     verifier = Verifier(True)
     writer = ConnectionWriter()
     connection_id, audit_id = uuid4(), uuid4()
-    use_case = RegisterPlatformConnection(
+    use_case = ConnectPlatformConnection(
         authorizer, verifier, SequenceIdentifiers([connection_id, audit_id]), writer
     )
 
@@ -92,7 +92,7 @@ async def test_registers_only_a_platform_verified_non_secret_pending_connection(
         "correlation_id": requested.correlation_id,
     }
     assert authorizer.request.resource.value == "console.platform_connections"
-    assert writer.audit_event.action == "platform_connection.register"
+    assert writer.audit_event.action == "platform_connection.connect"
     assert writer.audit_event.resource_id == str(connection_id)
 
 
@@ -100,11 +100,11 @@ async def test_registers_only_a_platform_verified_non_secret_pending_connection(
 async def test_does_not_call_platform_or_write_connection_when_console_rbac_denies() -> None:
     verifier = Verifier(True)
     writer = ConnectionWriter()
-    use_case = RegisterPlatformConnection(
+    use_case = ConnectPlatformConnection(
         Authorizer(False), verifier, SequenceIdentifiers([uuid4(), uuid4()]), writer
     )
 
-    with pytest.raises(PlatformConnectionRegistrationRejectedError):
+    with pytest.raises(PlatformConnectionConnectRejectedError):
         await use_case.execute(command())
 
     assert verifier.arguments is None
@@ -114,11 +114,11 @@ async def test_does_not_call_platform_or_write_connection_when_console_rbac_deni
 @pytest.mark.asyncio
 async def test_does_not_write_connection_without_platform_native_verification() -> None:
     writer = ConnectionWriter()
-    use_case = RegisterPlatformConnection(
+    use_case = ConnectPlatformConnection(
         Authorizer(True), Verifier(False), SequenceIdentifiers([uuid4(), uuid4()]), writer
     )
 
-    with pytest.raises(PlatformConnectionRegistrationRejectedError):
+    with pytest.raises(PlatformConnectionConnectRejectedError):
         await use_case.execute(command())
 
     assert writer.connection is None
@@ -133,7 +133,7 @@ async def test_verifier_router_dispatches_to_the_requested_platform_verifier() -
         {Platform.DISCORD: discord_verifier, Platform.TWITCH: twitch_verifier}
     )
 
-    verified = await router.verify_registration(
+    verified = await router.verify_connection(
         actor_id=requested.actor_id,
         organization_id=requested.organization_id,
         platform=Platform.TWITCH,
@@ -154,7 +154,7 @@ async def test_verifier_router_rejects_platforms_without_configured_verifier() -
     discord_verifier = Verifier(True)
     router = PlatformConnectionVerifierRouter({Platform.DISCORD: discord_verifier})
 
-    verified = await router.verify_registration(
+    verified = await router.verify_connection(
         actor_id=requested.actor_id,
         organization_id=requested.organization_id,
         platform=Platform.TELEGRAM,

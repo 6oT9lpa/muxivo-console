@@ -78,7 +78,7 @@ class TwitchPlatformConnectionVerifier:
     def __post_init__(self) -> None:
         _validate_twitch_control_base_url(self.base_url, self.allow_insecure_http)
 
-    async def verify_registration(
+    async def verify_connection(
         self,
         *,
         actor_id: UUID,

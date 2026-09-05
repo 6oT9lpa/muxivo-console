@@ -798,7 +798,7 @@ async def test_discord_verifier_requires_platform_confirmation_with_manage_asser
         allow_insecure_http=True,
     )
 
-    verified = await verifier.verify_registration(
+    verified = await verifier.verify_connection(
         actor_id=actor_id,
         organization_id=organization_id,
         platform=Platform.DISCORD,
@@ -825,7 +825,7 @@ async def test_discord_verifier_rejects_other_platforms_without_http_call() -> N
         allow_insecure_http=True,
     )
 
-    verified = await verifier.verify_registration(
+    verified = await verifier.verify_connection(
         actor_id=uuid4(),
         organization_id=uuid4(),
         platform=Platform.TWITCH,
@@ -846,7 +846,7 @@ async def test_discord_verifier_rejects_unlinked_console_user_without_http_call(
         allow_insecure_http=True,
     )
 
-    verified = await verifier.verify_registration(
+    verified = await verifier.verify_connection(
         actor_id=uuid4(),
         organization_id=uuid4(),
         platform=Platform.DISCORD,

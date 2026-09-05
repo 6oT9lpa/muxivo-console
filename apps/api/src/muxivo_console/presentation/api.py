@@ -154,10 +154,10 @@ from muxivo_console.application.reauthenticate_browser_session import (
     ReauthenticateBrowserSession,
     ReauthenticateBrowserSessionCommand,
 )
-from muxivo_console.application.register_platform_connection import (
-    PlatformConnectionRegistrationRejectedError,
-    RegisterPlatformConnection,
-    RegisterPlatformConnectionCommand,
+from muxivo_console.application.connect_platform_connection import (
+    PlatformConnectionConnectRejectedError,
+    ConnectPlatformConnection,
+    ConnectPlatformConnectionCommand,
 )
 from muxivo_console.application.request_password_recovery import (
     RequestPasswordRecovery,
@@ -610,7 +610,7 @@ def create_app(
     organization_invitation_list_use_case: ListOrganizationInvitations | None = None,
     organization_invitation_revoke_use_case: RevokeOrganizationInvitation | None = None,
     organization_invitation_accept_use_case: AcceptOrganizationInvitation | None = None,
-    platform_connection_registration_use_case: RegisterPlatformConnection | None = None,
+    platform_connection_connect_use_case: ConnectPlatformConnection | None = None,
     platform_connection_candidates_use_case: ListPlatformConnectionCandidates | None = None,
     platform_connection_lifecycle_use_case: ManagePlatformConnectionLifecycle | None = None,
     platform_connections_use_case: ListPlatformConnections | None = None,
@@ -2170,20 +2170,20 @@ def create_app(
         status_code=status.HTTP_201_CREATED,
         tags=["platform-connections"],
     )
-    async def register_platform_connection(
+    async def connect_platform_connection(
         organization_id: UUID, payload: PlatformConnectionCreateRequest, request: Request
     ) -> PlatformConnectionResponse:
         actor_id = getattr(request.state, "actor_id", None)
         if not isinstance(actor_id, UUID):
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied")
-        if platform_connection_registration_use_case is None:
+        if platform_connection_connect_use_case is None:
             raise HTTPException(
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-                detail="Platform connection registration is unavailable",
+                detail="Platform connection setup is unavailable",
             )
         try:
-            connection = await platform_connection_registration_use_case.execute(
-                RegisterPlatformConnectionCommand(
+            connection = await platform_connection_connect_use_case.execute(
+                ConnectPlatformConnectionCommand(
                     actor_id=actor_id,
                     organization_id=organization_id,
                     platform=payload.platform,
@@ -2191,10 +2191,10 @@ def create_app(
                     correlation_id=request.state.correlation_id,
                 )
             )
-        except PlatformConnectionRegistrationRejectedError as error:
+        except PlatformConnectionConnectRejectedError as error:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
-                detail="Platform connection registration failed",
+                detail="Platform connection setup failed",
             ) from error
         except PlatformControlUnavailableError as error:
             raise HTTPException(

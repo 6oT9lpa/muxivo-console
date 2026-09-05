@@ -122,7 +122,7 @@ class OrganizationListUseCase:
         )
 
 
-class PlatformConnectionRegistrationUseCase:
+class PlatformConnectionConnectUseCase:
     def __init__(self, state: FoundationSmokeState) -> None:
         self.state = state
 
@@ -136,7 +136,7 @@ class PlatformConnectionRegistrationUseCase:
         )
         self.state.connection = connection
         self.state.record_audit(
-            action="platform_connection.register",
+            action="platform_connection.connect",
             organization_id=command.organization_id,
             resource_type="platform_connection",
             resource_id=str(connection.id),
@@ -191,7 +191,7 @@ def test_sign_in_create_organization_connect_audit_and_revoke_foundation_flow() 
             session_resolver=SessionResolver(state),
             organization_creation_use_case=OrganizationCreationUseCase(state),
             organization_list_use_case=OrganizationListUseCase(state),
-            platform_connection_registration_use_case=PlatformConnectionRegistrationUseCase(state),
+            platform_connection_connect_use_case=PlatformConnectionConnectUseCase(state),
             platform_connections_use_case=PlatformConnectionListUseCase(state),
             platform_connection_lifecycle_use_case=lifecycle,
             audit_events_use_case=AuditEventsUseCase(state),
@@ -249,7 +249,7 @@ def test_sign_in_create_organization_connect_audit_and_revoke_foundation_flow() 
     assert audit_after_connect.status_code == 200
     assert [event["action"] for event in audit_after_connect.json()["items"]] == [
         "organization.created",
-        "platform_connection.register",
+        "platform_connection.connect",
     ]
 
     revoked_connection = client.post(
@@ -266,6 +266,6 @@ def test_sign_in_create_organization_connect_audit_and_revoke_foundation_flow() 
     assert audit_after_revoke.status_code == 200
     assert [event["action"] for event in audit_after_revoke.json()["items"]] == [
         "organization.created",
-        "platform_connection.register",
+        "platform_connection.connect",
         "platform_connection.revoke",
     ]

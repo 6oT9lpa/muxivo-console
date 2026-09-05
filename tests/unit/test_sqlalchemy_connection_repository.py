@@ -88,7 +88,7 @@ def audit_event(stored: PlatformConnection) -> AuditEvent:
         correlation_id=uuid4(),
         actor_id=uuid4(),
         organization_id=stored.organization_id,
-        action="platform_connection.register",
+        action="platform_connection.connect",
         resource_type="platform_connection",
         resource_id=str(stored.id),
         result="succeeded",

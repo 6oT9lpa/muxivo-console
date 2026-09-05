@@ -7,7 +7,7 @@ from uuid import UUID
 from muxivo_console.application.ports import PlatformConnectionVerifier
 from muxivo_console.domain.activity import Platform
 
-logger = logging.getLogger("muxivo_console.application.register_platform_connection")
+logger = logging.getLogger("muxivo_console.application.connect_platform_connection")
 
 
 class PlatformConnectionVerifierRouter:
@@ -16,7 +16,7 @@ class PlatformConnectionVerifierRouter:
     def __init__(self, verifiers: Mapping[Platform, PlatformConnectionVerifier]) -> None:
         self._verifiers = verifiers
 
-    async def verify_registration(
+    async def verify_connection(
         self,
         *,
         actor_id: UUID,
@@ -38,7 +38,7 @@ class PlatformConnectionVerifierRouter:
                 },
             )
             return False
-        return await verifier.verify_registration(
+        return await verifier.verify_connection(
             actor_id=actor_id,
             organization_id=organization_id,
             platform=platform,

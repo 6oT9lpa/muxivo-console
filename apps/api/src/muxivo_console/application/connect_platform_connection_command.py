@@ -1,4 +1,4 @@
-"""Command for registering a verified platform connection."""
+"""Command for connecting a verified platform resource."""
 
 from dataclasses import dataclass
 from uuid import UUID
@@ -7,8 +7,8 @@ from muxivo_console.domain.activity import Platform
 
 
 @dataclass(frozen=True, slots=True)
-class RegisterPlatformConnectionCommand:
-    """Identify the owned platform resource to connect to an organization."""
+class ConnectPlatformConnectionCommand:
+    """Identify the server-advertised owned resource to connect to an organization."""
 
     actor_id: UUID
     organization_id: UUID

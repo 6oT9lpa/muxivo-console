@@ -687,9 +687,9 @@ class OrganizationCreationWriter(Protocol):
 
 
 class PlatformConnectionVerifier(Protocol):
-    """Asks the platform service to validate native ownership before registration."""
+    """Asks the platform service to validate native ownership before connecting."""
 
-    async def verify_registration(
+    async def verify_connection(
         self,
         *,
         actor_id: UUID,

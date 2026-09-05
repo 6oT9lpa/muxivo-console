@@ -114,10 +114,10 @@ FOUNDATION_AUDIT_REQUIREMENTS: tuple[AuditCoverageRequirement, ...] = (
         rationale="Membership removal revokes organization access.",
     ),
     AuditCoverageRequirement(
-        action="platform_connection.register",
-        production_markers=("platform_connection.register",),
-        test_markers=("platform_connection.register",),
-        rationale="Platform resource registration crosses the ownership boundary.",
+        action="platform_connection.connect",
+        production_markers=("platform_connection.connect",),
+        test_markers=("platform_connection.connect",),
+        rationale="Platform resource connection crosses the ownership boundary.",
     ),
     AuditCoverageRequirement(
         action="platform_connection.reauthorize",

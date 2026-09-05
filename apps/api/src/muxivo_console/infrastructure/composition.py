@@ -67,9 +67,9 @@ from muxivo_console.application.platform_connection_candidate_catalog_router imp
 )
 from muxivo_console.application.reauthenticate_browser_session import ReauthenticateBrowserSession
 from muxivo_console.application.reconcile_platform_connections import ReconcilePlatformConnections
-from muxivo_console.application.register_platform_connection import (
+from muxivo_console.application.connect_platform_connection import (
     PlatformConnectionVerifierRouter,
-    RegisterPlatformConnection,
+    ConnectPlatformConnection,
 )
 from muxivo_console.application.request_password_recovery import RequestPasswordRecovery
 from muxivo_console.application.require_recent_authentication import RequireRecentAuthentication
@@ -514,7 +514,7 @@ def create_production_app(
         authorizer=MembershipOrganizationAuthorizer(membership_reader),
         candidates=PlatformConnectionCandidateCatalogRouter(platform_connection_candidate_catalogs),
     )
-    platform_connections = RegisterPlatformConnection(
+    platform_connections = ConnectPlatformConnection(
         authorizer=MembershipOrganizationAuthorizer(membership_reader),
         verifier=PlatformConnectionVerifierRouter(platform_connection_verifiers),
         identifiers=identifiers,
@@ -973,7 +973,7 @@ def create_production_app(
         organization_invitation_list_use_case=organization_invitation_list,
         organization_invitation_revoke_use_case=organization_invitation_revoke,
         organization_invitation_accept_use_case=organization_invitation_accept,
-        platform_connection_registration_use_case=platform_connections,
+        platform_connection_connect_use_case=platform_connections,
         platform_connection_candidates_use_case=platform_connection_candidates,
         platform_connection_lifecycle_use_case=platform_connection_lifecycle,
         platform_connections_use_case=listed_platform_connections,
